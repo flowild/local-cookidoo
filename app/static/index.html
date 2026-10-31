@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#234d3c">
+  <meta name="description" content="Deine Cookidoo-Rezeptlisten und Rezeptbilder in deiner privaten Sammlung.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Rezeptgarten · Deine Rezeptsammlung</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/brand.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6v15M3 3h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16 16 5 5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-.6 2.2-2 .9-2-.6-2 3.4L4 10.5v2.3l-1.6 1.6 2 3.4 2-.6 2 .9L9 21h4l.6-2.9 2-.9 2 .6 2-3.4-1.6-1.6v-2.3l1.6-1.6-2-3.4-2 .6-2-.9L13 3Z"/><circle cx="11" cy="12" r="3"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7m0-7L10 14M10 4H4v16h16v-6"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19C0 9 10 3 21 3c0 12-6 19-16 16Zm0 0L16 8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L20 5"/></symbol>
+  <symbol id="i-bowl" viewBox="0 0 24 24"><path d="M3 11h18a9 9 0 0 1-18 0Zm3 10h12M8 7V3m4 4V2m4 5V3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0m-4 4h.01"/></symbol>
+</svg>
+<a class="skip" href="#main">Zum Inhalt</a>
+<div id="offline-banner" class="offline-banner" hidden>Du bist offline. Zum Laden deiner Sammlung brauchst du eine Verbindung zu deinem Server.</div>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Hauptnavigation">
+    <a class="brand" href="#uebersicht"><img src="/static/brand.svg" width="40" height="40" alt=""><span>rezeptgarten<span class="brand-caption">Dein persönliches Rezeptregal</span></span></a>
+    <div class="nav-label">DEINE SAMMLUNG</div>
+    <nav class="desktop-nav">
+      <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg>Übersicht</a>
+      <a href="#listen" data-nav="listen"><svg><use href="#i-layers"/></svg>Rezeptlisten<span id="nav-list-count" class="nav-count">0</span></a>
+      <a href="#rezepte" data-nav="rezepte"><svg><use href="#i-book"/></svg>Alle Rezepte<span id="nav-recipe-count" class="nav-count">0</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="note-icon"><svg><use href="#i-leaf"/></svg></span><strong>Ein Platz für deine<br>Lieblingsgerichte.</strong><p>Deine Listen und Rezeptbilder.<br>Bei dir zu Hause gespeichert.</p></div>
+    <div class="sidebar-bottom">
+      <button class="nav-button install-trigger" hidden><svg><use href="#i-download"/></svg>App installieren</button>
+      <a href="#einstellungen" class="nav-button" data-nav="einstellungen"><svg><use href="#i-settings"/></svg>Einstellungen</a>
+      <div class="server-note"><span class="status-dot"></span>Deine lokale Sammlung<span>Rezeptgarten · Version 0.1</span></div>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <a class="mobile-brand" href="#uebersicht"><img src="/static/brand.svg" width="32" height="32" alt="">rezeptgarten</a>
+      <label class="search-box"><svg><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"><kbd>Suche</kbd></label>
+      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><button id="sync-button" class="button button-primary"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="sync-progress" class="sync-progress" role="status" aria-live="polite" hidden><svg class="spinning"><use href="#i-sync"/></svg><div><strong id="sync-message">Rezeptlisten werden geladen …</strong><span id="sync-counter"></span></div><progress id="sync-meter" max="1" value="0" aria-label="Synchronisierungsfortschritt"></progress></div>
+      <div id="content" aria-live="polite"><div class="initial-loading"><svg class="spinning"><use href="#i-sync"/></svg><p>Deine Sammlung wird geladen …</p></div></div>
+      <footer class="page-footer"><span>Mit Freude sammeln. Mit Ruhe kochen.</span><span>Privater Rezeptmanager · unabhängig von Vorwerk</span></footer>
+    </main>
+  </div>
+</div>
+<nav class="mobile-nav" aria-label="Mobile Navigation">
+  <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg><span>Übersicht</span></a>
+  <a href="#listen" data-nav="listen"><svg><use href="#i-layers"/></svg><span>Listen</span></a>
+  <a href="#rezepte" data-nav="rezepte"><svg><use href="#i-book"/></svg><span>Rezepte</span></a>
+  <a href="#einstellungen" data-nav="einstellungen"><svg><use href="#i-settings"/></svg><span>Einstellungen</span></a>
+</nav>
+<dialog id="auth-dialog" class="modal auth-modal" aria-labelledby="auth-title">
+  <form id="auth-form">
+    <img class="auth-logo" src="/static/brand.svg" width="54" height="54" alt="">
+    <span class="eyebrow">DEIN PERSÖNLICHES REZEPTREGAL</span>
+    <h1 id="auth-title">Willkommen in<br>deinem Rezeptgarten.</h1>
+    <p id="auth-description">Melde dich mit deinem App-Passwort an.</p>
+    <label id="setup-code-label" hidden>Einrichtungscode<input id="setup-code" name="setup-code" autocomplete="off" spellcheck="false"></label>
+    <label>App-Passwort<input id="app-password" name="app-password" type="password" autocomplete="current-password" required maxlength="256"></label>
+    <p id="auth-error" class="form-error" role="alert" hidden></p>
+    <button id="auth-submit" class="button button-primary button-full" type="submit">Sammlung öffnen<svg><use href="#i-arrow"/></svg></button>
+    <p class="form-footnote">Dieses Passwort schützt deine lokale App. Dein Cookidoo-Konto verbindest du im nächsten Schritt.</p>
+  </form>
+</dialog>
+<dialog id="connect-dialog" class="modal" aria-labelledby="connect-title">
+  <button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button>
+  <span class="dialog-symbol"><svg><use href="#i-link"/></svg></span>
+  <span class="eyebrow">DEINE REZEPTE ZIEHEN EIN</span>
+  <h2 id="connect-title">Mit Cookidoo verbinden</h2>
+  <p>Hole deine gespeicherten Rezeptlisten und Kollektionen in deine lokale Sammlung – inklusive Rezeptbildern.</p>
+  <form id="connect-form">
+    <label>Cookidoo-E-Mail<input id="cookidoo-email" name="cookidoo-email" type="email" autocomplete="username" required maxlength="254" placeholder="du@beispiel.de"></label>
+    <label>Cookidoo-Passwort<input id="cookidoo-password" name="cookidoo-password" type="password" autocomplete="current-password" required maxlength="512"></label>
+    <label>Land deines Cookidoo-Kontos<select id="cookidoo-region"><option value="de">Deutschland · cookidoo.de</option><option value="at">Österreich · cookidoo.at</option><option value="ch">Schweiz · cookidoo.ch</option></select></label>
+    <p id="connect-error" class="form-error" role="alert" hidden></p>
+    <button id="connect-submit" class="button button-primary button-full" type="submit">Verbinden & Listen laden<svg><use href="#i-arrow"/></svg></button>
+  </form>
+  <p class="form-footnote">Dein Cookidoo-Passwort wird nicht gespeichert. Die Anmeldung bleibt mit verschlüsselt gespeicherten Sitzungstokens erhalten. Die Verbindung verwendet eine inoffizielle Cookidoo-Schnittstelle.</p>
+</dialog>
+<dialog id="recipe-dialog" class="modal recipe-modal" aria-labelledby="recipe-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><div id="recipe-content"></div></dialog>
+<dialog id="install-dialog" class="modal" aria-labelledby="install-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><span class="dialog-symbol"><svg><use href="#i-download"/></svg></span><span class="eyebrow">IMMER GRIFFBEREIT</span><h2 id="install-title">Dein Rezeptgarten als App</h2><p>Öffne diese Seite in Chrome auf deinem Handy. Wähle im Drei-Punkte-Menü <strong>„App installieren“</strong> oder <strong>„Zum Startbildschirm hinzufügen“</strong>.</p><div class="info-box"><strong>Lokales HTTPS einrichten</strong><p>Falls Chrome eine Zertifikatswarnung zeigt: Lade das lokale CA-Zertifikat herunter und installiere es über die Zertifikatseinstellungen deines Geräts. Öffne danach diese HTTPS-Adresse erneut. Vertraue dem Zertifikat nur, wenn es von deinem eigenen Server stammt.</p><a id="certificate-link" class="text-link" href="http://192.168.184.30/zertifikat">CA-Zertifikat herunterladen<svg><use href="#i-download"/></svg></a></div><p class="form-footnote">Die App verbindet sich mit deinem Server im Heimnetz. Ohne Verbindung zum Server können keine Rezeptlisten geladen werden.</p></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

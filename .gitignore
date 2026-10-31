@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+data/
+*.sqlite3*
+*.key
+*.enc
+.env
+test-results/
+certificates/
+.qa-venv/
+.local/

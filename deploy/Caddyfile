@@ -1,0 +1,27 @@
+{
+    auto_https disable_redirects
+    skip_install_trust
+    admin 127.0.0.1:2019
+}
+
+https://192.168.184.30 {
+    bind 192.168.184.30
+    tls internal
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}
+
+http://192.168.184.30 {
+    bind 192.168.184.30
+    @certificate path /zertifikat
+    handle @certificate {
+        root * /var/lib/rezeptgarten-ca
+        rewrite * /Rezeptgarten-CA.crt
+        header Content-Type application/x-x509-ca-cert
+        header Content-Disposition "attachment; filename=Rezeptgarten-CA.crt"
+        file_server
+    }
+    handle {
+        redir https://192.168.184.30{uri} 308
+    }
+}

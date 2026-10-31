@@ -1,0 +1,26 @@
+[Unit]
+Description=Rezeptgarten local Cookidoo library
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cookidoo
+Group=cookidoo
+WorkingDirectory=/opt/cookidoo-manager/source
+Environment=REZEPTGARTEN_DATA=/var/lib/cookidoo-manager
+Environment=REZEPTGARTEN_SECURE_COOKIE=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/cookidoo-manager/.venv/bin/python -m uvicorn app.asgi:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=25
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cookidoo-manager /var/backups/cookidoo-manager
+
+[Install]
+WantedBy=multi-user.target
