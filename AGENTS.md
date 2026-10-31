@@ -1,5 +1,12 @@
 # Rezeptgarten / local-cookidoo
 
+## Diese Datei aktuell halten
+
+Bei jeder relevanten Änderung an Funktionen, Betrieb, Sicherheit, Tests oder
+Deployment diese Datei prüfen und im selben Arbeitsgang aktualisieren. Veraltete
+Aussagen ersetzen statt widersprüchliche Ergänzungen anzuhängen. Momentaufnahmen
+als solche kennzeichnen; keine Zugangsdaten oder persönlichen Rezeptdaten aufnehmen.
+
 ## Auftrag und aktueller Stand
 
 Wir bauen für den Nutzer eine private Cookidoo-Rezeptverwaltung, die im eigenen
@@ -8,21 +15,45 @@ sich über Chrome als PWA installieren lassen. Die Unterhaltung mit dem Nutzer i
 auf Deutsch. Arbeite in diesem Projekt; das frühere mqtt2PC-Projekt ist eine
 andere Anwendung und soll für Cookidoo-Arbeit nicht mehr geändert werden.
 
-Die aktuelle Version heißt **Rezeptgarten**. Sie übernimmt persönliche Rezeptlisten,
-gespeicherte Cookidoo-Kollektionen und die **Merkliste** in SQLite, zeigt die darin
-enthaltenen Rezepte und lädt deren echte Bilder in den lokalen Bildspeicher.
-Suche, Listenansichten, eine Rezept-Detailansicht, JSON-Export und manuelle sowie
-automatische Synchronisierung sind implementiert. Der letzte erfolgreiche
-Live-Abgleich ergab **eine Merkliste mit 31 Rezepten und 31 Bildern**; das ist eine
-Momentaufnahme, keine feste Datenvorgabe. Zutaten sind schon in `ingredients_json`
-gespeichert; ihre nutzerfreundliche Anzeige ist der nächste gewünschte Ausbau.
-Bidirektionale Cookidoo-Bearbeitung wurde als späteres Ziel besprochen, ist in
-dieser ersten Version aber noch nicht implementiert.
+**Rezeptgarten** synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene
+Kreationen in SQLite und speichert echte Rezeptbilder lokal. Die App bietet Suche,
+Rezeptdetails, JSON-Export sowie manuelle und automatische Synchronisierung.
+
+- Cookidoo-Listen und selbst angelegte lokale Rezeptlisten werden getrennt gezeigt;
+  lokale Listen werden nicht mit Cookidoo synchronisiert. Rezepte lassen sich in
+  lokalen Listen hinzufügen und öffnen. Zugeordnete Rezeptversionen werden gemeinsam
+  angezeigt und können in der Detailansicht ausgewählt werden.
+- In Rezeptlisten gibt es Sortierung und Filter für Zutaten, Portionen und Gesamtzeit.
+  Nicht passende Rezepte bleiben ausgegraut sichtbar; das gilt auch für die Liste
+  weiterer hinzufügbarer Rezepte. Die Zutatenfilter unterstützen Mehrfachauswahl.
+- Die Suche im Header durchsucht Rezepttitel und Zutaten einschließlich bekannter
+  Zutaten-Aliasse; Titeltreffer erscheinen vor reinen Zutatentreffern. Gewählte
+  Sortierung, Listenfilter und gruppierte Rezeptversionen bleiben berücksichtigt.
+- „Mein Vorrat“ verwaltet Zutaten in Kategorien mit Icons, alphabetischen Einträgen,
+  einklappbaren und per Griff sortierbaren Kategorien sowie Vorschlägen aus den
+  gespeicherten Rezeptzutaten. Die Rezeptansicht markiert verfügbare Zutaten. Die
+  Abgleichregeln in `app/ingredients.py` berücksichtigen u. a. Synonyme, englische
+  Begriffe, passende Speiseöle und Wasser. Mengen werden noch nicht abgeglichen.
+- Die Übersicht zeigt ein täglich wechselndes Zufallsrezept und eine Schaltfläche für
+  eine neue Auswahl. Dunkelmodus und Akzentfarbe gelten browserbezogen.
+- In den Einstellungen kann ein Google-API-Schlüssel gesetzt, ersetzt und entfernt
+  werden. Er wird getrennt vom Cookidoo-Token verschlüsselt in `google-api-key.enc`
+  gespeichert und über die API nicht wieder ausgegeben; der Status enthält nur, ob
+  ein Schlüssel hinterlegt ist. Der Server kann ihn für spätere Funktionen mit
+  `vault.key` entschlüsseln. Noch ist keine Google-Funktion angebunden.
+- „Heute kochen“ plant die ausgewählte Version für das heutige Berliner Datum in
+  Cookidoo ein und prüft den Kalendereintrag anschließend erneut. „Zur Einkaufsliste
+  hinzufügen“ schreibt in die Cookidoo-Einkaufsliste und markiert als vorhanden
+  erkannte Zutaten. Eigene Kreationen verwenden die passenden separaten Methoden.
+  Ein teilweiser Fehler bei der Markierung muss dem Nutzer klar angezeigt werden.
+  Die Aktionen sind gezielte Schreibzugriffe, keine allgemeine bidirektionale
+  Synchronisierung aller Daten; Rezeptgarten hat derzeit keine eigene Einkaufslistenansicht.
 
 ## Workspace und private Dateien
 
-- Projektwurzel: `D:\Github\local-cookidoo`. Das vorhandene `.git` wurde erhalten.
-- `app/`: FastAPI-Backend, SQLite, Authentifizierung, Cookidoo-Sync und statische UI.
+- Projektwurzel in der aktuellen Umgebung: `C:\Github\local-cookidoo`; ein früherer
+  Workspace lag unter `D:\Github\local-cookidoo`. Das vorhandene `.git` wurde erhalten.
+- `app/`: FastAPI-Backend, SQLite, Cookidoo-Sync, Zutatenabgleich und statische UI.
 - `app/static/`: responsive HTML/CSS/JavaScript-Oberfläche, Manifest, Service Worker,
   originale Bowl/Leaf-App-Icons. Kein Node-Build erforderlich.
 - `deploy/`: systemd-Dienst, Caddy-Konfiguration und Installation im Container.
@@ -34,7 +65,9 @@ dieser ersten Version aber noch nicht implementiert.
   ausdrücklich im Workspace haben.
 - `.local/proxmox/`: Container-Metadaten, historische Provisionierungshelfer und
   `access/` mit SSH-Schlüssel, `known_hosts` und dem alten Einrichtungslink.
-- `.qa-venv/`: lokale Python-Testumgebung mit Playwright; nutzt vorhandenes Edge.
+- `.qa-venv/`: historische lokale Python-Testumgebung; ihr Interpreterpfad war in
+  der aktuellen Windows-Umgebung zuletzt nicht mehr gültig und muss ggf. repariert
+  werden. Edge ist für Browserprüfungen vorhanden.
 - `test-results/`: Screenshots/Browserartefakte, teilweise mit künstlichen Testdaten.
 - `.local/migration.json`: Integritätsnachweis der lokalen Verschiebung.
 
@@ -63,7 +96,8 @@ bereits verwendeten Einmalcode und ist kein regulärer Login-Link.
 - Backend hört nur auf `127.0.0.1:8000`; Caddy bedient die LAN-IPv4 auf 80/443.
 - Caddy-Dienst: `caddy`, interne lokale CA, automatische TLS-Erneuerung.
 - Produktive Daten: `/var/lib/cookidoo-manager`: `library.sqlite3`, Bilder,
-  sieben rotierende SQLite-Sicherungen, `cookidoo.enc` und `vault.key`.
+  sieben rotierende SQLite-Sicherungen, `cookidoo.enc`, bei Bedarf
+  `google-api-key.enc` und `vault.key`.
 - Separates vorbereitetes Backup-Verzeichnis: `/var/backups/cookidoo-manager`.
 - Zeitzone: `Europe/Berlin`.
 
@@ -133,18 +167,20 @@ eingebunden. Lizenzhinweise für cookidoo-api stehen in `THIRD-PARTY-NOTICES.txt
 - Ein vollständiger Listen-Snapshot wird atomar gespeichert. Fehler beim Laden
   müssen die bisherige Sammlung erhalten. Einzelne nicht verfügbare Rezeptdetails
   dürfen Listeneinträge nicht verschwinden lassen.
+- Cookidoo-Aktionen nutzen den vorhandenen Client und denselben Lock wie der Sync.
+  IDs eigener Kreationen tragen intern den Präfix `creation:`, der für Cookidoo
+  entfernt wird. Kalender und Einkaufsliste nur auf ausdrückliche Nutzeraktion
+  beschreiben; bei Tests isolierte Daten und Mocks verwenden. Ein lesender Live-Abruf
+  bestätigte am 31.10.2026 einen von Rezeptgarten eingetragenen Kalendertag; die
+  Anzeige in der Cookidoo-App kann dennoch ein Aktualisieren erfordern.
 
-## Authentifizierung, HTTPS und PWA
+## Lokaler Zugriff, HTTPS und PWA
 
-Die lokale App hat ein eigenes Passwort, unabhängig vom Cookidoo-Konto.
-Die vom Nutzer ausdrücklich gewünschte Mindestlänge ist **8 Zeichen**; Browser-
-und Serverprüfung müssen übereinstimmen. Passwörter werden mit scrypt gehasht,
-Sitzungstokens gehasht in SQLite gespeichert. Cookies sind produktiv Secure,
-HttpOnly und SameSite Strict; schreibende API-Anfragen benötigen denselben Origin.
-
-Die Ersteinrichtung ist bereits erfolgt. Ein neuer Einmalcode oder ein neuer
-Administrator ist für Routinearbeiten nicht nötig. Bestehende Passwörter nicht
-zurücksetzen, um Tests durchzuführen.
+Der Nutzer hat das Passwort für den lokalen App-Zugang ausdrücklich entfernen
+lassen. Rezeptgarten ist im lokalen Netz ohne App-Anmeldung erreichbar; das
+Cookidoo-Konto bleibt davon unabhängig. Schreibende API-Anfragen benötigen denselben
+Origin. Eine lokale Passwortpflicht oder Ersteinrichtung nicht ungefragt wieder
+einführen. Historische Authentifizierungshilfen und Tabellen können noch existieren.
 
 Chrome-PWA-Installation benötigt vertrauenswürdiges HTTPS. Der Nutzer hat keine
 vorhandene Domain/keinen HTTPS-Reverse-Proxy und hat lokales HTTPS samt öffentlichem
@@ -154,24 +190,23 @@ ungefragt vornehmen. Zertifikat-Download: `http://192.168.184.30/zertifikat`.
 Der Service Worker speichert nur die öffentliche App-Hülle; keine persönlichen
 API-Antworten. Ohne Verbindung zum Server gibt es eine klare Verbindungsmeldung.
 Bei statischen Änderungen kann ein Neuladen der Seite nötig sein.
+Bei Änderungen an versionierten statischen Dateien auch die zugehörigen URLs in
+`index.html` und `sw.js` sowie die Service-Worker-Cacheversion konsistent erhöhen.
+Statusmeldungen müssen auch über geöffneten modalen Dialogen sichtbar bleiben.
 
 ## Prüfungen und weitere Arbeit
 
 - Backendtests: `python -m unittest discover -s tests -v`, auf dem Server mit
   `/opt/cookidoo-manager/.venv/bin/python` aus `/opt/cookidoo-manager/source`.
-  Zuletzt **10 Tests bestanden**, darunter Bookmark-Paginierung, sichere Anmeldung,
-  atomarer Import, Bildnormalisierung, Datenschutz und Erhalt bei Netzwerkfehlern.
-- Die 8-Zeichen-Grenze wurde separat in einer temporären Datenbank geprüft:
-  sieben Zeichen abgewiesen, acht akzeptiert und anschließender Login erfolgreich.
+  Zuletzt **39 Tests bestanden**, darunter Sync, Zutatenabgleich, lokale Listen,
+  Cookidoo-Aktionen und Erhalt bei Netzwerkfehlern. Für Prüfungen auf dem Server
+  eine isolierte Kopie des Quellcodes und temporäre Testdaten verwenden.
 - Desktop- und Mobil-Browserprüfung sowie PWA-Installierbarkeit wurden mit dem
   vorhandenen Edge geprüft; Chromium meldete keine Installationshindernisse.
-- Lokale QA-Befehle über `.qa-venv/Scripts/python.exe` bzw. `python -m pip` ausführen.
-  Der Browsercheck `tests/browser_check.py` erwartet eine **getrennte**, vorbereitete
+- Der Browsercheck `tests/browser_check.py` erwartet eine **getrennte**, vorbereitete
   QA-Instanz im Container auf Loopback-Port 8901 und nutzt einen SSH-Tunnel.
   Diese Testinstanz und ihre künstlichen Daten wurden anschließend entfernt.
   Nicht die produktive Datenbank zum Befüllen mit Testrezepten oder zum Einrichten
   eines Testkontos verwenden. Bilder in `test-results/` können Fixtures darstellen.
-- Den echten Cookidoo-Import nicht nur mit leeren Fake-Listen testen. Live waren
-  die Merkliste und alle 31 Rezeptbilder erfolgreich lesbar.
-- Nächster gewünschter Funktionsschritt: Zutaten in der Rezeptansicht darstellen.
-  Die bestehende Datenstruktur und das mobile Layout dafür weiterverwenden.
+- Den echten Cookidoo-Import nicht nur anhand leerer Fake-Listen beurteilen. Ein
+  früherer Live-Abgleich mit Merkliste und 31 Bildern ist nur eine Momentaufnahme.

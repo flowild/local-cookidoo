@@ -11,8 +11,9 @@
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/static/brand.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <script src="/static/theme.js?v=31"></script>
+  <link rel="stylesheet" href="/static/style.css?v=36">
+  <script src="/static/app.js?v=36" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -22,8 +23,10 @@
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16 16 5 5"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-.6 2.2-2 .9-2-.6-2 3.4L4 10.5v2.3l-1.6 1.6 2 3.4 2-.6 2 .9L9 21h4l.6-2.9 2-.9 2 .6 2-3.4-1.6-1.6v-2.3l1.6-1.6-2-3.4-2 .6-2-.9L13 3Z"/><circle cx="11" cy="12" r="3"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 7h3c5 0 7 10 12 10h3m-3-3 3 3-3 3M3 17h3c2.4 0 4.1-2.3 5.5-4.8M15 7.8A5 5 0 0 1 18 7h3m-3-3 3 3-3 3"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-portion" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 4 5v1"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></symbol>
@@ -44,6 +47,7 @@
       <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg>Übersicht</a>
       <a href="#listen" data-nav="listen"><svg><use href="#i-layers"/></svg>Rezeptlisten<span id="nav-list-count" class="nav-count">0</span></a>
       <a href="#rezepte" data-nav="rezepte"><svg><use href="#i-book"/></svg>Alle Rezepte<span id="nav-recipe-count" class="nav-count">0</span></a>
+      <a href="#vorrat" data-nav="vorrat"><svg><use href="#i-bowl"/></svg>Mein Vorrat</a>
     </nav>
     <div class="sidebar-note"><span class="note-icon"><svg><use href="#i-leaf"/></svg></span><strong>Ein Platz für deine<br>Lieblingsgerichte.</strong><p>Deine Listen und Rezeptbilder.<br>Bei dir zu Hause gespeichert.</p></div>
     <div class="sidebar-bottom">
@@ -69,21 +73,9 @@
   <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg><span>Übersicht</span></a>
   <a href="#listen" data-nav="listen"><svg><use href="#i-layers"/></svg><span>Listen</span></a>
   <a href="#rezepte" data-nav="rezepte"><svg><use href="#i-book"/></svg><span>Rezepte</span></a>
+  <a href="#vorrat" data-nav="vorrat"><svg><use href="#i-bowl"/></svg><span>Vorrat</span></a>
   <a href="#einstellungen" data-nav="einstellungen"><svg><use href="#i-settings"/></svg><span>Einstellungen</span></a>
 </nav>
-<dialog id="auth-dialog" class="modal auth-modal" aria-labelledby="auth-title">
-  <form id="auth-form">
-    <img class="auth-logo" src="/static/brand.svg" width="54" height="54" alt="">
-    <span class="eyebrow">DEIN PERSÖNLICHES REZEPTREGAL</span>
-    <h1 id="auth-title">Willkommen in<br>deinem Rezeptgarten.</h1>
-    <p id="auth-description">Melde dich mit deinem App-Passwort an.</p>
-    <label id="setup-code-label" hidden>Einrichtungscode<input id="setup-code" name="setup-code" autocomplete="off" spellcheck="false"></label>
-    <label>App-Passwort<input id="app-password" name="app-password" type="password" autocomplete="current-password" required maxlength="256"></label>
-    <p id="auth-error" class="form-error" role="alert" hidden></p>
-    <button id="auth-submit" class="button button-primary button-full" type="submit">Sammlung öffnen<svg><use href="#i-arrow"/></svg></button>
-    <p class="form-footnote">Dieses Passwort schützt deine lokale App. Dein Cookidoo-Konto verbindest du im nächsten Schritt.</p>
-  </form>
-</dialog>
 <dialog id="connect-dialog" class="modal" aria-labelledby="connect-title">
   <button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button>
   <span class="dialog-symbol"><svg><use href="#i-link"/></svg></span>
@@ -100,6 +92,9 @@
   <p class="form-footnote">Dein Cookidoo-Passwort wird nicht gespeichert. Die Anmeldung bleibt mit verschlüsselt gespeicherten Sitzungstokens erhalten. Die Verbindung verwendet eine inoffizielle Cookidoo-Schnittstelle.</p>
 </dialog>
 <dialog id="recipe-dialog" class="modal recipe-modal" aria-labelledby="recipe-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><div id="recipe-content"></div></dialog>
+<dialog id="new-list-dialog" class="modal" aria-labelledby="new-list-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="new-list-title">Neue Rezeptliste</h2><p>Diese Liste wird nur in deinem Rezeptgarten gespeichert.</p><form id="new-list-form"><label>Listenname<input id="new-list-name" maxlength="100" required autocomplete="off"></label><p id="new-list-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Liste erstellen</button></form></dialog>
+<dialog id="pantry-dialog" class="modal" aria-labelledby="pantry-dialog-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="pantry-dialog-title">Zutat hinzufügen</h2><form id="pantry-form"><div class="ingredient-combobox"><label for="pantry-name">Zutat</label><input id="pantry-name" maxlength="100" required autocomplete="off" placeholder="z. B. Paprika" role="combobox" aria-autocomplete="list" aria-controls="ingredient-suggestions" aria-expanded="false"><div id="ingredient-suggestions" class="ingredient-suggestions" role="listbox" aria-label="Zutaten aus deinen Rezepten" hidden></div></div><label>Kategorie<select id="pantry-category" required></select></label><label>Menge oder Notiz (optional)<input id="pantry-quantity" maxlength="80" autocomplete="off" placeholder="z. B. 2 Stück"></label><p id="pantry-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Speichern</button></form></dialog>
+<dialog id="pantry-category-dialog" class="modal" aria-labelledby="pantry-category-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="pantry-category-title">Neue Kategorie</h2><form id="pantry-category-form"><label>Kategoriename<input id="pantry-category-name" maxlength="60" required autocomplete="off"></label><p id="pantry-category-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Kategorie erstellen</button></form></dialog>
 <dialog id="install-dialog" class="modal" aria-labelledby="install-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><span class="dialog-symbol"><svg><use href="#i-download"/></svg></span><span class="eyebrow">IMMER GRIFFBEREIT</span><h2 id="install-title">Dein Rezeptgarten als App</h2><p>Öffne diese Seite in Chrome auf deinem Handy. Wähle im Drei-Punkte-Menü <strong>„App installieren“</strong> oder <strong>„Zum Startbildschirm hinzufügen“</strong>.</p><div class="info-box"><strong>Lokales HTTPS einrichten</strong><p>Falls Chrome eine Zertifikatswarnung zeigt: Lade das lokale CA-Zertifikat herunter und installiere es über die Zertifikatseinstellungen deines Geräts. Öffne danach diese HTTPS-Adresse erneut. Vertraue dem Zertifikat nur, wenn es von deinem eigenen Server stammt.</p><a id="certificate-link" class="text-link" href="http://192.168.184.30/zertifikat">CA-Zertifikat herunterladen<svg><use href="#i-download"/></svg></a></div><p class="form-footnote">Die App verbindet sich mit deinem Server im Heimnetz. Ohne Verbindung zum Server können keine Rezeptlisten geladen werden.</p></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>

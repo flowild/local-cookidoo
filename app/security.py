@@ -40,10 +40,10 @@ def valid_session(database, token):
 
 
 class Vault:
-    def __init__(self, directory):
+    def __init__(self, directory, filename='cookidoo.enc'):
         self.directory = Path(directory)
         self.key_path = self.directory / 'vault.key'
-        self.path = self.directory / 'cookidoo.enc'
+        self.path = self.directory / filename
         if not self.key_path.exists():
             with self.key_path.open('xb') as file:
                 file.write(Fernet.generate_key())

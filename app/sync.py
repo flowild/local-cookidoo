@@ -7,16 +7,20 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import quote, urlparse
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import httpx
 from cookidoo_api import Cookidoo
+from cookidoo_api.const import CUSTOM_RECIPES_PATH_ACCEPT
 from cookidoo_api.types import CookidooAuthData, CookidooConfig, CookidooLocalizationConfig
 from PIL import Image, ImageOps
 
 from .storage import now
+from .ingredients import ingredient_available, ingredient_name
 
 logger = logging.getLogger(__name__)
 Image.MAX_IMAGE_PIXELS = 24_000_000
@@ -33,6 +37,21 @@ def seconds(value):
     if isinstance(value, (int, float)):
         return max(0, int(value))
     return None
+
+
+class TextOnly(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def plain_step(value):
+    parser = TextOnly()
+    parser.feed(value or '')
+    return ''.join(parser.parts).strip()
 
 
 def friendly_error(error):
@@ -128,6 +147,44 @@ class SyncService:
                 await self.session.close()
                 self.session = None
 
+    async def recipe_action(self, recipe_id, action):
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            custom = recipe_id.startswith('creation:')
+            source_id = recipe_id.removeprefix('creation:') if custom else recipe_id
+            if action == 'plan':
+                day = datetime.now(ZoneInfo('Europe/Berlin')).date()
+                method = self.client.add_custom_recipes_to_calendar if custom else self.client.add_recipes_to_calendar
+                await method(day, [source_id])
+                try:
+                    days = await self.client.get_recipes_in_calendar_week(day)
+                    today = next((item for item in days if str(item.id) == day.isoformat()), None)
+                    ids = ([recipe.id for recipe in today.recipes] + list(today.customer_recipe_ids)) if today else []
+                    verified = source_id in ids
+                except Exception as error:
+                    logger.warning('Calendar verification failed: %s', type(error).__name__)
+                    verified = False
+                return {'date': day.isoformat(), 'verified': verified}
+            method = self.client.add_ingredient_items_for_custom_recipes if custom else self.client.add_ingredient_items_for_recipes
+            items = await method([source_id])
+            try:
+                pantry_names = [item['name'] for item in self.database.pantry()['items']]
+                available = []
+                for item in items:
+                    name = item.name or ingredient_name(getattr(item, 'description', '') or '')
+                    if name and not item.is_owned and ingredient_available(name, pantry_names):
+                        item.is_owned = True
+                        available.append(item)
+                if available:
+                    await self.client.edit_ingredient_items_ownership(available)
+            except Exception as error:
+                logger.warning('Shopping list added but pantry matching failed: %s', type(error).__name__)
+                return {'partial': True}
+            return {'partial': False, 'marked': len(available)}
+
     async def schedule(self):
         while True:
             await asyncio.sleep(60)
@@ -201,10 +258,46 @@ class SyncService:
                             members.append({'id': recipe.id, 'name': recipe.name, 'total_seconds': seconds(recipe.total_time), 'chapter': chapter.name})
                     result.append({'id': kind + ':' + collection.id, 'source_id': collection.id, 'kind': kind, 'name': collection.name, 'description': collection.description, 'members': members})
                 await asyncio.sleep(.15)
+        creations = await self.client.list_custom_recipes()
+        origins = await self.creation_origins()
+        members = []
+        seen = set()
+        for creation in creations:
+            if not isinstance(creation.id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', creation.id):
+                raise ValueError('Invalid created recipe ID')
+            if creation.id in seen:
+                continue
+            seen.add(creation.id)
+            members.append({'id': 'creation:' + creation.id, 'name': creation.name or creation.id, 'total_seconds': seconds(creation.total_time), 'chapter': '', 'origin_recipe_id': origins.get(creation.id)})
+        if members:
+            result.insert(0, {'id': 'creations:default', 'source_id': 'creations', 'kind': 'creations', 'name': 'Meine Kreationen', 'description': 'Deine eigenen Cookidoo-Rezepte.', 'members': members})
         bookmarks = await self.bookmarks()
         if bookmarks:
             result.insert(0, bookmarks)
         return result
+
+    async def creation_origins(self):
+        """Read Cookidoo's explicit source link; names are not reliable identities."""
+        await self.client._ensure_endpoints()
+        path = self.client._path('customer-recipes:recipe-create').format(**self.client._cfg.localization.__dict__)
+        payload = await self.client._request_json('get', self.client.api_endpoint / path, 'loading creation origins', headers={'ACCEPT': CUSTOM_RECIPES_PATH_ACCEPT})
+        if not isinstance(payload, dict) or not isinstance(payload.get('items'), list):
+            raise ValueError('Invalid creation response')
+        region = (self.database.get('account') or {}).get('region', 'de')
+        website = urlparse(REGIONS[region][2])
+        origins = {}
+        for item in payload['items']:
+            if not isinstance(item, dict) or not isinstance(item.get('recipeContent'), dict):
+                raise ValueError('Invalid creation entry')
+            creation_id = item.get('recipeId')
+            origin = item['recipeContent'].get('isBasedOn')
+            if not isinstance(creation_id, str) or not isinstance(origin, str) or not origin:
+                continue
+            parsed = urlparse(origin)
+            match = re.fullmatch(r'/recipes/recipe/[A-Za-z]{2}(?:-[A-Za-z]{2})?/([A-Za-z0-9_-]{1,120})/?', parsed.path)
+            if parsed.scheme == 'https' and parsed.hostname == website.hostname and not parsed.username and not parsed.password and parsed.port in (None, 443) and match:
+                origins[creation_id] = match.group(1)
+        return origins
 
     async def cache_image(self, url, http):
         if not url:
@@ -253,7 +346,9 @@ class SyncService:
                 language, _, website = REGIONS[region]
                 for collection in collections:
                     for member in collection['members']:
-                        recipes.setdefault(member['id'], {'id': member['id'], 'name': member['name'] or member['id'], 'total_seconds': member.get('total_seconds'), 'source_url': f'{website}/recipes/recipe/{language}/{quote(member["id"])}', 'updated_at': now()})
+                        recipes.setdefault(member['id'], {'id': member['id'], 'name': member['name'] or member['id'], 'total_seconds': member.get('total_seconds'), 'source_url': (f'{website}/created-recipes/{language}/{quote(member["id"][9:])}/edit' if collection['kind'] == 'creations' else f'{website}/recipes/recipe/{language}/{quote(member["id"])}'), 'updated_at': now()})
+                        if collection['kind'] == 'creations':
+                            recipes[member['id']]['origin_recipe_id'] = member.get('origin_recipe_id')
                 self.state.update(phase='recipes', total=len(recipes), message='Rezeptdetails und Bilder werden gespeichert …')
                 with self.database.connect() as db:
                     existing = {row['id']: dict(row) for row in db.execute('SELECT * FROM recipes')}
@@ -262,13 +357,19 @@ class SyncService:
                         previous = existing.get(recipe_id)
                         # A cached image and details can be reused for fourteen days.
                         recent = previous and previous.get('detail_updated_at') and datetime.now(timezone.utc) - datetime.fromisoformat(previous['detail_updated_at']) < timedelta(days=14)
-                        if recent and previous.get('image_file') and (self.images / previous['image_file']).exists():
-                            for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'detail_updated_at'):
+                        is_creation = recipe_id.startswith('creation:')
+                        if not is_creation and recent and previous.get('instructions_json') is not None and previous.get('image_file') and (self.images / previous['image_file']).exists():
+                            for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'instructions_json', 'detail_updated_at'):
                                 recipe[key] = previous[key]
                         else:
                             try:
-                                detail = await self.client.get_recipe_details(recipe_id)
-                                recipe.update(name=detail.name or recipe['name'], total_seconds=seconds(detail.total_time), active_seconds=seconds(detail.active_time), servings=str(detail.serving_size) if detail.serving_size else None, difficulty=str(detail.difficulty) if detail.difficulty else None, ingredients_json=json.dumps(detail.ingredients, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False), detail_updated_at=now())
+                                detail = await (self.client.get_custom_recipe(recipe_id[9:]) if is_creation else self.client.get_recipe_details(recipe_id))
+                                recipe.update(name=detail.name or recipe['name'], total_seconds=seconds(detail.total_time), active_seconds=seconds(detail.active_time), servings=str(detail.serving_size) if detail.serving_size else None, difficulty=str(getattr(detail, 'difficulty', '') or '') or None, ingredients_json=json.dumps(detail.ingredients, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False), detail_updated_at=now())
+                                if is_creation:
+                                    recipe['instructions_json'] = json.dumps(detail.instructions, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False)
+                                else:
+                                    groups = [{'title': group.title, 'steps': [plain_step(step.formatted_text) for step in group.recipe_steps]} for group in getattr(detail, 'step_groups', [])]
+                                    recipe['instructions_json'] = json.dumps(groups, ensure_ascii=False)
                                 try:
                                     recipe['image_file'] = await self.cache_image(detail.image or detail.thumbnail, http)
                                     if not recipe['image_file']:
