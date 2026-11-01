@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -21,6 +22,7 @@ from PIL import Image, ImageOps
 
 from .storage import now
 from .ingredients import ingredient_available, ingredient_name
+from .recipe_text import readable_instructions
 
 logger = logging.getLogger(__name__)
 Image.MAX_IMAGE_PIXELS = 24_000_000
@@ -71,9 +73,14 @@ class SyncService:
         self.vault = vault
         self.images = database.directory / 'images'
         self.images.mkdir(exist_ok=True, mode=0o750)
+        self.thumbnail_semaphore = asyncio.Semaphore(4)
+        self.calendar_image_semaphore = asyncio.Semaphore(4)
+        self.calendar_image_sources = {}
+        self.calendar_image_tasks = {}
         self.lock = asyncio.Lock()
         self.task = None
         self.scheduler = None
+        self.calendar_scheduler = None
         self.session = None
         self.client = None
         self.state = {'running': False, 'phase': 'idle', 'done': 0, 'total': 0, 'message': '', 'warnings': 0}
@@ -99,15 +106,22 @@ class SyncService:
             self.state['message'] = 'Bitte verbinde dein Cookidoo-Konto erneut.'
             self.client = None
         self.scheduler = asyncio.create_task(self.schedule())
+        self.recover_calendar_queue()
+        self.calendar_scheduler = asyncio.create_task(self.schedule_calendar_moves())
 
     async def close(self):
-        for task in (self.scheduler, self.task):
+        for task in (self.scheduler, self.calendar_scheduler, self.task):
             if task and not task.done():
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
+        image_tasks = list(self.calendar_image_tasks.values())
+        for task in image_tasks:
+            task.cancel()
+        if image_tasks:
+            await asyncio.gather(*image_tasks, return_exceptions=True)
         if self.session:
             await self.session.close()
 
@@ -146,6 +160,505 @@ class SyncService:
             if self.session:
                 await self.session.close()
                 self.session = None
+
+    async def _recipe_note_request(self, method, source_id, payload=None):
+        """Use the existing token without logging personal note response bodies."""
+        region = (self.database.get('account') or {}).get('region', 'de')
+        language = REGIONS[region][0]
+        base = self.client.api_endpoint / f'recipe-notes/{language}/recipes'
+        url = base if method == 'post' else base / source_id
+        await self.client._ensure_token()
+        headers = {**self.client._api_headers, 'Accept': 'application/json'}
+        async with self.client._session.request(method, url, headers=headers, json=payload, allow_redirects=False) as response:
+            if response.status == 404:
+                return None
+            if response.status not in (200, 201, 204):
+                raise RuntimeError('Cookidoo note request failed')
+            if response.status == 204 or method == 'delete':
+                return None
+            return await response.json()
+
+    async def _read_recipe_note(self, source_id):
+        result = await self._recipe_note_request('get', source_id)
+        if result is None:
+            return None
+        if not isinstance(result, dict) or not isinstance(result.get('text'), str):
+            raise RuntimeError('Invalid Cookidoo note response')
+        return result['text']
+
+    async def recipe_note(self, recipe_id, text=None, expected=None, save=False):
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        source_id = recipe_id.removeprefix('creation:')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', source_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            current = await self._read_recipe_note(source_id)
+            if not save:
+                return {'text': current or ''}
+            if (current or '') != expected:
+                raise ValueError('Die Notiz wurde inzwischen in Cookidoo geändert. Bitte lade sie erneut, bevor du speicherst.')
+            if text == (current or ''):
+                return {'text': text}
+            try:
+                if not text:
+                    await self._recipe_note_request('delete', source_id)
+                elif current is None:
+                    await self._recipe_note_request('post', source_id, {'recipeId': source_id, 'text': text})
+                else:
+                    await self._recipe_note_request('put', source_id, {'text': text})
+                confirmed = await self._read_recipe_note(source_id)
+                if (confirmed or '') != text:
+                    raise RuntimeError('Cookidoo note verification failed')
+            except Exception as error:
+                logger.warning('Cookidoo note write or verification failed: %s', type(error).__name__)
+                raise RuntimeError('Die Notiz konnte nicht bestätigt werden. Bitte prüfe sie in Cookidoo, bevor du erneut speicherst.') from None
+            return {'text': text}
+
+    def week_collection_owner(self):
+        account = self.database.get('account') or {}
+        return hashlib.sha256((account.get('region', '') + '\0' + account.get('email', '')).encode()).hexdigest()
+
+    def calendar_queue(self):
+        queue = self.database.get('calendar_move_queue') or {}
+        if not queue.get('items'):
+            return {'phase': 'idle', 'items': [], 'due': None, 'error': None}
+        if queue.get('owner') != self.week_collection_owner():
+            return {'phase': 'error', 'items': [], 'due': None, 'error': 'Vorgemerkte Änderungen gehören zu einem anderen Cookidoo-Konto.'}
+        return {key: queue.get(key) for key in ('phase', 'items', 'due', 'error')}
+
+    def enqueue_calendar_move(self, source, target, recipe_id, custom, move_id=None):
+        if not self.client:
+            raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+        if source == target or source - timedelta(days=source.weekday()) != target - timedelta(days=target.weekday()):
+            raise ValueError('Bitte wähle einen anderen Tag derselben Woche.')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', recipe_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        owner = self.week_collection_owner()
+        due = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        item = {'source': source.isoformat(), 'target': target.isoformat(), 'recipe_id': recipe_id, 'custom': custom, 'move_id': move_id}
+        def update(queue):
+            queue = queue or {}
+            if queue.get('items') and queue.get('owner') != owner:
+                raise ValueError('Vorgemerkte Änderungen gehören zu einem anderen Cookidoo-Konto.')
+            if queue.get('items') and queue.get('phase') == 'error':
+                raise ValueError('Bitte prüfe zuerst den fehlgeschlagenen Wochenabgleich.')
+            if queue.get('phase') == 'processing':
+                raise ValueError('Der Wochenabgleich läuft gerade. Bitte versuche es gleich erneut.')
+            items = queue.get('items') or []
+            if move_id and any(existing.get('move_id') == move_id for existing in items):
+                return queue
+            if len(items) >= 1000:
+                raise ValueError('Zu viele vorgemerkte Änderungen. Bitte warte auf den Abgleich.')
+            return {'owner': owner, 'phase': 'waiting', 'items': [*items, item], 'due': due, 'error': None}
+        self.database.calendar_queue_update(update)
+        return self.calendar_queue()
+
+    def discard_failed_calendar_moves(self):
+        def update(queue):
+            if not queue or queue.get('phase') != 'error':
+                raise ValueError('Es gibt keinen fehlgeschlagenen Wochenabgleich zum Verwerfen.')
+            return {'owner': self.week_collection_owner(), 'phase': 'idle', 'items': [], 'due': None, 'error': None}
+        self.database.calendar_queue_update(update)
+        return self.calendar_queue()
+
+    def recover_calendar_queue(self):
+        def update(queue):
+            queue = queue or {}
+            if queue.get('phase') == 'processing' and queue.get('items'):
+                queue['phase'] = 'error'
+                queue['error'] = 'Der Wochenabgleich wurde unterbrochen. Bitte prüfe die Einträge in Cookidoo.'
+            return queue
+        self.database.calendar_queue_update(update)
+
+    async def schedule_calendar_moves(self):
+        while True:
+            await asyncio.sleep(1)
+            try:
+                await self.process_due_calendar_moves()
+            except Exception as error:
+                logger.warning('Scheduled calendar move failed: %s', type(error).__name__)
+
+    async def process_due_calendar_moves(self):
+        if not self.client or self.lock.locked() or self.state['running']:
+            return
+        owner = self.week_collection_owner()
+        pending = self.database.get('calendar_move_queue') or {}
+        if pending.get('phase') != 'waiting' or not pending.get('items') or pending.get('owner') != owner:
+            return
+        if datetime.fromisoformat(pending['due']) > datetime.now(timezone.utc):
+            return
+        claimed = False
+        def claim(queue):
+            nonlocal claimed
+            queue = queue or {}
+            if queue.get('phase') != 'waiting' or not queue.get('items'):
+                return queue
+            if queue.get('owner') != owner:
+                return queue
+            if datetime.fromisoformat(queue['due']) > datetime.now(timezone.utc):
+                return queue
+            queue['phase'] = 'processing'
+            claimed = True
+            return queue
+        queue = self.database.calendar_queue_update(claim)
+        if not claimed:
+            return
+        while queue.get('items'):
+            if self.lock.locked() or self.state['running']:
+                def defer(current):
+                    current['phase'] = 'waiting'
+                    current['due'] = datetime.now(timezone.utc).isoformat()
+                    return current
+                self.database.calendar_queue_update(defer)
+                return
+            item = queue['items'][0]
+            try:
+                result = await self.move_calendar_recipe(datetime.fromisoformat(item['source']).date(), datetime.fromisoformat(item['target']).date(), item['recipe_id'], item['custom'])
+                failure = None if result.get('status') == 'moved' else result.get('message', 'Der Wochenabgleich konnte nicht bestätigt werden.')
+            except Exception as error:
+                logger.warning('Calendar queue operation failed: %s', type(error).__name__)
+                failure = 'Der Wochenabgleich konnte nicht abgeschlossen werden. Bitte prüfe die Einträge in Cookidoo.'
+            def advance(current):
+                if failure:
+                    current['phase'] = 'error'; current['error'] = failure
+                else:
+                    current['items'] = current['items'][1:]
+                    if not current['items']:
+                        current['phase'] = 'idle'; current['due'] = None; current['error'] = None
+                return current
+            queue = self.database.calendar_queue_update(advance)
+            if failure:
+                return
+
+    async def calendar_week(self, requested_day=None):
+        """Read the Berlin calendar week directly from the shared Cookidoo client."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            today = datetime.now(ZoneInfo('Europe/Berlin')).date()
+            selected = requested_day or today
+            monday = selected - timedelta(days=selected.weekday())
+            entries = await self.client.get_recipes_in_calendar_week(monday)
+            days = { (monday + timedelta(days=i)).isoformat(): [] for i in range(7) }
+            region = (self.database.get('account') or {}).get('region', 'de')
+            language, _, website = REGIONS[region]
+
+            async def calendar_recipe(identifier, custom, remote):
+                source_id = str(identifier)
+                local_id = ('creation:' if custom else '') + source_id
+                local = self.database.recipe(local_id)
+                name = (local or {}).get('name') or getattr(remote, 'name', None)
+                image_file = (local or {}).get('image_file')
+                if custom and (not name or not image_file) and not remote:
+                    try:
+                        remote = await self.client.get_custom_recipe(source_id)
+                        name = name or remote.name
+                    except Exception as error:
+                        logger.warning('Calendar custom recipe lookup failed: %s', type(error).__name__)
+                if image_file and not (self.images / image_file).is_file():
+                    image_file = None
+                if not image_file and remote:
+                    image_file = self.calendar_image_reference(getattr(remote, 'thumbnail', None) or getattr(remote, 'image', None))
+                safe_id = quote(source_id, safe='')
+                source_url = (f'{website}/created-recipes/{language}/{safe_id}/edit' if custom else f'{website}/recipes/recipe/{language}/{safe_id}')
+                return {'id': local_id, 'calendar_id': source_id, 'custom': custom, 'name': name or ('Eigene Kreation' if custom else 'Rezept'), 'image_file': image_file, 'source_url': source_url, 'unfiled': not custom and not (local or {}).get('collections'), 'total_seconds': (local or {}).get('total_seconds') or seconds(getattr(remote, 'total_time', None)), 'servings': (local or {}).get('servings') or getattr(remote, 'serving_size', None)}
+
+            for entry in entries:
+                day = str(entry.id)
+                if day not in days:
+                    continue
+                seen = set()
+                for recipe in entry.recipes:
+                    custom = getattr(recipe, 'is_custom', False)
+                    days[day].append(await calendar_recipe(recipe.id, custom, recipe))
+                    seen.add(str(recipe.id))
+                for identifier in entry.customer_recipe_ids:
+                    if str(identifier) in seen:
+                        continue
+                    days[day].append(await calendar_recipe(identifier, True, None))
+            tracked = self.database.get('week_unfiled_collection') or {}
+            needs_setup = tracked.get('owner') != self.week_collection_owner() or not tracked.get('id')
+            return {'today': today.isoformat(), 'days': [{'date': day, 'recipes': recipes} for day, recipes in days.items()], 'needs_collection_setup': needs_setup}
+
+    async def calendar_badges(self, recipe_ids):
+        """Fetch note presence and missing recipe metadata without exposing note text."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        if len(recipe_ids) > 100 or any(not re.fullmatch(r'(?:creation:)?[A-Za-z0-9_-]{1,120}', item) for item in recipe_ids):
+            raise ValueError('Ungültige Rezeptauswahl.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            limit = asyncio.Semaphore(4)
+
+            async def badges(recipe_id):
+                async with limit:
+                    custom = recipe_id.startswith('creation:')
+                    source_id = recipe_id.removeprefix('creation:') if custom else recipe_id
+                    local = self.database.recipe(recipe_id) or {}
+                    total_seconds = local.get('total_seconds')
+                    servings = local.get('servings')
+                    has_note = None
+                    try:
+                        note = await self._read_recipe_note(source_id)
+                        has_note = bool(note and note.strip())
+                    except Exception as error:
+                        logger.warning('Calendar note presence unavailable: %s', type(error).__name__)
+                    if not total_seconds or not servings:
+                        try:
+                            detail = await (self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id))
+                            total_seconds = total_seconds or seconds(detail.total_time)
+                            servings = servings or (str(detail.serving_size) if detail.serving_size else None)
+                        except Exception as error:
+                            logger.warning('Calendar recipe metadata unavailable: %s', type(error).__name__)
+                    return {'id': recipe_id, 'has_note': has_note, 'total_seconds': total_seconds, 'servings': servings}
+
+            return {'items': await asyncio.gather(*(badges(item) for item in dict.fromkeys(recipe_ids)))}
+
+    async def save_unfiled_calendar_recipes(self, day):
+        """Save unfiled catalogue recipes from a viewed week in a Cookidoo list."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        should_sync = False
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            monday = day - timedelta(days=day.weekday())
+            entries = await self.client.get_recipes_in_calendar_week(monday)
+            candidates = set()
+            for entry in entries:
+                for item in entry.recipes:
+                    source_id = str(item.id)
+                    if getattr(item, 'is_custom', False) or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', source_id):
+                        continue
+                    local = self.database.recipe(source_id)
+                    if not local or not local['collections']:
+                        candidates.add(source_id)
+            owner = self.week_collection_owner()
+            tracked = self.database.get('week_unfiled_collection') or {}
+            if tracked.get('owner') != owner:
+                tracked = {}
+            if not candidates and tracked.get('id'):
+                return {'added': 0}
+            # Use a complete live snapshot before deciding that a recipe is unfiled.
+            collections = await self.collections()
+            assigned = {member['id'] for collection in collections for member in collection['members']}
+            missing = sorted(candidates - assigned)
+            custom_lists = [collection for collection in collections if collection['kind'] == 'custom']
+            target = next((item for item in custom_lists if item['source_id'] == tracked.get('id')), None)
+            if target is None and tracked.get('pending'):
+                matches = [item for item in custom_lists if item['name'] == tracked['pending']]
+                if len(matches) != 1:
+                    raise ValueError('Die Erstellung der Cookidoo-Liste konnte nicht bestätigt werden. Bitte prüfe deine Listen in Cookidoo.')
+                target = matches[0]
+            if target is None:
+                name = 'Rezeptgarten – Wochenrezepte ohne Liste'
+                names = {item['name'] for item in custom_lists}
+                candidate = name
+                suffix = 2
+                while candidate in names:
+                    candidate = f'{name} ({suffix})'
+                    suffix += 1
+                self.database.set('week_unfiled_collection', {'owner': owner, 'pending': candidate})
+                created = await self.client.add_custom_collection(candidate)
+                if not isinstance(created.id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', created.id):
+                    raise ValueError('Die Erstellung der Cookidoo-Liste konnte nicht bestätigt werden. Bitte prüfe deine Listen in Cookidoo.')
+                target = {'source_id': created.id, 'name': candidate}
+                should_sync = True
+            self.database.set('week_unfiled_collection', {'owner': owner, 'id': target['source_id']})
+            if missing:
+                updated = await self.client.add_recipes_to_custom_collection(target['source_id'], missing)
+                confirmed = {str(recipe.id) for chapter in (updated.chapters or []) for recipe in (chapter.recipes or [])}
+                if not set(missing).issubset(confirmed):
+                    raise ValueError('Die Cookidoo-Liste wurde geändert, aber die Rezepte konnten nicht bestätigt werden. Bitte prüfe die Liste in Cookidoo.')
+                should_sync = True
+            elif candidates:
+                # Refresh the local snapshot if Cookidoo already has these recipes in a list.
+                should_sync = True
+        if should_sync:
+            self.begin()
+        return {'added': len(missing), 'sync_started': should_sync}
+
+    async def calendar_recipe_details(self, recipe_id):
+        """Load a calendar recipe without changing the local library."""
+        custom = recipe_id.startswith('creation:')
+        source_id = recipe_id.removeprefix('creation:') if custom else recipe_id
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', source_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            detail = await (self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id))
+            ingredients = [dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item for item in detail.ingredients]
+            if custom:
+                instructions = readable_instructions([dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item for item in detail.instructions])
+            else:
+                instructions = [{'title': group.title, 'steps': [plain_step(step.formatted_text) for step in group.recipe_steps]} for group in getattr(detail, 'step_groups', [])]
+                instructions = readable_instructions(instructions)
+            image_file = None
+            try:
+                async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
+                    image_file = await self.cache_image(detail.image or detail.thumbnail, http)
+            except Exception as error:
+                logger.warning('Calendar recipe detail image unavailable: %s', type(error).__name__)
+            pantry_names = [item['name'] for item in self.database.pantry()['items']]
+            availability = {}
+            for index, ingredient in enumerate(ingredients):
+                name = ingredient_name(ingredient)
+                if name:
+                    availability[str(index)] = ingredient_available(name, pantry_names)
+            region = (self.database.get('account') or {}).get('region', 'de')
+            language, _, website = REGIONS[region]
+            safe_id = quote(source_id, safe='')
+            source_url = (f'{website}/created-recipes/{language}/{safe_id}/edit' if custom else f'{website}/recipes/recipe/{language}/{safe_id}')
+            return {'id': recipe_id, 'name': detail.name or 'Rezept', 'image_file': image_file, 'source_url': source_url,
+                    'total_seconds': seconds(detail.total_time), 'active_seconds': seconds(detail.active_time),
+                    'servings': str(detail.serving_size) if detail.serving_size else None,
+                    'difficulty': str(getattr(detail, 'difficulty', '') or '') or None,
+                    'ingredients_json': json.dumps(ingredients, ensure_ascii=False),
+                    'instructions_json': json.dumps(instructions, ensure_ascii=False),
+                    'ingredient_availability': availability, 'collections': [], 'versions': [], 'is_local': False}
+
+    async def move_calendar_recipe(self, source, target, recipe_id, custom):
+        """Add and verify before removing; never silently discard an entry."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        if source == target or source - timedelta(days=source.weekday()) != target - timedelta(days=target.weekday()):
+            raise ValueError('Bitte wähle einen anderen Tag derselben Woche.')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', recipe_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            monday = source - timedelta(days=source.weekday())
+
+            async def present():
+                entries = await self.client.get_recipes_in_calendar_week(monday)
+                result = set()
+                for day in entries:
+                    ids = ([str(item.id) for item in day.recipes if bool(getattr(item, 'is_custom', False)) == custom]
+                           + ([str(item) for item in day.customer_recipe_ids] if custom else []))
+                    if recipe_id in ids:
+                        result.add(str(day.id))
+                return result
+
+            existing = await present()
+            if source.isoformat() not in existing:
+                raise ValueError('Das Rezept ist am ursprünglichen Tag nicht mehr eingeplant. Bitte lade die Woche neu.')
+            if target.isoformat() in existing:
+                raise ValueError('Das Rezept ist am Zieltag bereits eingeplant.')
+            add = self.client.add_custom_recipes_to_calendar if custom else self.client.add_recipes_to_calendar
+            remove = self.client.remove_custom_recipe_from_calendar if custom else self.client.remove_recipe_from_calendar
+            try:
+                await add(target, [recipe_id])
+                if target.isoformat() not in await present():
+                    return {'status': 'uncertain', 'message': 'Das Hinzufügen am Zieltag konnte nicht bestätigt werden. Der ursprüngliche Eintrag wurde nicht entfernt. Bitte prüfe Cookidoo.'}
+            except Exception as error:
+                logger.warning('Calendar move add or verification failed: %s', type(error).__name__)
+                return {'status': 'uncertain', 'message': 'Das Hinzufügen am Zieltag konnte nicht bestätigt werden. Der ursprüngliche Eintrag wurde nicht entfernt. Bitte prüfe Cookidoo.'}
+            try:
+                await remove(source, recipe_id)
+                after = await present()
+                if source.isoformat() not in after and target.isoformat() in after:
+                    return {'status': 'moved'}
+            except Exception as error:
+                logger.warning('Calendar move removal or verification failed: %s', type(error).__name__)
+            return {'status': 'uncertain', 'message': 'Das Rezept wurde am Zieltag bestätigt. Ob der ursprüngliche Eintrag entfernt wurde, konnte nicht bestätigt werden. Bitte prüfe Cookidoo.'}
+
+    async def add_week_to_shopping(self, selected_day):
+        """Add future recipes from one week and mark pantry ingredients owned."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            today = datetime.now(ZoneInfo('Europe/Berlin')).date()
+            monday = selected_day - timedelta(days=selected_day.weekday())
+            sunday = monday + timedelta(days=6)
+            if sunday < today:
+                return {'status': 'empty', 'added': 0, 'existing': 0, 'marked': 0}
+            queue = self.calendar_queue()
+            if queue['phase'] in ('processing', 'error'):
+                raise ValueError('Bitte warte auf den Wochenabgleich beziehungsweise prüfe zuerst dessen Fehlermeldung.')
+            entries = await self.client.get_recipes_in_calendar_week(monday)
+            days = {(monday + timedelta(days=i)).isoformat(): [] for i in range(7)}
+            for entry in entries:
+                items = days.get(str(entry.id))
+                if items is None:
+                    continue
+                for recipe in entry.recipes:
+                    identifier = str(recipe.id)
+                    if re.fullmatch(r'[A-Za-z0-9_-]{1,120}', identifier):
+                        key = (identifier, bool(getattr(recipe, 'is_custom', False)))
+                        if key not in items:
+                            items.append(key)
+                for identifier in entry.customer_recipe_ids:
+                    identifier = str(identifier)
+                    if re.fullmatch(r'[A-Za-z0-9_-]{1,120}', identifier) and (identifier, True) not in items:
+                        items.append((identifier, True))
+            for move in queue['items']:
+                source, target = days.get(move['source']), days.get(move['target'])
+                if source is None or target is None:
+                    continue
+                key = (move['recipe_id'], move['custom'])
+                if key not in source or key in target:
+                    raise ValueError('Die vorgemerkte Woche stimmt nicht mehr mit Cookidoo überein. Bitte prüfe die Planung.')
+                source.remove(key); target.append(key)
+            selected = []
+            for day, items in days.items():
+                if day >= today.isoformat():
+                    for item in items:
+                        if item not in selected:
+                            selected.append(item)
+            if not selected:
+                return {'status': 'empty', 'added': 0, 'existing': 0, 'marked': 0}
+            # Never re-add recipes already on the user's shopping list.
+            existing = {str(item.id).removeprefix('creation:') for item in await self.client.get_shopping_list_recipes()}
+            if self.calendar_queue() != queue:
+                raise ValueError('Die Wochenplanung wurde gerade geändert. Bitte versuche es erneut.')
+            missing = [(identifier, custom) for identifier, custom in selected if identifier not in existing]
+            existing_count = len(selected) - len(missing)
+            if not missing:
+                return {'status': 'ok', 'added': 0, 'existing': existing_count, 'marked': 0}
+            pantry_names = [item['name'] for item in self.database.pantry()['items']]
+            added = marked = 0
+            for custom in (False, True):
+                identifiers = [identifier for identifier, is_custom in missing if is_custom == custom]
+                if not identifiers:
+                    continue
+                method = self.client.add_ingredient_items_for_custom_recipes if custom else self.client.add_ingredient_items_for_recipes
+                try:
+                    ingredients = await method(identifiers)
+                    added += len(identifiers)
+                except Exception as error:
+                    logger.warning('Week shopping recipe addition failed: %s', type(error).__name__)
+                    return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
+                            'message': 'Das Hinzufügen konnte nicht vollständig bestätigt werden. Bitte prüfe die Cookidoo-Einkaufsliste, bevor du es erneut versuchst.'}
+                try:
+                    available = {}
+                    for ingredient in ingredients:
+                        name = ingredient.name or ingredient_name(getattr(ingredient, 'description', '') or '')
+                        if name and not ingredient.is_owned and ingredient_available(name, pantry_names):
+                            ingredient.is_owned = True
+                            available[str(ingredient.id)] = ingredient
+                    if available:
+                        confirmed = await self.client.edit_ingredient_items_ownership(list(available.values()))
+                        confirmed_ids = {str(item.id) for item in confirmed if item.is_owned}
+                        if not set(available).issubset(confirmed_ids):
+                            raise ValueError('Pantry ownership could not be verified')
+                        marked += len(available)
+                except Exception as error:
+                    logger.warning('Week shopping pantry marking failed: %s', type(error).__name__)
+                    return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
+                            'message': 'Rezepte wurden hinzugefügt, aber vorhandene Zutaten konnten nicht vollständig bestätigt werden. Bitte prüfe die Cookidoo-Einkaufsliste.'}
+            return {'status': 'ok', 'added': added, 'existing': existing_count, 'marked': marked}
 
     async def recipe_action(self, recipe_id, action):
         if self.lock.locked() or self.state['running']:
@@ -299,6 +812,75 @@ class SyncService:
                 origins[creation_id] = match.group(1)
         return origins
 
+    def calendar_image_reference(self, url):
+        if not url:
+            return None
+        url = str(url)
+        try:
+            parsed = urlparse(url)
+            host = (parsed.hostname or '').lower()
+            if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port not in (None, 443) or not (host == 'assets.tmecosys.com' or host.endswith('.tmecosys.com')):
+                return None
+        except ValueError:
+            return None
+        filename = hashlib.sha256(url.encode()).hexdigest()[:40] + '.webp'
+        if not (self.images / filename).is_file():
+            if len(self.calendar_image_sources) >= 2000 and filename not in self.calendar_image_sources:
+                self.calendar_image_sources.pop(next(iter(self.calendar_image_sources)))
+            self.calendar_image_sources[filename] = url
+        return filename
+
+    async def ensure_calendar_image(self, filename):
+        if (self.images / filename).is_file():
+            return True
+        url = self.calendar_image_sources.get(filename)
+        if not url:
+            return False
+        task = self.calendar_image_tasks.get(filename)
+        if task is None:
+            async def download():
+                async with self.calendar_image_semaphore:
+                    async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
+                        return await self.cache_image(url, http)
+            task = asyncio.create_task(download())
+            self.calendar_image_tasks[filename] = task
+            task.add_done_callback(lambda done: self.calendar_image_tasks.pop(filename, None))
+        try:
+            return bool(await asyncio.shield(task))
+        except Exception as error:
+            logger.warning('Calendar image download failed: %s', type(error).__name__)
+            return False
+
+    async def thumbnail(self, filename):
+        """Create a smaller local preview without modifying the original image."""
+        source = self.images / filename
+        directory = self.images / 'thumbnails'
+        target = directory / filename
+        if target.is_file():
+            return target
+        async with self.thumbnail_semaphore:
+            if target.is_file():
+                return target
+            directory.mkdir(exist_ok=True, mode=0o750)
+
+            def create():
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=directory, suffix='.tmp', delete=False) as output:
+                        temporary = Path(output.name)
+                    with Image.open(source) as original:
+                        image = ImageOps.exif_transpose(original).convert('RGB')
+                        image.thumbnail((480, 480))
+                        image.save(temporary, format='WEBP', quality=80)
+                    os.chmod(temporary, 0o600)
+                    os.replace(temporary, target)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+
+            await asyncio.to_thread(create)
+            return target
+
     async def cache_image(self, url, http):
         if not url:
             return None
@@ -325,12 +907,19 @@ class SyncService:
                         return None
                 image_bytes = bytes(data)
             def convert():
-                with Image.open(io.BytesIO(image_bytes)) as original:
-                    image = ImageOps.exif_transpose(original).convert('RGB')
-                    image.thumbnail((960, 960))
-                    temporary = target.with_suffix('.tmp')
-                    image.save(temporary, format='WEBP', quality=84)
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=self.images, suffix='.tmp', delete=False) as output:
+                        temporary = Path(output.name)
+                    with Image.open(io.BytesIO(image_bytes)) as original:
+                        image = ImageOps.exif_transpose(original).convert('RGB')
+                        image.thumbnail((960, 960))
+                        image.save(temporary, format='WEBP', quality=84)
+                    os.chmod(temporary, 0o600)
                     os.replace(temporary, target)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
             await asyncio.to_thread(convert)
             return filename
         return None

@@ -4,7 +4,9 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
@@ -51,6 +53,23 @@ class PantryItem(BaseModel):
     ingredient_id: int | None = Field(default=None, gt=0)
 
 
+class CalendarMove(BaseModel):
+    source: date
+    target: date
+    recipe_id: str = Field(min_length=1, max_length=120)
+    custom: bool = False
+    move_id: str | None = Field(default=None, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
+
+
+class CalendarWeekSelection(BaseModel):
+    day: date
+
+
+class RecipeNote(BaseModel):
+    text: str = Field(max_length=5000)
+    expected: str = Field(max_length=5000)
+
+
 def create_app(directory=None, secure_cookies=None):
     os.umask(0o077)
     database = Database(directory or os.environ.get('REZEPTGARTEN_DATA', './data'))
@@ -76,7 +95,8 @@ def create_app(directory=None, secure_cookies=None):
                 return JSONResponse({'detail': 'Die Anfrage muss aus dieser App stammen.'}, status_code=403)
             content_length = request.headers.get('content-length', '0')
             try:
-                if int(content_length) > 16384:
+                max_length = 48000 if request.method == 'PUT' and request.url.path.startswith('/api/notes/') else 16384
+                if int(content_length) > max_length:
                     return JSONResponse({'detail': 'Die Anfrage ist zu groß.'}, status_code=413)
             except ValueError:
                 return JSONResponse({'detail': 'Ungültige Anfrage.'}, status_code=400)
@@ -86,7 +106,11 @@ def create_app(directory=None, secure_cookies=None):
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if request.url.path.startswith('/api/'):
-            response.headers['Cache-Control'] = 'no-store'
+            is_image = bool(re.fullmatch(r'/api/images/[a-f0-9]{40}\.webp', request.url.path))
+            if not (is_image and request.method == 'GET' and response.status_code == 200):
+                response.headers['Cache-Control'] = 'no-store'
+            elif 'Cache-Control' not in response.headers:
+                response.headers['Cache-Control'] = 'no-store'
         return response
 
     @app.get('/api/health')
@@ -100,7 +124,7 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/status')
     def status():
-        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file()}
+        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'calendar_queue': service.calendar_queue()}
 
     @app.post('/api/google-api-key')
     async def set_google_api_key(request: Request):
@@ -118,6 +142,90 @@ def create_app(directory=None, secure_cookies=None):
     def delete_google_api_key():
         google_key_vault.clear()
         return {'ok': True}
+
+    @app.get('/api/calendar/week')
+    async def calendar_week(day: date | None = None):
+        try:
+            return await service.calendar_week(day)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo calendar read failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Deine Woche konnte nicht von Cookidoo geladen werden. Bitte versuche es erneut.') from None
+
+    @app.get('/api/calendar/badges')
+    async def calendar_badges(recipe_id: list[str] = Query(default=[])):
+        try:
+            return await service.calendar_badges(recipe_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Calendar badges failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Rezeptangaben konnten nicht aus Cookidoo geladen werden.') from None
+
+    @app.post('/api/calendar/move')
+    async def move_calendar_recipe(payload: CalendarMove):
+        try:
+            return await service.move_calendar_recipe(payload.source, payload.target, payload.recipe_id, payload.custom)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo calendar move failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Woche konnte nicht geprüft werden. Bitte lade sie neu und versuche es erneut.') from None
+
+    @app.post('/api/calendar/queue')
+    def enqueue_calendar_move(payload: CalendarMove):
+        try:
+            return service.enqueue_calendar_move(payload.source, payload.target, payload.recipe_id, payload.custom, payload.move_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.delete('/api/calendar/queue')
+    def discard_failed_calendar_moves():
+        try:
+            return service.discard_failed_calendar_moves()
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post('/api/calendar/save-unfiled')
+    async def save_unfiled_calendar_recipes(payload: CalendarWeekSelection):
+        try:
+            return await service.save_unfiled_calendar_recipes(payload.day)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo unfiled calendar save failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Wochenrezepte konnten nicht sicher in der Cookidoo-Liste gespeichert werden. Bitte prüfe deine Listen, bevor du es erneut versuchst.') from None
+
+    @app.post('/api/calendar/shopping')
+    async def add_week_to_shopping(payload: CalendarWeekSelection):
+        try:
+            return await service.add_week_to_shopping(payload.day)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Week shopping preparation failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Wochenplanung oder Einkaufsliste konnte nicht gelesen werden. Es wurden keine Rezepte hinzugefügt.') from None
+
+    @app.get('/api/notes/{recipe_id}')
+    async def get_recipe_note(recipe_id: str):
+        try:
+            return await service.recipe_note(recipe_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo note read failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Notiz konnte nicht aus Cookidoo geladen werden.') from None
+
+    @app.put('/api/notes/{recipe_id}')
+    async def save_recipe_note(recipe_id: str, payload: RecipeNote):
+        try:
+            return await service.recipe_note(recipe_id, payload.text, payload.expected, save=True)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo note write failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Notiz konnte nicht bestätigt werden. Bitte prüfe sie in Cookidoo, bevor du erneut speicherst.') from None
 
     @app.get('/api/featured-recipe')
     def featured_recipe():
@@ -212,14 +320,23 @@ def create_app(directory=None, secure_cookies=None):
         return database.recipes(collection, q.strip(), sort, offset, limit, exclude_collection, ingredient, min_servings, max_minutes, show_all, candidate_q.strip())
 
     @app.get('/api/recipes/{recipe_id}')
-    def recipe(recipe_id: str):
+    async def recipe(recipe_id: str, calendar: bool = False):
         result = database.recipe(recipe_id)
         if result is None:
-            raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
+            if not calendar:
+                raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
+            try:
+                return await service.calendar_recipe_details(recipe_id)
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from None
+            except Exception as error:
+                logging.getLogger(__name__).warning('Calendar recipe detail read failed: %s', type(error).__name__)
+                raise HTTPException(502, 'Die Rezeptdetails konnten nicht aus Cookidoo geladen werden.') from None
+        result['is_local'] = True
         return result
 
-    async def cookidoo_recipe_action(recipe_id: str, action: str):
-        if database.recipe(recipe_id) is None:
+    async def cookidoo_recipe_action(recipe_id: str, action: str, calendar: bool = False):
+        if database.recipe(recipe_id) is None and not (calendar and re.fullmatch(r'(?:creation:)?[A-Za-z0-9_-]{1,120}', recipe_id)):
             raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
         try:
             return await service.recipe_action(recipe_id, action)
@@ -230,20 +347,26 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(502, 'Cookidoo konnte die Aktion nicht bestätigen. Bitte prüfe den Kalender oder die Einkaufsliste, bevor du es erneut versuchst.') from None
 
     @app.post('/api/recipes/{recipe_id}/plan-today')
-    async def plan_today(recipe_id: str):
-        return await cookidoo_recipe_action(recipe_id, 'plan')
+    async def plan_today(recipe_id: str, calendar: bool = False):
+        return await cookidoo_recipe_action(recipe_id, 'plan', calendar)
 
     @app.post('/api/recipes/{recipe_id}/shopping')
-    async def add_to_shopping(recipe_id: str):
-        return await cookidoo_recipe_action(recipe_id, 'shopping')
+    async def add_to_shopping(recipe_id: str, calendar: bool = False):
+        return await cookidoo_recipe_action(recipe_id, 'shopping', calendar)
 
     @app.get('/api/images/{filename}')
-    def image(filename: str):
+    async def image(filename: str, size: Literal['thumb'] | None = None):
         if not re.fullmatch(r'[a-f0-9]{40}\.webp', filename):
             raise HTTPException(404)
         path = service.images / filename
-        if not path.is_file():
+        if not path.is_file() and not await service.ensure_calendar_image(filename):
             raise HTTPException(404)
+        if size == 'thumb':
+            try:
+                path = await service.thumbnail(filename)
+            except Exception as error:
+                logging.getLogger(__name__).warning('Image preview unavailable: %s', type(error).__name__)
+                return FileResponse(path, media_type='image/webp', headers={'Cache-Control': 'private, max-age=300'})
         return FileResponse(path, media_type='image/webp', headers={'Cache-Control': 'private, max-age=86400'})
 
     @app.post('/api/connect')

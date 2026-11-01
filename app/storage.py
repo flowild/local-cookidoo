@@ -196,6 +196,16 @@ class Database:
         with self.connect() as db:
             self.write_setting(db, key, value)
 
+    def calendar_queue_update(self, update):
+        """Atomically update the persisted calendar queue."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute("SELECT value FROM settings WHERE key='calendar_move_queue'").fetchone()
+            current = json.loads(row['value']) if row else None
+            result = update(current)
+            self.write_setting(db, 'calendar_move_queue', result)
+            return result
+
     @staticmethod
     def write_setting(db, key, value):
         db.execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, json.dumps(value)))
