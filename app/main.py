@@ -65,6 +65,20 @@ class CalendarWeekSelection(BaseModel):
     day: date
 
 
+class CalendarUndo(BaseModel):
+    move_id: str = Field(min_length=1, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
+
+
+class CalendarPlacement(BaseModel):
+    week: date
+    source: str = Field(max_length=10)
+    target: str = Field(max_length=10)
+    recipe_id: str = Field(min_length=1, max_length=120)
+    custom: bool = False
+    move_id: str = Field(min_length=1, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
+    recipe: dict
+
+
 class RecipeNote(BaseModel):
     text: str = Field(max_length=5000)
     expected: str = Field(max_length=5000)
@@ -177,6 +191,20 @@ def create_app(directory=None, secure_cookies=None):
     def enqueue_calendar_move(payload: CalendarMove):
         try:
             return service.enqueue_calendar_move(payload.source, payload.target, payload.recipe_id, payload.custom, payload.move_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post('/api/calendar/placement')
+    def enqueue_calendar_placement(payload: CalendarPlacement):
+        try:
+            return service.enqueue_calendar_placement(payload.week, payload.source, payload.target, payload.recipe_id, payload.custom, payload.move_id, payload.recipe)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post('/api/calendar/undo-removal')
+    def undo_calendar_removal(payload: CalendarUndo):
+        try:
+            return service.undo_calendar_removal(payload.move_id)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
 
@@ -394,7 +422,7 @@ def create_app(directory=None, secure_cookies=None):
     @app.post('/api/sync')
     async def sync():
         try:
-            started = service.begin()
+            started = service.begin(manual=True)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         return {'started': started}

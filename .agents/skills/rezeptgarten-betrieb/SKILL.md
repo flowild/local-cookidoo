@@ -58,3 +58,5 @@ Relevante Änderungen an Betrieb, Tests und Deployment in diesem Skill und den
 Projekthinweisen aktuell halten.
 
 - Browser dürfen erfolgreiche Bildantworten einen Tag privat zwischenspeichern. `images/thumbnails` enthält regenerierbare 480-Pixel-Vorschauen; der Service Worker speichert weiterhin keine persönlichen API-Antworten.
+
+- Das Deployment-Archiv enthält ausschließlich explizit erlaubte Quelldateien aus App, Tests, Skripten und Deployment; lokale Konfiguration, Daten und verborgene Dateien bleiben ausgeschlossen.

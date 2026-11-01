@@ -226,7 +226,7 @@ class SyncService:
         if not queue.get('items'):
             return {'phase': 'idle', 'items': [], 'due': None, 'error': None}
         if queue.get('owner') != self.week_collection_owner():
-            return {'phase': 'error', 'items': [], 'due': None, 'error': 'Vorgemerkte Änderungen gehören zu einem anderen Cookidoo-Konto.'}
+            return {'phase': 'error', 'items': [], 'due': None, 'error': 'Vorgemerkte Änderungen gehören zu einem anderen Cookidoo-Konto. Bitte verbinde das ursprüngliche Konto erneut.'}
         return {key: queue.get(key) for key in ('phase', 'items', 'due', 'error')}
 
     def enqueue_calendar_move(self, source, target, recipe_id, custom, move_id=None):
@@ -252,7 +252,108 @@ class SyncService:
                 return queue
             if len(items) >= 1000:
                 raise ValueError('Zu viele vorgemerkte Änderungen. Bitte warte auf den Abgleich.')
-            return {'owner': owner, 'phase': 'waiting', 'items': [*items, item], 'due': due, 'error': None}
+            return {**queue, 'owner': owner, 'phase': 'waiting', 'items': [*items, item], 'due': due, 'error': None}
+        self.database.calendar_queue_update(update)
+        return self.calendar_queue()
+
+    def enqueue_calendar_placement(self, week, source, target, recipe_id, custom, move_id, recipe):
+        if not self.client:
+            raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+        monday = week - timedelta(days=week.weekday())
+        dates = {(monday + timedelta(days=i)).isoformat() for i in range(7)}
+        if source not in dates | {'shelf', 'library'} or target not in dates | {'shelf', 'trash'} or source == target or (source == 'library' and target != 'shelf'):
+            raise ValueError('Ungültiges Ziel für diese Woche.')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', recipe_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        if source == 'library':
+            local_id = ('creation:' if custom else '') + recipe_id
+            with self.database.connect() as db:
+                in_local_list = db.execute("SELECT 1 FROM members m JOIN collections c ON c.id=m.collection_id WHERE c.kind='local' AND m.recipe_id=? LIMIT 1", (local_id,)).fetchone()
+            recipe = self.database.recipe(local_id) if in_local_list else None
+            if not recipe:
+                raise ValueError('Das Rezept ist nicht mehr in einer lokalen Liste.')
+        owner = self.week_collection_owner()
+        # Only retain the display fields needed by the week view.
+        snapshot = {'id': ('creation:' if custom else '') + recipe_id, 'calendar_id': recipe_id,
+                    'custom': custom, 'name': str(recipe.get('name') or 'Rezept')[:300],
+                    'image_file': recipe.get('image_file') if isinstance(recipe.get('image_file'), str) and len(recipe['image_file']) <= 2048 else None,
+                    'total_seconds': recipe.get('total_seconds') if isinstance(recipe.get('total_seconds'), (int, float)) else None,
+                    'servings': str(recipe.get('servings') or '')[:80], 'has_note': bool(recipe.get('has_note'))}
+        item = {'source': source, 'target': target, 'week': monday.isoformat(), 'recipe_id': recipe_id,
+                'custom': custom, 'move_id': move_id, 'recipe': snapshot}
+        created = datetime.now(timezone.utc)
+        due = (created + timedelta(minutes=5)).isoformat()
+        if target == 'trash' and source != 'shelf':
+            item['not_before'] = (created + timedelta(seconds=10)).isoformat()
+        def update(queue):
+            queue = queue or {}
+            if queue.get('items') and queue.get('owner') != owner:
+                raise ValueError('Vorgemerkte Änderungen gehören zu einem anderen Cookidoo-Konto.')
+            if queue.get('phase') in ('error', 'processing'):
+                raise ValueError('Bitte prüfe zuerst den Wochenabgleich.')
+            if move_id in queue.get('recent_placements', []):
+                return queue
+            items = queue.get('items') or []
+            if len(items) >= 1000:
+                raise ValueError('Zu viele vorgemerkte Änderungen. Bitte warte auf den Abgleich.')
+            shelves = queue.setdefault('shelves', {}).setdefault(owner, {})
+            shelf = shelves.setdefault(monday.isoformat(), [])
+            match = next((i for i, entry in enumerate(shelf) if entry['calendar_id'] == recipe_id and entry['custom'] == custom), None)
+            if source == 'shelf':
+                if match is None:
+                    raise ValueError('Das Rezept liegt nicht mehr in der Ablage.')
+                snapshot.update(shelf.pop(match))
+            if target == 'shelf':
+                if match is not None:
+                    raise ValueError('Das Rezept liegt bereits in der Ablage.')
+                shelf.append(snapshot)
+            if source != 'library' and (source != 'shelf' or target != 'trash'):
+                items.append(item)
+                queue.update(owner=owner, phase='waiting', items=items, due=due, error=None)
+            elif items:
+                queue['due'] = due
+            if target == 'trash':
+                records = [entry for entry in queue.get('undo_removals', []) if entry.get('expires', '') > created.isoformat()]
+                records.append({'owner': owner, 'move_id': move_id, 'week': monday.isoformat(), 'source': source,
+                                'recipe': snapshot, 'expires': (created + timedelta(seconds=30)).isoformat()})
+                queue['undo_removals'] = records[-100:]
+            queue['recent_placements'] = (queue.get('recent_placements', []) + [move_id])[-100:]
+            return queue
+        self.database.calendar_queue_update(update)
+        return self.calendar_queue()
+
+    def undo_calendar_removal(self, move_id):
+        owner = self.week_collection_owner()
+        current_time = datetime.now(timezone.utc)
+        def update(queue):
+            queue = queue or {}
+            records = queue.get('undo_removals', [])
+            record = next((entry for entry in records if entry.get('move_id') == move_id and entry.get('owner') == owner), None)
+            if not record or datetime.fromisoformat(record['expires']) < current_time:
+                raise ValueError('Das Entfernen kann nicht mehr rückgängig gemacht werden.')
+            if queue.get('phase') in ('processing', 'error') or (queue.get('items') and queue.get('owner') != owner):
+                raise ValueError('Der Wochenabgleich läuft bereits oder muss zuerst geprüft werden.')
+            recipe = record['recipe']
+            items = queue.get('items') or []
+            if record['source'] == 'shelf':
+                shelf = queue.setdefault('shelves', {}).setdefault(owner, {}).setdefault(record['week'], [])
+                if any(entry['calendar_id'] == recipe['calendar_id'] and entry['custom'] == recipe['custom'] for entry in shelf):
+                    raise ValueError('Das Rezept liegt bereits in der Ablage.')
+                shelf.append(recipe)
+            else:
+                position = next((i for i, item in enumerate(items) if item.get('move_id') == move_id and item.get('target') == 'trash'), None)
+                if position is None:
+                    raise ValueError('Das Entfernen wurde bereits abgeglichen. Bitte prüfe die Woche in Cookidoo.')
+                if any(item.get('recipe_id') == recipe['calendar_id'] and item.get('custom') == recipe['custom'] and item.get('week') == record['week'] for item in items[position + 1:]):
+                    raise ValueError('Das Rezept wurde inzwischen weiter verändert. Bitte prüfe die Woche.')
+                items.pop(position)
+                queue['items'] = items
+                if not items:
+                    queue.update(phase='idle', due=None, error=None)
+            if items:
+                queue['due'] = (current_time + timedelta(minutes=5)).isoformat()
+            queue['undo_removals'] = [entry for entry in records if entry is not record and entry.get('expires', '') > current_time.isoformat()]
+            return queue
         self.database.calendar_queue_update(update)
         return self.calendar_queue()
 
@@ -260,7 +361,9 @@ class SyncService:
         def update(queue):
             if not queue or queue.get('phase') != 'error':
                 raise ValueError('Es gibt keinen fehlgeschlagenen Wochenabgleich zum Verwerfen.')
-            return {'owner': self.week_collection_owner(), 'phase': 'idle', 'items': [], 'due': None, 'error': None}
+            if queue.get('owner') != self.week_collection_owner():
+                raise ValueError('Diese Änderungen gehören zu einem anderen Cookidoo-Konto und können hier nicht verworfen werden.')
+            return {**queue, 'owner': self.week_collection_owner(), 'phase': 'idle', 'items': [], 'due': None, 'error': None}
         self.database.calendar_queue_update(update)
         return self.calendar_queue()
 
@@ -315,8 +418,18 @@ class SyncService:
                 self.database.calendar_queue_update(defer)
                 return
             item = queue['items'][0]
+            if item.get('not_before') and datetime.fromisoformat(item['not_before']) > datetime.now(timezone.utc):
+                def wait_for_undo(current):
+                    current['phase'] = 'waiting'
+                    current['due'] = item['not_before']
+                    return current
+                self.database.calendar_queue_update(wait_for_undo)
+                return
             try:
-                result = await self.move_calendar_recipe(datetime.fromisoformat(item['source']).date(), datetime.fromisoformat(item['target']).date(), item['recipe_id'], item['custom'])
+                if item['source'] == 'shelf' or item['target'] in ('shelf', 'trash'):
+                    result = await self.apply_calendar_placement(item)
+                else:
+                    result = await self.move_calendar_recipe(datetime.fromisoformat(item['source']).date(), datetime.fromisoformat(item['target']).date(), item['recipe_id'], item['custom'])
                 failure = None if result.get('status') == 'moved' else result.get('message', 'Der Wochenabgleich konnte nicht bestätigt werden.')
             except Exception as error:
                 logger.warning('Calendar queue operation failed: %s', type(error).__name__)
@@ -383,7 +496,9 @@ class SyncService:
                     days[day].append(await calendar_recipe(identifier, True, None))
             tracked = self.database.get('week_unfiled_collection') or {}
             needs_setup = tracked.get('owner') != self.week_collection_owner() or not tracked.get('id')
-            return {'today': today.isoformat(), 'days': [{'date': day, 'recipes': recipes} for day, recipes in days.items()], 'needs_collection_setup': needs_setup}
+            stored = self.database.get('calendar_move_queue') or {}
+            shelf = stored.get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), [])
+            return {'today': today.isoformat(), 'days': [{'date': day, 'recipes': recipes} for day, recipes in days.items()], 'shelf': shelf, 'needs_collection_setup': needs_setup}
 
     async def calendar_badges(self, recipe_ids):
         """Fetch note presence and missing recipe metadata without exposing note text."""
@@ -526,6 +641,34 @@ class SyncService:
                     'instructions_json': json.dumps(instructions, ensure_ascii=False),
                     'ingredient_availability': availability, 'collections': [], 'versions': [], 'is_local': False}
 
+    async def apply_calendar_placement(self, item):
+        """Apply one add or removal and verify the resulting Cookidoo calendar."""
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            monday = datetime.fromisoformat(item['week']).date()
+            day = item['target'] if item['source'] == 'shelf' else item['source']
+            adding = item['source'] == 'shelf'
+            identifier, custom = item['recipe_id'], item['custom']
+            async def present():
+                entries = await self.client.get_recipes_in_calendar_week(monday)
+                for entry in entries:
+                    if str(entry.id) == day:
+                        return any(str(recipe.id) == identifier and bool(getattr(recipe, 'is_custom', False)) == custom for recipe in entry.recipes) or (custom and identifier in [str(value) for value in entry.customer_recipe_ids])
+                return False
+            if await present() == adding:
+                raise ValueError('Die Woche hat sich in Cookidoo geändert. Bitte prüfe die Einträge.')
+            method = (self.client.add_custom_recipes_to_calendar if custom else self.client.add_recipes_to_calendar) if adding else (self.client.remove_custom_recipe_from_calendar if custom else self.client.remove_recipe_from_calendar)
+            try:
+                await method(datetime.fromisoformat(day).date(), [identifier] if adding else identifier)
+                if await present() == adding:
+                    return {'status': 'moved'}
+            except Exception as error:
+                logger.warning('Calendar placement failed: %s', type(error).__name__)
+            return {'status': 'uncertain', 'message': 'Die Änderung konnte nicht bestätigt werden. Bitte prüfe die Woche in Cookidoo.'}
+
     async def move_calendar_recipe(self, source, target, recipe_id, custom):
         """Add and verify before removing; never silently discard an entry."""
         if self.lock.locked() or self.state['running']:
@@ -572,6 +715,21 @@ class SyncService:
                 logger.warning('Calendar move removal or verification failed: %s', type(error).__name__)
             return {'status': 'uncertain', 'message': 'Das Rezept wurde am Zieltag bestätigt. Ob der ursprüngliche Eintrag entfernt wurde, konnte nicht bestätigt werden. Bitte prüfe Cookidoo.'}
 
+    async def mark_pantry_ingredients(self, ingredients, pantry_names):
+        """Mark matching ingredients as owned and verify Cookidoo's response."""
+        available = {}
+        for ingredient in ingredients:
+            name = ingredient.name or ingredient_name(getattr(ingredient, 'description', '') or '')
+            if name and not ingredient.is_owned and ingredient_available(name, pantry_names):
+                ingredient.is_owned = True
+                available[str(ingredient.id)] = ingredient
+        if available:
+            confirmed = await self.client.edit_ingredient_items_ownership(list(available.values()))
+            confirmed_ids = {str(item.id) for item in confirmed if item.is_owned}
+            if not set(available).issubset(confirmed_ids):
+                raise ValueError('Pantry ownership could not be verified')
+        return len(available)
+
     async def add_week_to_shopping(self, selected_day):
         """Add future recipes from one week and mark pantry ingredients owned."""
         if self.lock.locked() or self.state['running']:
@@ -605,23 +763,36 @@ class SyncService:
                         items.append((identifier, True))
             for move in queue['items']:
                 source, target = days.get(move['source']), days.get(move['target'])
-                if source is None or target is None:
+                if move.get('week') and move['week'] != monday.isoformat():
                     continue
                 key = (move['recipe_id'], move['custom'])
-                if key not in source or key in target:
+                if source is None and move['source'] != 'shelf':
+                    continue
+                if target is None and move['target'] not in ('shelf', 'trash'):
+                    continue
+                if (source is not None and key not in source) or (target is not None and key in target):
                     raise ValueError('Die vorgemerkte Woche stimmt nicht mehr mit Cookidoo überein. Bitte prüfe die Planung.')
-                source.remove(key); target.append(key)
+                if source is not None:
+                    source.remove(key)
+                if target is not None:
+                    target.append(key)
             selected = []
             for day, items in days.items():
                 if day >= today.isoformat():
                     for item in items:
                         if item not in selected:
                             selected.append(item)
+            stored = self.database.get('calendar_move_queue') or {}
+            shelf = stored.get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), [])
+            for recipe in shelf:
+                key = (recipe['calendar_id'], recipe['custom'])
+                if key not in selected:
+                    selected.append(key)
             if not selected:
                 return {'status': 'empty', 'added': 0, 'existing': 0, 'marked': 0}
             # Never re-add recipes already on the user's shopping list.
             existing = {str(item.id).removeprefix('creation:') for item in await self.client.get_shopping_list_recipes()}
-            if self.calendar_queue() != queue:
+            if self.calendar_queue() != queue or (self.database.get('calendar_move_queue') or {}).get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), []) != shelf:
                 raise ValueError('Die Wochenplanung wurde gerade geändert. Bitte versuche es erneut.')
             missing = [(identifier, custom) for identifier, custom in selected if identifier not in existing]
             existing_count = len(selected) - len(missing)
@@ -642,18 +813,7 @@ class SyncService:
                     return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
                             'message': 'Das Hinzufügen konnte nicht vollständig bestätigt werden. Bitte prüfe die Cookidoo-Einkaufsliste, bevor du es erneut versuchst.'}
                 try:
-                    available = {}
-                    for ingredient in ingredients:
-                        name = ingredient.name or ingredient_name(getattr(ingredient, 'description', '') or '')
-                        if name and not ingredient.is_owned and ingredient_available(name, pantry_names):
-                            ingredient.is_owned = True
-                            available[str(ingredient.id)] = ingredient
-                    if available:
-                        confirmed = await self.client.edit_ingredient_items_ownership(list(available.values()))
-                        confirmed_ids = {str(item.id) for item in confirmed if item.is_owned}
-                        if not set(available).issubset(confirmed_ids):
-                            raise ValueError('Pantry ownership could not be verified')
-                        marked += len(available)
+                    marked += await self.mark_pantry_ingredients(ingredients, pantry_names)
                 except Exception as error:
                     logger.warning('Week shopping pantry marking failed: %s', type(error).__name__)
                     return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
@@ -685,18 +845,11 @@ class SyncService:
             items = await method([source_id])
             try:
                 pantry_names = [item['name'] for item in self.database.pantry()['items']]
-                available = []
-                for item in items:
-                    name = item.name or ingredient_name(getattr(item, 'description', '') or '')
-                    if name and not item.is_owned and ingredient_available(name, pantry_names):
-                        item.is_owned = True
-                        available.append(item)
-                if available:
-                    await self.client.edit_ingredient_items_ownership(available)
+                marked = await self.mark_pantry_ingredients(items, pantry_names)
             except Exception as error:
                 logger.warning('Shopping list added but pantry matching failed: %s', type(error).__name__)
                 return {'partial': True}
-            return {'partial': False, 'marked': len(available)}
+            return {'partial': False, 'marked': marked}
 
     async def schedule(self):
         while True:
@@ -708,11 +861,19 @@ class SyncService:
             if not last or datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(hours=hours):
                 self.begin()
 
-    def begin(self):
+    def begin(self, manual=False):
         if self.state['running']:
             return False
         if not self.client:
             raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+        if manual:
+            owner = self.week_collection_owner()
+            def expedite(queue):
+                queue = queue or {}
+                if queue.get('owner') == owner and queue.get('phase') == 'waiting' and queue.get('items'):
+                    queue['due'] = datetime.now(timezone.utc).isoformat()
+                return queue
+            self.database.calendar_queue_update(expedite)
         self.state = {'running': True, 'phase': 'lists', 'done': 0, 'total': 0, 'message': 'Rezeptlisten werden geladen …', 'warnings': 0}
         self.task = asyncio.create_task(self.synchronize())
         return True

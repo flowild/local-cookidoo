@@ -12,8 +12,8 @@
   <link rel="icon" href="/static/brand.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <script src="/static/theme.js?v=31"></script>
-  <link rel="stylesheet" href="/static/style.css?v=55">
-  <script src="/static/app.js?v=55" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=63">
+  <script src="/static/app.js?v=63" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -31,6 +31,7 @@
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4-.8L19 8.2a2.1 2.1 0 0 0-3-3L5 16.2 4 20ZM14.5 6.7l2.8 2.8"/></symbol>
   <symbol id="i-cook" viewBox="0 0 24 24"><path d="M4 10h16v3a8 8 0 0 1-16 0v-3Zm-2 0h20M7 19h10M8 7V4m4 3V3m4 4V4"/></symbol>
   <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2 11h11l2-8H6M9 19a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm8 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6"/></symbol>
   <symbol id="i-portion" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 4 5v1"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
@@ -104,5 +105,6 @@
 <dialog id="pantry-category-dialog" class="modal" aria-labelledby="pantry-category-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="pantry-category-title">Neue Kategorie</h2><form id="pantry-category-form"><label>Kategoriename<input id="pantry-category-name" maxlength="60" required autocomplete="off"></label><p id="pantry-category-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Kategorie erstellen</button></form></dialog>
 <dialog id="install-dialog" class="modal" aria-labelledby="install-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><span class="dialog-symbol"><svg><use href="#i-download"/></svg></span><span class="eyebrow">IMMER GRIFFBEREIT</span><h2 id="install-title">Dein Rezeptgarten als App</h2><p>Öffne diese Seite in Chrome auf deinem Handy. Wähle im Drei-Punkte-Menü <strong>„App installieren“</strong> oder <strong>„Zum Startbildschirm hinzufügen“</strong>.</p><div class="info-box"><strong>Lokales HTTPS einrichten</strong><p>Falls Chrome eine Zertifikatswarnung zeigt: Lade das lokale CA-Zertifikat herunter und installiere es über die Zertifikatseinstellungen deines Geräts. Öffne danach diese HTTPS-Adresse erneut. Vertraue dem Zertifikat nur, wenn es von deinem eigenen Server stammt.</p><a id="certificate-link" class="text-link" href="http://192.168.184.30/zertifikat">CA-Zertifikat herunterladen<svg><use href="#i-download"/></svg></a></div><p class="form-footnote">Die App verbindet sich mit deinem Server im Heimnetz. Ohne Verbindung zum Server können keine Rezeptlisten geladen werden.</p></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="week-undo-notices" class="week-undo-notices" aria-live="polite"></div>
 </body>
 </html>

@@ -56,3 +56,11 @@ Bei relevanten Änderungen diesen Skill und die Projekthinweise aktuell halten.
 - Die serverseitige Wochenwarteschlange ist kontobezogen und übersteht Neustarts. Ein unterbrochener oder unbestätigter Schreibvorgang wird nicht automatisch wiederholt; der Nutzer muss Cookidoo prüfen und die verbleibenden Vormerkungen ausdrücklich verwerfen.
 
 - Der Wocheneinkauf ermittelt unter dem gemeinsamen Client-Lock nur Rezepte ab heute bis Sonntag der ausgewählten Woche, einschließlich serverseitig vorgemerkter Verschiebungen. Bereits auf der Einkaufsliste befindliche Rezepte werden nicht erneut hinzugefügt. Vorratszutaten werden als vorhanden markiert und die Markierung bestätigt; Teilerfolge und unklare Schreibvorgänge müssen angezeigt werden.
+
+- Die taglose Wochenablage wird lokal und kontobezogen gespeichert, da sie keinem Cookidoo-Kalendertag entspricht. Hinzufügen und Entfernen aus Cookidoo erfolgen über die bestehende fünfminütige Warteschlange; auch diese Änderungen werden bestätigt und unklare Ergebnisse nicht blind wiederholt.
+
+- Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort frei; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
+
+- Rückgängig entfernt eine vorgemerkte Kalenderlöschung atomar aus der Warteschlange oder stellt ein Rezept in der Ablage wieder her. Bei manuellem Synchronisieren bleibt das Rückgängig-Zeitfenster geschützt; bereits laufende oder unbestätigte Vorgänge werden nicht blind zurückgesetzt.
+
+- Vormerkungen eines anderen Kontos können nicht verworfen werden. Vorratsmarkierungen werden sowohl beim Einzelrezept als auch beim Wocheneinkauf anhand der Cookidoo-Antwort bestätigt.

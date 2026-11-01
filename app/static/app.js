@@ -10,6 +10,7 @@ let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredient
 let featuredLocalDay = null;
 let weekOffset = 0;
 let displayedWeek = null, weekMoves = [], weekSaving = false, weekDrag = null, suppressWeekClick = false;
+let weekListRecipes = new Map(), weekOpenLists = new Set();
 let weekQueueWriting = false, weekQueueError = '', weekQueueSignature = '', weekQueueRefreshPending = false, weekShoppingBusy = false;
 let weekArchiveBusy = false, weekArchiveDone = Promise.resolve();
 let weekBadgesBusy = false, weekBadgesTimer = null, weekBadgesDone = Promise.resolve(), noteBadgeVersion = {};
@@ -163,11 +164,12 @@ function weekDays(week, unavailable = false) {
   const format = new Intl.DateTimeFormat('de-DE', {weekday:'long', day:'numeric', month:'long', timeZone:'UTC'});
   const short = new Intl.DateTimeFormat('de-DE', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
   const narrow = new Intl.DateTimeFormat('de-DE', {weekday:'narrow', day:'numeric', month:'numeric', timeZone:'UTC'});
-  return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span></h2>${day.recipes.length ? `<ul>${day.recipes.map(recipe => { const body = `<span class="week-recipe-photo" title="Zum Verschieben ziehen">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-name">${escapeHTML(recipe.name)}</span>`; const id = escapeHTML(recipe.calendar_id); return `<li data-week-recipe="${id}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${day.date}"><button class="week-recipe" type="button" data-recipe="${escapeHTML(recipe.id)}">${body}</button><select class="week-move-select" aria-label="${escapeHTML(recipe.name)} verschieben" ${weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy ? 'disabled' : ''}><option value="">Verschieben …</option>${week.days.filter(target => target.date !== day.date).map(target => `<option value="${target.date}">${escapeHTML(short.format(new Date(target.date + 'T12:00:00Z')))}</option>`).join('')}</select></li>`; }).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div>`;
+  const renderRecipe = (recipe, source) => `<li data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo" title="Zum Verschieben ziehen">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-name">${escapeHTML(recipe.name)}</span></button><select class="week-move-select" aria-label="${escapeHTML(recipe.name)} verschieben" ${weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy ? 'disabled' : ''}><option value="">Verschieben …</option>${week.days.filter(target => target.date !== source).map(target => `<option value="${target.date}">${escapeHTML(short.format(new Date(target.date + 'T12:00:00Z')))}</option>`).join('')}${source !== 'shelf' ? '<option value="shelf">Ablage</option>' : ''}<option value="trash">Aus Woche entfernen</option></select></li>`;
+  return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span></h2>${day.recipes.length ? `<ul>${day.recipes.map(recipe => renderRecipe(recipe, day.date)).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div><section class="week-shelf" data-week-day="shelf"><h2>Ablage für diese Woche</h2>${week.shelf?.length ? `<ul>${week.shelf.map(recipe => renderRecipe(recipe, 'shelf')).join('')}</ul>` : '<p>Rezepte hier ablegen, wenn der Tag noch offen ist.</p>'}</section>`;
 }
 function weekToolbar(message, error = false) {
   const disabled = weekQueueWriting || weekSaving || weekShoppingBusy ? 'disabled' : '';
-  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Diese Woche</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary" type="button" data-action="week-shopping" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}In den Einkaufswagen</button>`}${weekQueueError ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
+  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Diese Woche</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary" type="button" data-action="week-shopping" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}In den Einkaufswagen</button>`}${weekQueueError && weekMoves.length ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
 }
 function adoptWeekQueue(queue) {
   if (!queue || weekQueueWriting) return false;
@@ -180,48 +182,126 @@ function adoptWeekQueue(queue) {
   return true;
 }
 function applyWeekMoves(week) {
+  week.shelf ||= [];
   for (const move of weekMoves) {
+    if (move.week && move.week !== week.days[0].date) continue;
     const from = week.days.find(day => day.date === move.source), to = week.days.find(day => day.date === move.target);
-    if (!from || !to) continue;
-    const index = from.recipes.findIndex(item => item.calendar_id === move.recipe_id && item.custom === move.custom);
-    if (index >= 0 && !to.recipes.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) to.recipes.push(from.recipes.splice(index, 1)[0]);
+    if (!from && move.source !== 'shelf') continue;
+    if (!to && !['shelf', 'trash'].includes(move.target)) continue;
+    if (to?.recipes.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) continue;
+    const index = from?.recipes.findIndex(item => item.calendar_id === move.recipe_id && item.custom === move.custom) ?? -1;
+    const recipe = from ? (index >= 0 ? from.recipes.splice(index, 1)[0] : null) : move.recipe;
+    if (recipe && to && !to.recipes.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) to.recipes.push(recipe);
   }
 }
 function showWeek() {
   if (state.view !== 'meine-woche' || !$('#week-content') || !displayedWeek) return;
   const scroll = $('.week-scroll')?.scrollLeft || 0;
   const message = weekQueueError || (weekShoppingBusy ? 'Rezepte werden zur Einkaufsliste hinzugefügt …' : weekSaving ? 'Änderungen werden mit Cookidoo abgeglichen …' : weekMoves.length ? 'Änderungen vorgemerkt · Abgleich fünf Minuten nach der letzten Änderung.' : '');
-  $('#week-content').innerHTML = `${weekToolbar(message)}${weekDays(displayedWeek)}`;
+  $('#week-heading-toolbar').innerHTML = weekToolbar(message);
+  $('#week-content').innerHTML = weekDays(displayedWeek);
   $('.week-scroll').scrollLeft = scroll;
+  updateWeekListButtons();
+}
+function renderWeekLists() {
+  const container = $('#week-lists');
+  if (!container) return;
+  weekListRecipes = new Map();
+  const lists = state.collections.filter(collection => collection.kind === 'local');
+  container.innerHTML = lists.length ? `<h2>Meine lokalen Listen</h2>${lists.map(collection => `<details class="week-local-list" data-week-list="${escapeHTML(collection.id)}" ${weekOpenLists.has(collection.id) ? 'open' : ''}><summary><span>${escapeHTML(collection.name)}</span><span class="week-local-count">${collection.recipe_count} ${collection.recipe_count === 1 ? 'Rezept' : 'Rezepte'}</span></summary><div class="week-local-content"><div class="candidate-list" data-week-list-items></div><p class="week-local-empty" hidden>Diese Liste ist noch leer.</p><button class="button" type="button" data-week-list-more hidden>Weitere Rezepte anzeigen</button></div></details>`).join('')}` : '';
+}
+function updateWeekListButtons() {
+  document.querySelectorAll('[data-week-add]').forEach(button => {
+    const id = button.dataset.weekAdd;
+    const inShelf = displayedWeek?.shelf?.some(recipe => recipe.id === id);
+    button.disabled = !displayedWeek || !!inShelf || weekQueueWriting || weekSaving || !!weekQueueError || weekShoppingBusy;
+    button.textContent = inShelf ? '✓' : '+';
+    button.title = inShelf ? 'Bereits in der Ablage' : 'Zur Wochenablage hinzufügen';
+  });
+}
+async function loadWeekList(details) {
+  if (!details || details.dataset.loading === '1' || details.dataset.done === '1') return;
+  details.dataset.loading = '1';
+  const offset = Number(details.dataset.offset || 0);
+  const more = details.querySelector('[data-week-list-more]');
+  more.disabled = true;
+  try {
+    const params = new URLSearchParams({collection:details.dataset.weekList, offset, limit:100});
+    const result = await api('/api/recipes?' + params);
+    if (!details.isConnected) return;
+    result.items.forEach(recipe => weekListRecipes.set(recipe.id, recipe));
+    details.querySelector('[data-week-list-items]').insertAdjacentHTML('beforeend', result.items.map(recipe => `<div class="candidate-row"><button class="candidate-open" type="button" data-recipe="${escapeHTML(recipe.id)}"><span class="candidate-photo">${photo(recipe.image_file)}</span><span class="candidate-name">${escapeHTML(recipe.name)}</span></button><button class="candidate-add" type="button" data-week-add="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} zur Wochenablage hinzufügen" title="Zur Wochenablage hinzufügen">+</button></div>`).join(''));
+    details.dataset.offset = String(offset + result.items.length);
+    details.dataset.done = details.dataset.offset >= result.total ? '1' : '0';
+    details.querySelector('.week-local-empty').hidden = result.total > 0;
+    more.hidden = details.dataset.done === '1';
+    updateWeekListButtons();
+  } finally { details.dataset.loading = '0'; more.disabled = false; }
+}
+async function addRecipeToWeekShelf(id) {
+  if (!displayedWeek || weekQueueWriting || weekSaving || weekQueueError || weekShoppingBusy) return;
+  const recipe = weekListRecipes.get(id);
+  if (!recipe || displayedWeek.shelf.some(item => item.id === id)) return;
+  const week = displayedWeek, custom = id.startsWith('creation:');
+  const snapshot = {...recipe, calendar_id:custom ? id.slice(9) : id, custom};
+  week.shelf.push(snapshot); weekQueueWriting = true; showWeek();
+  try {
+    const queue = await post('/api/calendar/placement', {week:week.days[0].date, source:'library', target:'shelf', recipe_id:snapshot.calendar_id, custom, recipe:snapshot, move_id:globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`});
+    weekQueueWriting = false; adoptWeekQueue(queue);
+    if (state.status) state.status.calendar_queue = queue;
+  } catch (error) {
+    toast(`Die Änderung konnte nicht bestätigt werden. Bitte prüfe die Woche: ${error.message}`);
+    weekQueueWriting = false;
+    await renderRoute();
+  } finally { weekQueueWriting = false; if (displayedWeek === week) showWeek(); }
+}
+function offerWeekUndo(move, recipe, index) {
+  const container = $('#week-undo-notices');
+  const notice = document.createElement('div'); notice.className = 'week-undo-notice';
+  const text = document.createElement('span'); text.textContent = `„${recipe.name}“ entfernt`;
+  const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Rückgängig';
+  const progress = document.createElement('span'); progress.className = 'week-undo-progress'; progress.setAttribute('aria-hidden', 'true');
+  progress.innerHTML = '<svg viewBox="0 0 24 24"><circle class="week-undo-progress-track" cx="12" cy="12" r="9"></circle><circle class="week-undo-progress-ring" cx="12" cy="12" r="9"></circle></svg>';
+  notice.append(text, button, progress); container.append(notice);
+  const timer = setTimeout(() => notice.remove(), 5000);
+  button.addEventListener('click', async () => {
+    if (weekQueueWriting || weekSaving || weekShoppingBusy || weekDrag) { toast('Bitte warte, bis die aktuelle Wochenänderung abgeschlossen ist.'); return; }
+    clearTimeout(timer); button.disabled = true; notice.classList.add('is-busy'); weekQueueWriting = true;
+    try {
+      const queue = await post('/api/calendar/undo-removal', {move_id:move.move_id});
+      weekQueueWriting = false; adoptWeekQueue(queue);
+      if (state.status) state.status.calendar_queue = queue;
+      if (displayedWeek?.days[0].date === move.week) {
+        const destination = move.source === 'shelf' ? displayedWeek.shelf : displayedWeek.days.find(day => day.date === move.source)?.recipes;
+        if (destination && !destination.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) destination.splice(Math.min(index, destination.length), 0, recipe);
+        showWeek();
+      }
+      notice.remove();
+    } catch (error) { notice.remove(); toast(error.message); }
+    finally { weekQueueWriting = false; if (state.view === 'meine-woche') showWeek(); }
+  });
 }
 async function queueWeekMove(source, target, identifier, custom) {
   if (weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy || !displayedWeek || source === target) return;
   const week = displayedWeek;
-  const from = displayedWeek.days.find(day => day.date === source), to = displayedWeek.days.find(day => day.date === target);
-  const index = from?.recipes.findIndex(item => item.calendar_id === identifier && item.custom === custom) ?? -1;
-  if (!from || !to || index < 0) return;
-  if (to.recipes.some(item => item.calendar_id === identifier && item.custom === custom)) { toast('Das Rezept ist am Zieltag bereits eingeplant.'); return; }
-  const recipe = from.recipes.splice(index, 1)[0];
-  const move = {source, target, recipe_id:identifier, custom, move_id:globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`};
-  to.recipes.push(recipe); weekMoves.push(move); weekQueueWriting = true; showWeek();
+  const from = source === 'shelf' ? week.shelf : week.days.find(day => day.date === source)?.recipes;
+  const to = target === 'shelf' ? week.shelf : target === 'trash' ? null : week.days.find(day => day.date === target)?.recipes;
+  const index = from?.findIndex(item => item.calendar_id === identifier && item.custom === custom) ?? -1;
+  if (!from || index < 0 || (target !== 'trash' && !to)) return;
+  if (to?.some(item => item.calendar_id === identifier && item.custom === custom)) { toast('Das Rezept ist dort bereits eingeplant.'); return; }
+  const recipe = from.splice(index, 1)[0];
+  const move = {week:week.days[0].date, source, target, recipe_id:identifier, custom, recipe, move_id:globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`};
+  if (to) to.push(recipe);
+  weekQueueWriting = true; showWeek();
   try {
-    const queue = await post('/api/calendar/queue', move);
-    weekQueueWriting = false;
-    adoptWeekQueue(queue);
+    const queue = await post('/api/calendar/placement', move);
+    weekQueueWriting = false; adoptWeekQueue(queue);
     if (state.status) state.status.calendar_queue = queue;
+    if (target === 'trash') offerWeekUndo(move, recipe, index);
   } catch (error) {
-    let confirmed = false;
-    try {
-      const status = await api('/api/status');
-      confirmed = !!status.calendar_queue?.items?.some(item => item.move_id === move.move_id);
-      if (confirmed) { weekQueueWriting = false; state.status = status; adoptWeekQueue(status.calendar_queue); }
-    } catch (_) { /* The write may have reached the server; do not retry blindly. */ }
-    if (!confirmed) {
-      const pos = weekMoves.indexOf(move); if (pos >= 0) weekMoves.splice(pos, 1);
-      const at = to.recipes.indexOf(recipe); if (at >= 0) to.recipes.splice(at, 1);
-      from.recipes.splice(index, 0, recipe);
-      toast(`Die Änderung konnte nicht bestätigt werden. Bitte prüfe die Woche: ${error.message}`);
-    }
+    toast(`Die Änderung konnte nicht bestätigt werden. Bitte prüfe die Woche: ${error.message}`);
+    weekQueueWriting = false;
+    await renderRoute();
   } finally {
     weekQueueWriting = false;
     if (displayedWeek === week) showWeek();
@@ -261,13 +341,13 @@ async function addWeekShopping() {
 }
 function updateWeekBadges(recipeId, values) {
   if (!displayedWeek) return;
-  for (const day of displayedWeek.days) for (const recipe of day.recipes) {
+  for (const recipe of [...displayedWeek.days.flatMap(day => day.recipes), ...(displayedWeek.shelf || [])]) {
     if (recipe.id === recipeId) Object.assign(recipe, values);
   }
   document.querySelectorAll('[data-week-recipe]').forEach(item => {
     const id = (item.dataset.weekCustom === '1' ? 'creation:' : '') + item.dataset.weekRecipe;
     if (id !== recipeId) return;
-    const recipe = displayedWeek.days.flatMap(day => day.recipes).find(entry => entry.id === id);
+    const recipe = [...displayedWeek.days.flatMap(day => day.recipes), ...(displayedWeek.shelf || [])].find(entry => entry.id === id);
     const layer = item.querySelector('.week-badge-layer');
     if (recipe && layer) layer.innerHTML = weekRecipeBadges(recipe);
   });
@@ -278,7 +358,7 @@ function scheduleWeekBadges(week, delay = 500) {
 }
 async function loadWeekBadges(week) {
   if (state.view !== 'meine-woche' || displayedWeek !== week || week.badgesLoaded) return;
-  const ids = [...new Set(week.days.flatMap(day => day.recipes.map(recipe => recipe.id)))];
+  const ids = [...new Set([...week.days.flatMap(day => day.recipes), ...(week.shelf || [])].map(recipe => recipe.id))];
   if (!ids.length) return;
   if (weekBadgesBusy || weekArchiveBusy || weekSaving || weekQueueWriting || weekShoppingBusy || weekDrag || state.status?.sync?.running || $('#recipe-dialog').open) { scheduleWeekBadges(week, 1000); return; }
   const versions = Object.fromEntries(ids.map(id => [id, noteBadgeVersion[id] || 0]));
@@ -325,8 +405,10 @@ async function renderRoute() {
   const content = $('#content');
   if (state.view === 'einstellungen') { renderSettings(); return; }
   if (state.view === 'meine-woche') {
-    content.innerHTML = `<div class="page-title"><span class="eyebrow">ZEIT FÜR GUTE IDEEN</span><h1>Meine Woche</h1></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div>`;
+    content.innerHTML = `<div class="week-heading"><div class="page-title"><span class="eyebrow">ZEIT FÜR GUTE IDEEN</span><h1>Meine Woche</h1></div><div id="week-heading-toolbar" aria-live="polite"></div><div class="week-trash" data-week-day="trash" aria-label="Aus der Woche entfernen">${icon('trash')}<span>Aus der Woche entfernen</span></div></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div><section id="week-lists" class="week-local-lists"></section>`;
+    renderWeekLists();
     if ((weekSaving || weekQueueWriting || weekShoppingBusy) && displayedWeek) { showWeek(); return; }
+    displayedWeek = null;
     try {
       if (weekBadgesBusy) await weekBadgesDone;
       if (request !== state.request) return;
@@ -336,7 +418,7 @@ async function renderRoute() {
       setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 300);
       scheduleWeekBadges(week);
     } catch (error) {
-      if (request === state.request) $('#week-content').innerHTML = `${weekToolbar(error.message, true)}${weekDays(emptyCurrentWeek(), true)}`;
+      if (request === state.request) { $('#week-heading-toolbar').innerHTML = weekToolbar(error.message, true); $('#week-content').innerHTML = weekDays(emptyCurrentWeek(), true); }
     }
     return;
   }
@@ -699,8 +781,10 @@ async function openRecipe(id, fromWeek = false) {
 }
 async function startSync() {
   if (!state.status?.connected) { $('#connect-dialog').showModal(); return; }
-  await post('/api/sync');
+  if (weekQueueWriting || weekDrag) { toast('Bitte schließe zuerst die Änderung an der Woche ab.'); return; }
+  const result = await post('/api/sync');
   state.status = await api('/api/status'); updateSync();
+  if (result.started && !state.status.sync.running) { await loadLibrary(); toast(state.status.sync.message); }
 }
 async function install() {
   if (deferredInstall) {
@@ -745,6 +829,7 @@ function finishWeekDrag(cancelled = false) {
   drag.ghost?.remove();
   document.querySelectorAll('.week-drop-target,.week-drag-source').forEach(node => node.classList.remove('week-drop-target', 'week-drag-source'));
   weekDrag = null;
+  document.body.classList.remove('week-is-dragging');
   if (drag.moved) {
     suppressWeekClick = true;
     setTimeout(() => { suppressWeekClick = false; }, 400);
@@ -758,7 +843,9 @@ function updateWeekDrag() {
   const bounds = scroll.getBoundingClientRect();
   if (drag.x < bounds.left + 45) scroll.scrollLeft -= 12;
   else if (drag.x > bounds.right - 45) scroll.scrollLeft += 12;
-  drag.ghost.style.left = `${drag.x + 12}px`; drag.ghost.style.top = `${drag.y + 12}px`;
+  if (drag.y < 45) window.scrollBy(0, -10);
+  else if (drag.y > window.innerHeight - 45) window.scrollBy(0, 10);
+  drag.ghost.style.left = `${drag.x}px`; drag.ghost.style.top = `${drag.y}px`;
   document.querySelectorAll('.week-drop-target').forEach(node => node.classList.remove('week-drop-target'));
   const day = document.elementFromPoint(drag.x, drag.y)?.closest('[data-week-day]');
   if (day && day.dataset.weekDay !== drag.source) day.classList.add('week-drop-target');
@@ -776,8 +863,11 @@ document.addEventListener('pointermove', event => {
   weekDrag.x = event.clientX; weekDrag.y = event.clientY;
   if (!weekDrag.moved && Math.hypot(event.clientX - weekDrag.startX, event.clientY - weekDrag.startY) > 8) {
     weekDrag.moved = true;
+    document.body.classList.add('week-is-dragging');
     weekDrag.item.classList.add('week-drag-source');
-    const ghost = weekDrag.image.cloneNode(true); ghost.classList.add('week-drag-ghost');
+    const ghost = document.createElement('div'); ghost.className = 'week-drag-ghost';
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.append(weekDrag.image.cloneNode(true), weekDrag.item.querySelector('.week-recipe-name').cloneNode(true));
     document.body.append(ghost); weekDrag.ghost = ghost;
     updateWeekDrag();
   }
@@ -786,6 +876,11 @@ document.addEventListener('pointermove', event => {
 document.addEventListener('pointerup', event => { if (weekDrag && event.pointerId === weekDrag.pointer) finishWeekDrag(); });
 document.addEventListener('pointercancel', event => { if (weekDrag && event.pointerId === weekDrag.pointer) finishWeekDrag(true); });
 document.addEventListener('dragstart', event => { if (event.target.closest('.week-recipe-photo')) event.preventDefault(); });
+document.addEventListener('toggle', event => {
+  if (!event.target.matches?.('[data-week-list]') || !event.target.isConnected) return;
+  if (event.target.open) { weekOpenLists.add(event.target.dataset.weekList); loadWeekList(event.target).catch(error => toast(error.message)); }
+  else weekOpenLists.delete(event.target.dataset.weekList);
+}, true);
 document.addEventListener('click', event => { if (suppressWeekClick) { event.preventDefault(); event.stopImmediatePropagation(); suppressWeekClick = false; } }, true);
 window.addEventListener('beforeunload', event => { if (weekQueueWriting || weekShoppingBusy || (inlineNote?.loaded && (inlineNote.saving || inlineNote.draft !== inlineNote.original))) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', async event => {
@@ -793,12 +888,16 @@ document.addEventListener('click', async event => {
   if (close) { const dialog = close.closest('dialog'); if (dialog.id === 'recipe-dialog') await closeRecipeSafely(); else dialog.close(); return; }
   const recipe = event.target.closest('[data-recipe]');
   const addRecipe = event.target.closest('[data-add-recipe]');
+  const weekAdd = event.target.closest('[data-week-add]');
+  const weekListMore = event.target.closest('[data-week-list-more]');
   const pantryAdd = event.target.closest('[data-pantry-add-category]');
   const pantryEdit = event.target.closest('[data-pantry-edit]');
   const pantryRemove = event.target.closest('[data-pantry-remove]');
   const pantryToggle = event.target.closest('[data-pantry-toggle]');
   const action = event.target.closest('[data-action]');
   try {
+    if (weekAdd) await addRecipeToWeekShelf(weekAdd.dataset.weekAdd);
+    if (weekListMore) await loadWeekList(weekListMore.closest('[data-week-list]'));
     if (event.target.closest('#recipe-note-preview') && event.target.id !== 'recipe-note-text') $('#recipe-note-text')?.focus();
     if (pantryToggle) {
       const id = Number(pantryToggle.dataset.pantryToggle);

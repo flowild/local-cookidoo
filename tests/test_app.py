@@ -277,6 +277,12 @@ class AppTests(unittest.TestCase):
         self.assertIn('Zieltag', response.json()['message'])
         cookidoo.remove_custom_recipe_from_calendar.assert_awaited_once()
 
+    def test_manual_sync_requests_calendar_sync(self):
+        with patch.object(self.app.state.sync, 'begin', return_value=True) as begin:
+            response = self.client.post('/api/sync', headers=ORIGIN)
+        self.assertEqual(response.json(), {'started': True})
+        begin.assert_called_once_with(manual=True)
+
     def test_calendar_queue_persists_and_resets_five_minute_deadline(self):
         from datetime import datetime, timedelta, timezone
         service = self.app.state.sync
@@ -301,6 +307,105 @@ class AppTests(unittest.TestCase):
         self.assertEqual(again['due'], result['due'])
         self.assertEqual(self.client.get('/api/status').json()['calendar_queue'], again)
         self.assertEqual(self.client.delete('/api/calendar/queue', headers=ORIGIN).status_code, 409)
+
+    def test_cannot_discard_another_accounts_failed_calendar_queue(self):
+        service = self.app.state.sync
+        service.client = NS()
+        service.database.set('account', {'email':'first@example.test', 'region':'de'})
+        queue = {'owner':service.week_collection_owner(), 'phase':'error', 'items':[{'source':'2026-01-05', 'target':'2026-01-06', 'recipe_id':'r1', 'custom':False}], 'due':None, 'error':'unconfirmed'}
+        service.database.set('calendar_move_queue', queue)
+        service.database.set('account', {'email':'second@example.test', 'region':'de'})
+        self.assertEqual(self.client.get('/api/status').json()['calendar_queue']['phase'], 'error')
+        self.assertEqual(self.client.delete('/api/calendar/queue', headers=ORIGIN).status_code, 409)
+        self.assertEqual(service.database.get('calendar_move_queue'), queue)
+
+    def test_week_shelf_is_persistent_scoped_and_queued(self):
+        service = self.app.state.sync
+        service.client = NS()
+        payload = {'week':'2026-01-05', 'source':'2026-01-06', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'move_id':'shelf-1', 'recipe':{'name':'Testrezept'}}
+        self.assertEqual(self.client.post('/api/calendar/placement', json=payload).status_code, 403)
+        response = self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['items'][0]['target'], 'shelf')
+        saved = service.database.get('calendar_move_queue')
+        self.assertEqual(saved['shelves'][service.week_collection_owner()]['2026-01-05'][0]['name'], 'Testrezept')
+        self.assertEqual(len(self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN).json()['items']), 1)
+        moved = {**payload, 'source':'shelf', 'target':'2026-01-09', 'move_id':'shelf-2'}
+        self.assertEqual(self.client.post('/api/calendar/placement', json=moved, headers=ORIGIN).status_code, 200)
+        saved = service.database.get('calendar_move_queue')
+        self.assertEqual(saved['shelves'][service.week_collection_owner()]['2026-01-05'], [])
+        self.assertEqual(len(saved['items']), 2)
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'target':'2026-01-12', 'move_id':'bad'}, headers=ORIGIN).status_code, 409)
+
+    def test_add_local_list_recipe_to_week_shelf_without_calendar_write(self):
+        service = self.app.state.sync; service.client = NS()
+        collections, recipes = snapshot()
+        self.app.state.database.save_snapshot(collections, recipes)
+        local = self.app.state.database.create_local_collection('Kochen')
+        self.assertTrue(self.app.state.database.set_local_membership(local, 'r1', True))
+        payload = {'week':'2026-01-05', 'source':'library', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'move_id':'library-1', 'recipe':{'name':'Manipuliert'}}
+        response = self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['phase'], 'idle')
+        shelf = self.app.state.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05']
+        self.assertEqual(shelf[0]['name'], recipes['r1']['name'])
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'move_id':'library-2'}, headers=ORIGIN).status_code, 409)
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'recipe_id':'r2', 'move_id':'library-3'}, headers=ORIGIN).status_code, 409)
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'target':'2026-01-06', 'move_id':'library-4'}, headers=ORIGIN).status_code, 409)
+
+    def test_week_shelf_deletion_is_local_after_queued_removal(self):
+        service = self.app.state.sync; service.client = NS()
+        payload = {'week':'2026-01-05', 'source':'2026-01-06', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'move_id':'shelf-1', 'recipe':{'name':'Test'}}
+        self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        response = self.client.post('/api/calendar/placement', json={**payload, 'source':'shelf', 'target':'trash', 'move_id':'shelf-2'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['items']), 1)
+        self.assertEqual(service.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05'], [])
+
+    def test_undo_removal_cancels_queued_delete_and_restores_shelf(self):
+        service = self.app.state.sync; service.client = NS()
+        base = {'week':'2026-01-05', 'source':'2026-01-06', 'target':'trash', 'recipe_id':'r1', 'custom':False, 'move_id':'delete-1', 'recipe':{'name':'Test'}}
+        self.assertEqual(self.client.post('/api/calendar/placement', json=base, headers=ORIGIN).status_code, 200)
+        self.assertEqual(self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}).status_code, 403)
+        response = self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['phase'], 'idle')
+        self.assertEqual(self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}, headers=ORIGIN).status_code, 409)
+        self.client.post('/api/calendar/placement', json={**base, 'target':'shelf', 'move_id':'shelf-1'}, headers=ORIGIN)
+        self.client.post('/api/calendar/placement', json={**base, 'source':'shelf', 'move_id':'delete-2'}, headers=ORIGIN)
+        response = self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-2'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        shelf = service.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05']
+        self.assertEqual([item['calendar_id'] for item in shelf], ['r1'])
+        self.assertEqual(len(response.json()['items']), 1)
+
+    def test_undo_refuses_processing_or_expired_removal(self):
+        service = self.app.state.sync; service.client = NS()
+        payload = {'week':'2026-01-05', 'source':'2026-01-06', 'target':'trash', 'recipe_id':'r1', 'custom':False, 'move_id':'delete-1', 'recipe':{'name':'Test'}}
+        self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        def processing(queue): queue['phase'] = 'processing'; return queue
+        service.database.calendar_queue_update(processing)
+        self.assertEqual(self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}, headers=ORIGIN).status_code, 409)
+        def expired(queue): queue['phase'] = 'waiting'; queue['undo_removals'][0]['expires'] = '2000-01-01T00:00:00+00:00'; return queue
+        service.database.calendar_queue_update(expired)
+        self.assertEqual(self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}, headers=ORIGIN).status_code, 409)
+
+    def test_week_shopping_includes_shelf_and_excludes_queued_trash(self):
+        from datetime import datetime
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
+        entries = [NS(id='2026-01-08', recipes=[NS(id='shelved', is_custom=False), NS(id='deleted', is_custom=False)], customer_recipe_ids=[])]
+        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=entries), get_shopping_list_recipes=AsyncMock(return_value=[]), add_ingredient_items_for_recipes=AsyncMock(return_value=[]))
+        service = self.app.state.sync; service.client = client
+        base = {'week':'2026-01-05', 'source':'2026-01-08', 'custom':False, 'recipe':{'name':'Test'}}
+        self.client.post('/api/calendar/placement', json={**base, 'target':'shelf', 'recipe_id':'shelved', 'move_id':'one'}, headers=ORIGIN)
+        self.client.post('/api/calendar/placement', json={**base, 'target':'trash', 'recipe_id':'deleted', 'move_id':'two'}, headers=ORIGIN)
+        with patch('app.sync.datetime', FixedDateTime):
+            result = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()['added'], 1)
+        client.add_ingredient_items_for_recipes.assert_awaited_once_with(['shelved'])
 
     def test_week_shopping_uses_selected_week_future_days_queue_and_pantry(self):
         from datetime import datetime
@@ -890,6 +995,16 @@ class AppTests(unittest.TestCase):
         self.assertFalse(ingredient_available('Kokoswasser', []))
         self.assertTrue(ingredient_available('heißes Wasser', []))
 
+    def test_starch_and_cornstarch_are_equivalent_in_both_directions(self):
+        database = self.app.state.database
+        collections, recipes = snapshot()
+        recipes['r1']['ingredients_json'] = json.dumps([{'name':'Stärke'}, {'name':'Speisestärke'}, {'name':'Kartoffelstärke'}], ensure_ascii=False)
+        database.save_snapshot(collections, recipes)
+        category = self.client.get('/api/pantry').json()['categories'][0]['id']
+        self.client.post('/api/pantry/items', json={'name':'Speisestärke', 'category_id':category}, headers=ORIGIN)
+        self.assertEqual(self.client.get('/api/recipes/r1').json()['ingredient_availability'], {'0':True, '1':True, '2':False})
+        self.assertTrue(ingredient_available('Speisestärke', ['Stärke']))
+
     def test_generic_oil_accepts_cooking_oils_but_specific_oils_stay_distinct(self):
         for oil in ('Olivenöl', 'Rapsöl', 'Sonnenblumenöl', 'Sesamöl', 'Kokosöl', 'Kürbiskernöl'):
             self.assertTrue(ingredient_available('Öl', [oil]), oil)
@@ -988,7 +1103,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
                     get_recipes_in_calendar_week=AsyncMock(side_effect=lambda day: [NS(id=day.isoformat(), recipes=[NS(id='r1')], customer_recipe_ids=['abc'])]),
                     add_ingredient_items_for_recipes=AsyncMock(return_value=items),
                     add_ingredient_items_for_custom_recipes=AsyncMock(return_value=[]),
-                    edit_ingredient_items_ownership=AsyncMock())
+                    edit_ingredient_items_ownership=AsyncMock(side_effect=lambda items: items))
         self.service.client = client
         result = await self.service.recipe_action('r1', 'plan')
         self.assertTrue(result['verified'])
@@ -1015,6 +1130,13 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.service.recipe_action('r1', 'shopping')
         self.service.client.add_ingredient_items_for_recipes.assert_awaited_once()
+
+    async def test_single_recipe_shopping_reports_unconfirmed_pantry_marking(self):
+        ingredient = NS(id='water', name='Wasser', is_owned=False)
+        self.service.client = NS(add_ingredient_items_for_recipes=AsyncMock(return_value=[ingredient]),
+                                 edit_ingredient_items_ownership=AsyncMock(return_value=[]))
+        result = await self.service.recipe_action('r1', 'shopping')
+        self.assertEqual(result, {'partial': True})
 
     async def test_all_pages_saved_and_recipe_details_deduplicated(self):
         calls = []
@@ -1143,6 +1265,68 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         result = await asyncio.gather(*(self.service.ensure_calendar_image(filename) for _ in range(5)))
         self.assertEqual(result, [True] * 5)
         self.service.cache_image.assert_awaited_once()
+
+    async def test_calendar_shelf_removal_and_return_are_verified(self):
+        service = self.service
+        day = lambda ids: NS(id='2026-01-06', recipes=[NS(id=value, is_custom=False) for value in ids], customer_recipe_ids=[])
+        client = NS(get_recipes_in_calendar_week=AsyncMock(side_effect=[[day(['r1'])], [day([])], [day([])], [day(['r1'])]]),
+                    remove_recipe_from_calendar=AsyncMock(), add_recipes_to_calendar=AsyncMock())
+        service.client = client
+        base = {'week':'2026-01-05', 'recipe_id':'r1', 'custom':False}
+        result = await service.apply_calendar_placement({**base, 'source':'2026-01-06', 'target':'shelf'})
+        self.assertEqual(result['status'], 'moved')
+        result = await service.apply_calendar_placement({**base, 'source':'shelf', 'target':'2026-01-06'})
+        self.assertEqual(result['status'], 'moved')
+        client.remove_recipe_from_calendar.assert_awaited_once()
+        client.add_recipes_to_calendar.assert_awaited_once()
+
+    async def test_manual_sync_respects_removal_undo_window(self):
+        from datetime import date, datetime, timezone
+        service = self.service; service.client = NS()
+        service.enqueue_calendar_placement(date(2026,1,5), '2026-01-06', 'trash', 'r1', False, 'delete-1', {'name':'Test'})
+        service.synchronize = AsyncMock()
+        service.apply_calendar_placement = AsyncMock(return_value={'status':'moved'})
+        self.assertTrue(service.begin(manual=True))
+        await service.task
+        service.state['running'] = False
+        await service.process_due_calendar_moves()
+        self.assertEqual(service.calendar_queue()['phase'], 'waiting')
+        self.assertGreater(datetime.fromisoformat(service.calendar_queue()['due']), datetime.now(timezone.utc))
+        service.apply_calendar_placement.assert_not_awaited()
+        service.undo_calendar_removal('delete-1')
+        self.assertEqual(service.calendar_queue()['phase'], 'idle')
+
+    async def test_manual_sync_expedites_pending_week_but_not_failed_or_automatic(self):
+        from datetime import date, datetime, timezone
+        service = self.service
+        service.client = NS()
+        service.synchronize = AsyncMock()
+        service.enqueue_calendar_move(date(2026, 1, 5), date(2026, 1, 6), 'r1', False, 'one')
+        original = service.calendar_queue()['due']
+        self.assertTrue(service.begin())
+        await service.task
+        self.assertEqual(service.calendar_queue()['due'], original)
+        service.state['running'] = False
+        before = datetime.now(timezone.utc)
+        self.assertTrue(service.begin(manual=True))
+        await service.task
+        self.assertGreaterEqual(datetime.fromisoformat(service.calendar_queue()['due']), before)
+        self.assertLess((datetime.fromisoformat(service.calendar_queue()['due']) - before).total_seconds(), 2)
+        service.state['running'] = False
+        service.move_calendar_recipe = AsyncMock(return_value={'status':'moved'})
+        await service.process_due_calendar_moves()
+        self.assertEqual(service.calendar_queue()['phase'], 'idle')
+        service.move_calendar_recipe.assert_awaited_once()
+        service.enqueue_calendar_move(date(2026, 1, 5), date(2026, 1, 6), 'r1', False, 'two')
+        def fail(queue):
+            queue['phase'] = 'error'
+            queue['error'] = 'unconfirmed'
+            return queue
+        self.db.calendar_queue_update(fail)
+        failed = service.calendar_queue()
+        self.assertTrue(service.begin(manual=True))
+        await service.task
+        self.assertEqual(service.calendar_queue(), failed)
 
     async def test_queued_calendar_moves_wait_and_survive_service_restart(self):
         from datetime import date

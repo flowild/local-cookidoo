@@ -9,6 +9,7 @@ def ingredient_key(name):
 
 _PREPARATION = re.compile(r'^\s*(?:gemahlen|gerieben|gehackt|zerkleinert|in stücken|gewürfelt|geschnitten|geschält|frisch|getrocknet|tiefgekühlt|tk|kalt|heiss|warm|lauwarm|kochend|ohne knochen|ground|grated|chopped|diced|sliced|peeled|fresh|dried|frozen)\b', re.IGNORECASE)
 _ALIASES = {
+    'stärke': 'speisestärke',
     'cumin': 'kreuzkümmel',
     'kreuzkümmelsamen': 'kreuzkümmel',
     'muskat': 'muskatnuss',

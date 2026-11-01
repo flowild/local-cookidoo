@@ -1,5 +1,5 @@
-const CACHE = 'rezeptgarten-shell-v55';
-const SHELL = ['/', '/static/style.css?v=55', '/static/theme.js?v=31', '/static/app.js?v=55', '/static/brand.svg', '/static/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable-512.png'];
+const CACHE = 'rezeptgarten-shell-v63';
+const SHELL = ['/', '/static/style.css?v=63', '/static/theme.js?v=31', '/static/app.js?v=63', '/static/brand.svg', '/static/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable-512.png'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', event => {

@@ -58,3 +58,17 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 - Bildkacheln verwenden lokal erzeugte WebP-Vorschauen bis 480 Pixel, die Detailansicht das Bild bis 960 Pixel. Erfolgreiche Bildantworten sind einen Tag privat im Browser cachebar; andere persönliche API-Antworten und der Service-Worker-Cache bleiben davon ausgeschlossen.
 
 - „In den Einkaufswagen“ überträgt nur Rezepte ab dem heutigen Berliner Datum aus der angezeigten Woche. Vorgemerkte Verschiebungen werden berücksichtigt; Zutaten im lokalen Vorrat werden in Cookidoo als vorhanden markiert.
+
+- Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Rezepte lassen sich per Bild oder Tagesauswahl zwischen Tagen und Ablage bewegen; beim Ziehen wird der Kopfbereich als Papierkorb eingeblendet. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
+
+- Beim Ziehen folgt eine Vorschau mit Rezeptbild und -name dem Zeiger beziehungsweise Finger.
+
+- Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort frei; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
+
+- Unter der Wochenablage sind lokale Listen aufklappbar; ihre Rezepte lassen sich per Plus in der Ablage der angezeigten Woche speichern.
+
+- Beim Entfernen aus der Wochenplanung oder Ablage bietet ein schwebender Hinweis fünf Sekunden lang Rückgängig an. Der Vorratsabgleich erkennt Stärke und Speisestärke als gleichwertig.
+
+- Ein Fortschrittskreis zeigt die verbleibenden fünf Sekunden zum Rückgängigmachen; bei reduzierter Bewegung aktualisiert er sich in Sekundenschritten.
+
+- Nach einem fehlgeschlagenen Wochenwechsel bleiben Listenrezepte gesperrt, bis die ausgewählte Woche geladen wurde; niemals die vorherige Woche still weiterverwenden.

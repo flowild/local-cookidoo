@@ -70,3 +70,22 @@ erzeugte Vorschauen bis 480 Pixel. Erfolgreiche Bildantworten dürfen einen Tag 
 privaten Browsercache liegen, aber nicht im Service-Worker-Cache. Andere persönliche
 API-Antworten bleiben `no-store`. Nicht lokal vorhandene Wochenbilder werden erst
 bei ihrer Bildanfrage heruntergeladen und blockieren nicht die Wochenansicht.
+
+Unter jeder Woche liegt eine lokale, kontobezogene Ablage für Rezepte ohne festen
+Tag. Beim Ziehen wird der Kopfbereich zum Papierkorb für das Entfernen aus der Woche. Änderungen
+an Cookidoo-Kalendereinträgen werden über die bestehende Warteschlange nach fünf
+Minuten übertragen und bestätigt. Die Ablage selbst existiert nur in Rezeptgarten;
+ihre Rezepte gehören beim Wocheneinkauf zur ausgewählten Woche.
+Beim Ziehen folgt eine Vorschau mit Rezeptbild und -name dem Zeiger beziehungsweise Finger.
+Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort zum
+Abgleich frei; der Kalenderabgleich folgt nach der laufenden Sammlungssynchronisierung.
+Fehlerhafte oder unklare Warteschlangeneinträge werden dabei nicht erneut ausgeführt.
+Unter der Wochenablage zeigen aufklappbare lokale Listen ihre Rezepte. Das Plus
+speichert ein ausgewähltes Listenrezept in der Ablage der angezeigten Woche.
+Nach dem Entfernen aus der Woche kann der Nutzer die Änderung fünf Sekunden lang
+rückgängig machen; ein Kreis zeigt die verbleibende Zeit. Vorgemerkte Cookidoo-
+Löschungen müssen beim Rückgängigmachen sicher entfallen.
+„Stärke“ und „Speisestärke“ gelten beim Vorratsabgleich als gleichwertig.
+Fehlgeschlagene Wochenabfragen dürfen keine Einträge in einer zuvor angezeigten
+Woche verändern. Vorgemerkte Änderungen eines anderen Kontos dürfen nicht verworfen
+werden. Vorratsmarkierungen auf der Einkaufsliste müssen bestätigt werden.

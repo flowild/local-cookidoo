@@ -36,20 +36,20 @@ python -m uvicorn app.asgi:app --host 127.0.0.1 --port 8000
 
 The app has no access password: anyone who can reach it can read and change the library. Same-origin checks remain in place for mutations. Cookidoo tokens and passwords are excluded from logs and JSON export. Database snapshots must remain protected. Back up the whole data directory, including `vault.key` and `cookidoo.enc`, for account restoration; keep those backups private.
 
-Deploy from the workspace with `python scripts/deploy.py --install`, using the SSH key from `.local/proxmox/access/id_ed25519`. This script does not need a Proxmox API token. The service configuration is intended for this dedicated LXC, not a shared server.
+For routine deployment use `python scripts/deploy.py`, using the SSH key from `.local/proxmox/access/id_ed25519`. The script does not need a Proxmox API token and does not restart the service; restart `rezeptgarten` after backend changes and check its health. Do not apply the installation option to the existing container as a routine update. See the operating skill for the current procedure.
 
 ## Synchronization behavior and limits
 
 The app fetches every page of custom and managed collections, reads details once per unique recipe, and caches WebP images at up to 960 pixels. Metadata with an existing image is reused for fourteen days. A complete list snapshot is committed in one transaction; list-read/authentication failures preserve the previous library. Individual unavailable recipe details retain list stubs and previously cached fields. Images are fetched only from HTTPS `tmecosys.com` asset hosts, without Cookidoo authorization headers. Unreferenced image files remain cached for now.
 
-This version reads Cookidoo data and does not write changes back to Cookidoo. A bidirectional editing interface is a later step. Personal recipe lists, saved official collections and the separate Merkliste/bookmarks endpoint are included. The bookmark adapter uses the private request helper of the pinned library, including its token-refresh handling, and reads every bookmark page.
+Personal recipe lists, saved official collections and the separate Merkliste/bookmarks endpoint are included. The app also writes user-requested calendar changes, personal notes, selected recipe-list additions and shopping-list updates to Cookidoo. Calendar changes are queued on the server, confirmed after writing and normally sent five minutes after the last change; manual synchronization can send waiting changes sooner. The undated weekly shelf and local lists stay in Rezeptgarten. This is not a general bidirectional synchronization. The bookmark adapter uses the private request helper of the pinned library, including its token-refresh handling, and reads every bookmark page.
 
 The integration pins `cookidoo-api==0.19.0` and uses its token refresh/pagination APIs directly. It does not import the older `cookidoo-migrate` integration, whose cookie/session imports do not match this release. Cookidoo's unofficial endpoints can change. Real account authentication cannot be verified without a user's Cookidoo account; automated tests use deterministic simulated API responses.
 
 ## Local workspace
 
-The project is rooted at `D:\Github\local-cookidoo` in its own existing Git repository.
+The project is rooted at `C:\Github\local-cookidoo` in its own existing Git repository.
 Local provisioning records and private SSH access files are in `.local/proxmox/`;
-the relocated browser QA environment is `.qa-venv/`. Both are ignored by Git and
-excluded from deployment archives. Public CA files are in `certificates/`.
+an older `.qa-venv/` may no longer contain a working interpreter. Both are ignored
+by Git and excluded from deployment archives. Public CA files are in `certificates/`.
 See `AGENTS.md` for current project context and the SSH workflow.
