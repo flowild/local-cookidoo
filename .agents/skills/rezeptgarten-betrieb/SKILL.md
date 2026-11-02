@@ -44,7 +44,8 @@ Daten, Zertifikatsartefakte und Testergebnisse aus.
 Backendtests in einer isolierten Quellkopie mit temporären Daten ausführen:
 `/opt/cookidoo-manager/.venv/bin/python -m unittest discover -s tests -v`.
 Beim Einkaufswagen-Deployment am 02.11.2026 bestanden 92 Tests in einer isolierten
-Quellkopie. Produktive Datenbanken niemals mit Testrezepten oder
+Quellkopie. Am 03.11.2026 bestanden lokal unter Windows 113 Backendtests mit
+isolierten Testdaten. Produktive Datenbanken niemals mit Testrezepten oder
 Testkonten befüllen. `tests/browser_check.py` erwartet eine getrennte Testinstanz
 auf Loopback-Port 8901 und einen SSH-Tunnel. Die historische `.qa-venv` verweist
 in der aktuellen Windows-Umgebung auf einen nicht mehr vorhandenen Interpreter.
