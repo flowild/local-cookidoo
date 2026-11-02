@@ -9,12 +9,14 @@ let suggestionTimer, suggestionRequest = 0, selectedIngredient = null, suggestio
 let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredientMatches = [], recipeIngredientIndex = -1;
 let featuredLocalDay = null;
 let weekOffset = 0;
-let displayedWeek = null, weekMoves = [], weekSaving = false, weekDrag = null, suppressWeekClick = false;
+let displayedWeek = null, weekMoves = [], weekSaving = false;
 let weekListRecipes = new Map(), weekOpenLists = new Set();
 let weekQueueWriting = false, weekQueueError = '', weekQueueSignature = '', weekQueueRefreshPending = false, weekShoppingBusy = false;
 let weekArchiveBusy = false, weekArchiveDone = Promise.resolve();
 let weekBadgesBusy = false, weekBadgesTimer = null, weekBadgesDone = Promise.resolve(), noteBadgeVersion = {};
 let inlineNote = null, recipeNoteRequest = 0;
+let previewNoteCache = new Map(), previewNotePending = new Set(), previewNoteObserved = new Set();
+let previewNoteObserver = null, previewNoteTimer = null, previewNoteBusy = false, previewNoteDone = Promise.resolve(), previewShelfBusy = false, previewInteractionBusy = false, previewAccount = null, previewAccountVersion = 0;
 let collapsedPantry = new Set();
 let pantryDrag = null, pantryReordering = false;
 try { const saved = JSON.parse(localStorage.getItem('rezeptgarten-pantry-collapsed') || '[]'); if (Array.isArray(saved)) collapsedPantry = new Set(saved.filter(Number.isInteger)); } catch (_) {}
@@ -67,6 +69,98 @@ async function api(path, options = {}) {
 }
 const post = (path, body = {}) => api(path, {method:'POST',body:JSON.stringify(body)});
 
+function previewNote(id) {
+  return `<span class="preview-note" data-preview-note="${escapeHTML(id)}" role="img" aria-label="Notiz vorhanden" title="Notiz vorhanden">${icon('note')}</span>`;
+}
+function previewWeekButton(id, name) {
+  return `<button class="preview-week-add" type="button" data-preview-week-add="${escapeHTML(id)}" aria-label="${escapeHTML(name)} zur Ablage der aktuellen Woche hinzufügen" title="Zur Ablage der aktuellen Woche hinzufügen" ${previewShelfBusy ? 'disabled' : ''}>${icon('calendar')}<span aria-hidden="true">+</span></button>`;
+}
+function rememberPreviewNote(id, hasNote) {
+  if (typeof hasNote !== 'boolean') return;
+  previewNoteCache.set(id, {hasNote, time:Date.now()});
+  document.querySelectorAll(`[data-preview-note="${CSS.escape(id)}"]`).forEach(node => node.classList.toggle('has-note', hasNote));
+}
+function updatePreviewAccount() {
+  const account = JSON.stringify(state.status?.account || null);
+  if (account === previewAccount) return;
+  previewAccount = account; previewAccountVersion++;
+  previewNoteCache.clear(); previewNotePending.clear();
+  document.querySelectorAll('[data-preview-note]').forEach(node => node.classList.remove('has-note'));
+  for (const node of previewNoteObserved) { previewNoteObserver?.unobserve(node); previewNoteObserver?.observe(node); }
+}
+function schedulePreviewNotes(delay = 200) {
+  clearTimeout(previewNoteTimer);
+  previewNoteTimer = setTimeout(loadPreviewNotes, delay);
+}
+async function loadPreviewNotes() {
+  if (!previewNotePending.size || previewNoteBusy || !state.status?.connected) return;
+  if (state.status.sync?.running || weekBadgesBusy || weekArchiveBusy || weekSaving || weekQueueWriting || weekShoppingBusy || previewShelfBusy || previewInteractionBusy || (state.view === 'meine-woche' && !displayedWeek) || document.querySelector('dialog:modal')) { schedulePreviewNotes(1200); return; }
+  const ids = [...previewNotePending].slice(0, 4);
+  ids.forEach(id => previewNotePending.delete(id));
+  const accountVersion = previewAccountVersion;
+  const versions = Object.fromEntries(ids.map(id => [id, noteBadgeVersion[id] || 0]));
+  previewNoteBusy = true;
+  let done; previewNoteDone = new Promise(resolve => { done = resolve; });
+  try {
+    const params = new URLSearchParams({notes_only:'true'});
+    ids.forEach(id => params.append('recipe_id', id));
+    const result = await api('/api/calendar/badges?' + params);
+    if (accountVersion !== previewAccountVersion) return;
+    for (const item of result.items) {
+      if ((noteBadgeVersion[item.id] || 0) !== versions[item.id]) continue;
+      if (typeof item.has_note === 'boolean') rememberPreviewNote(item.id, item.has_note);
+      else previewNotePending.add(item.id);
+    }
+  } catch (_) {
+    if (accountVersion === previewAccountVersion) ids.forEach(id => previewNotePending.add(id));
+  } finally {
+    previewNoteBusy = false; done();
+    if (previewNotePending.size) schedulePreviewNotes(2000);
+  }
+}
+function observeRecipePreviews() {
+  for (const node of previewNoteObserved) {
+    if (!node.isConnected) { previewNoteObserver?.unobserve(node); previewNoteObserved.delete(node); }
+  }
+  document.querySelectorAll('[data-preview-observe]').forEach(node => {
+    const id = node.dataset.previewObserve, cached = previewNoteCache.get(id);
+    if (cached && Date.now() - cached.time < 300000) node.querySelector('[data-preview-note]')?.classList.toggle('has-note', cached.hasNote);
+    if (previewNoteObserved.has(node)) return;
+    previewNoteObserved.add(node);
+    if (previewNoteObserver) previewNoteObserver.observe(node);
+    else { if (!cached || Date.now() - cached.time >= 300000) previewNotePending.add(id); schedulePreviewNotes(); }
+  });
+}
+if ('IntersectionObserver' in window) {
+  previewNoteObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const id = entry.target.dataset.previewObserve, cached = previewNoteCache.get(id);
+      if (!cached || Date.now() - cached.time >= 300000) previewNotePending.add(id);
+    }
+    if (previewNotePending.size) schedulePreviewNotes();
+  }, {rootMargin:'200px'});
+}
+new MutationObserver(observeRecipePreviews).observe(document.body, {childList:true, subtree:true});
+setInterval(() => {
+  if (document.hidden || !state.status?.connected) return;
+  for (const node of previewNoteObserved) {
+    const rect = node.getBoundingClientRect(), cached = previewNoteCache.get(node.dataset.previewObserve);
+    if (rect.bottom >= 0 && rect.top <= innerHeight && rect.right >= 0 && rect.left <= innerWidth && (!cached || Date.now() - cached.time >= 300000)) previewNotePending.add(node.dataset.previewObserve);
+  }
+  if (previewNotePending.size) schedulePreviewNotes();
+}, 60000);
+
+function setCartCount(count) {
+  if (!Number.isInteger(count) || count < 0) return;
+  $('#cart-shortcut-count').textContent = count > 99 ? '99+' : String(count);
+  $('#cart-shortcut').setAttribute('aria-label', `Einkaufswagen öffnen, ${count} ${count === 1 ? 'Rezept' : 'Rezepte'}`);
+}
+async function refreshCartCount() {
+  const status = await api('/api/status');
+  setCartCount(status.cart_recipe_count);
+}
+
 async function loadLibrary() {
   const [status, collections] = await Promise.all([api('/api/status'), api('/api/collections')]);
   state.status = status; state.collections = collections.items;
@@ -78,6 +172,9 @@ async function loadLibrary() {
 }
 function updateSync() {
   if (!state.status) return;
+  updatePreviewAccount();
+  if (state.status.connected && previewNotePending.size && !previewNoteBusy) schedulePreviewNotes();
+  setCartCount(state.status.cart_recipe_count);
   const sync = state.status.sync;
   const button = $('#sync-button');
   button.disabled = sync.running;
@@ -105,19 +202,56 @@ function collectionSections() {
   const cookidoo = state.collections.filter(c => c.kind !== 'local');
   return `<section><div class="section-heading"><div><h2>Meine lokalen Listen</h2><p>Nur in deinem Rezeptgarten gespeichert.</p></div><button class="button button-primary" data-action="new-list">Neue Liste</button></div>${local.length ? `<div class="collection-grid">${local.map(collectionCard).join('')}</div>` : '<div class="empty-state compact"><p>Hier ist Platz für deine eigenen Rezeptlisten.</p></div>'}</section><section><div class="section-heading"><div><h2>Aus Cookidoo</h2><p>Synchronisierte Merkliste, Kreationen und weitere Sammlungen.</p></div></div>${cookidoo.length ? `<div class="collection-grid">${cookidoo.map(collectionCard).join('')}</div>` : '<div class="empty-state compact"><p>Noch keine Cookidoo-Sammlungen vorhanden.</p></div>'}</section>`;
 }
+function difficultyLabel(value) {
+  return {easy:'Einfach',medium:'Mittel',advanced:'Anspruchsvoll',hard:'Anspruchsvoll'}[String(value || '').toLowerCase()] || 'Cookidoo-Rezept';
+}
 function recipeCard(recipe) {
   const time = duration(recipe.total_seconds);
-  const difficulty = {easy:'Einfach',medium:'Mittel',advanced:'Anspruchsvoll',hard:'Anspruchsvoll'}[recipe.difficulty] || 'Cookidoo-Rezept';
+  const difficulty = difficultyLabel(recipe.difficulty);
   const outsideFilter = recipe.matches === false;
   const servings = Array.isArray(recipe.version_servings) ? recipe.version_servings : (recipe.servings ? [recipe.servings] : []);
   const servingsText = servings.join(' / ');
   const portionsLabel = servings.length === 1 && servings[0] === '1' ? 'Portion' : 'Portionen';
-  return `<button class="recipe-card${outsideFilter ? ' outside-filter' : ''}" data-recipe="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} öffnen${servings.length ? ` · ${escapeHTML(servingsText)} ${portionsLabel}` : ''}${outsideFilter ? ' · entspricht nicht dem Filter' : ''}"><div class="recipe-photo">${photo(recipe.image_file, recipe.name)}${time ? `<span class="recipe-time">${icon('clock')}${time}</span>` : ''}${servings.length ? `<span class="recipe-portions${time ? ' with-time' : ''}">${icon('portion')}<span>${escapeHTML(servingsText)} ${portionsLabel}</span></span>` : ''}</div><div class="recipe-info"><h3>${escapeHTML(recipe.name)}</h3><p>${escapeHTML(difficulty)}</p></div></button>`;
+  return `<div class="preview-card"><button class="recipe-card${outsideFilter ? ' outside-filter' : ''}" data-recipe="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} öffnen${servings.length ? ` · ${escapeHTML(servingsText)} ${portionsLabel}` : ''}${outsideFilter ? ' · entspricht nicht dem Filter' : ''}"><div class="recipe-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name)}${previewNote(recipe.id)}${time ? `<span class="recipe-time">${icon('clock')}${time}</span>` : ''}${servings.length ? `<span class="recipe-portions${time ? ' with-time' : ''}">${icon('portion')}<span>${escapeHTML(servingsText)} ${portionsLabel}</span></span>` : ''}</div><div class="recipe-info"><h3>${escapeHTML(recipe.name)}</h3><p>${escapeHTML(difficulty)}</p></div></button>${previewWeekButton(recipe.id, recipe.name)}</div>`;
 }
 function berlinDay() {
   const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Europe/Berlin', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+function currentWeekMonday() {
+  const date = new Date(berlinDay() + 'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return date.toISOString().slice(0, 10);
+}
+async function addPreviewToWeek(id) {
+  if (weekQueueError) { toast(weekQueueError); return; }
+  if (previewShelfBusy || weekQueueWriting || weekSaving || weekShoppingBusy) { toast('Bitte warte, bis die aktuelle Wochenänderung abgeschlossen ist.'); return; }
+  if (!state.status?.connected) { toast('Bitte verbinde zuerst dein Cookidoo-Konto.'); return; }
+  previewShelfBusy = true;
+  document.querySelectorAll('[data-preview-week-add]').forEach(button => { button.disabled = true; });
+  try {
+    if (previewNoteBusy) await previewNoteDone;
+    if (weekBadgesBusy) await weekBadgesDone;
+    if (weekArchiveBusy) await weekArchiveDone;
+    if (state.status?.sync?.running) { toast('Bitte warte, bis die Synchronisierung fertig ist.'); return; }
+    const week = currentWeekMonday(), custom = id.startsWith('creation:');
+    weekQueueWriting = true;
+    const result = await post('/api/calendar/placement', {week, source:'preview', target:'shelf', recipe_id:custom ? id.slice(9) : id, custom, recipe:{}, move_id:globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`});
+    const {shelf_recipe: added, ...queue} = result;
+    weekQueueWriting = false; adoptWeekQueue(queue);
+    if (state.status) state.status.calendar_queue = queue;
+    if (added && displayedWeek?.days[0].date === week && !displayedWeek.shelf.some(recipe => recipe.id === added.id)) {
+      displayedWeek.shelf.push(added);
+      if (state.view === 'meine-woche') showWeek();
+    }
+    toast('Zur Ablage der aktuellen Woche hinzugefügt.');
+  } catch (error) { toast(error.message); }
+  finally {
+    weekQueueWriting = false; previewShelfBusy = false;
+    document.querySelectorAll('[data-preview-week-add]').forEach(button => { button.disabled = false; });
+    if (previewNotePending.size) schedulePreviewNotes();
+  }
 }
 function renderFeatured(result) {
   const container = $('#featured-recipe');
@@ -130,7 +264,7 @@ function renderFeatured(result) {
   }
   const time = duration(recipe.total_seconds);
   const portions = recipe.servings ? `${escapeHTML(recipe.servings)} ${String(recipe.servings) === '1' ? 'Portion' : 'Portionen'}` : '';
-  container.innerHTML = `<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" data-recipe="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button><button class="button featured-shuffle" data-action="shuffle-featured" ${result.can_shuffle ? '' : 'disabled'}>${icon('shuffle')}Anderes Rezept</button></div></div><div class="featured-photo">${photo(recipe.image_file, recipe.name, true)}</div></section>`;
+  container.innerHTML = `<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" data-recipe="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button><button class="button featured-shuffle" data-action="shuffle-featured" ${result.can_shuffle ? '' : 'disabled'}>${icon('shuffle')}Anderes Rezept</button></div></div><div class="featured-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name, true)}${previewNote(recipe.id)}${previewWeekButton(recipe.id, recipe.name)}</div></section>`;
 }
 async function loadFeatured(request = state.request) {
   const result = await api('/api/featured-recipe');
@@ -158,13 +292,18 @@ function emptyCurrentWeek() {
 function weekRecipeBadges(recipe) {
   const time = duration(recipe.total_seconds);
   const servings = recipe.servings == null ? '' : String(recipe.servings).trim();
-  return `${recipe.has_note ? `<span class="week-badge week-badge-note" role="img" aria-label="Notiz vorhanden" title="Notiz vorhanden">${icon('note')}</span>` : ''}${time ? `<span class="week-badge week-badge-time" aria-label="${escapeHTML(time)} Gesamtzeit">${icon('clock')}<span>${escapeHTML(time)}</span></span>` : ''}${servings ? `<span class="week-badge week-badge-servings" aria-label="${escapeHTML(servings)} ${servings === '1' ? 'Portion' : 'Portionen'}">${icon('portion')}<span>${escapeHTML(servings)}</span></span>` : ''}`;
+  return `${recipe.has_note ? `<span class="week-badge week-badge-note" role="img" aria-label="Notiz vorhanden" title="Notiz vorhanden">${icon('note')}</span>` : ''}${time ? `<span class="week-badge week-badge-time" aria-label="${escapeHTML(time)} Gesamtzeit" title="${escapeHTML(time)} Gesamtzeit">${icon('clock')}<span>${escapeHTML(time)}</span></span>` : ''}${servings ? `<span class="week-badge week-badge-servings" aria-label="${escapeHTML(servings)} ${servings === '1' ? 'Portion' : 'Portionen'}" title="${escapeHTML(servings)} ${servings === '1' ? 'Portion' : 'Portionen'}">${icon('portion')}<span>${escapeHTML(servings)}<span class="week-portion-label"> ${servings === '1' ? 'Portion' : 'Portionen'}</span></span></span>` : ''}`;
+}
+function weekPreviewAction(recipe, source) {
+  const shelf = source === 'shelf';
+  const label = shelf ? 'aus der Woche entfernen' : 'in die Wochenablage verschieben';
+  return `<button class="preview-week-add week-preview-action" type="button" data-week-preview-action aria-label="${escapeHTML(recipe.name)} ${label}" title="${shelf ? 'Aus Woche entfernen' : 'In die Ablage verschieben'}" ${weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy || previewShelfBusy ? 'disabled' : ''}>${icon(shelf ? 'trash' : 'close')}</button>`;
 }
 function weekDays(week, unavailable = false) {
   const format = new Intl.DateTimeFormat('de-DE', {weekday:'long', day:'numeric', month:'long', timeZone:'UTC'});
   const short = new Intl.DateTimeFormat('de-DE', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
   const narrow = new Intl.DateTimeFormat('de-DE', {weekday:'narrow', day:'numeric', month:'numeric', timeZone:'UTC'});
-  const renderRecipe = (recipe, source) => `<li data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo" title="Zum Verschieben ziehen">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-name">${escapeHTML(recipe.name)}</span></button><select class="week-move-select" aria-label="${escapeHTML(recipe.name)} verschieben" ${weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy ? 'disabled' : ''}><option value="">Verschieben …</option>${week.days.filter(target => target.date !== source).map(target => `<option value="${target.date}">${escapeHTML(short.format(new Date(target.date + 'T12:00:00Z')))}</option>`).join('')}${source !== 'shelf' ? '<option value="shelf">Ablage</option>' : ''}<option value="trash">Aus Woche entfernen</option></select></li>`;
+  const renderRecipe = (recipe, source) => `<li class="week-preview" data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" draggable="true" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-info"><span class="week-recipe-name">${escapeHTML(recipe.name)}</span><span class="week-recipe-difficulty">${escapeHTML(difficultyLabel(recipe.difficulty))}</span></span></button>${weekPreviewAction(recipe, source)}</li>`;
   return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span></h2>${day.recipes.length ? `<ul>${day.recipes.map(recipe => renderRecipe(recipe, day.date)).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div><section class="week-shelf" data-week-day="shelf"><h2>Ablage für diese Woche</h2>${week.shelf?.length ? `<ul>${week.shelf.map(recipe => renderRecipe(recipe, 'shelf')).join('')}</ul>` : '<p>Rezepte hier ablegen, wenn der Tag noch offen ist.</p>'}</section>`;
 }
 function weekToolbar(message, error = false) {
@@ -230,7 +369,7 @@ async function loadWeekList(details) {
     const result = await api('/api/recipes?' + params);
     if (!details.isConnected) return;
     result.items.forEach(recipe => weekListRecipes.set(recipe.id, recipe));
-    details.querySelector('[data-week-list-items]').insertAdjacentHTML('beforeend', result.items.map(recipe => `<div class="candidate-row"><button class="candidate-open" type="button" data-recipe="${escapeHTML(recipe.id)}"><span class="candidate-photo">${photo(recipe.image_file)}</span><span class="candidate-name">${escapeHTML(recipe.name)}</span></button><button class="candidate-add" type="button" data-week-add="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} zur Wochenablage hinzufügen" title="Zur Wochenablage hinzufügen">+</button></div>`).join(''));
+    details.querySelector('[data-week-list-items]').insertAdjacentHTML('beforeend', result.items.map(recipe => `<div class="candidate-row"><button class="candidate-open" type="button" data-recipe="${escapeHTML(recipe.id)}"><span class="candidate-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file)}${previewNote(recipe.id)}</span><span class="candidate-name">${escapeHTML(recipe.name)}</span></button>${previewWeekButton(recipe.id, recipe.name)}<button class="candidate-add" type="button" data-week-add="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} zur Wochenablage hinzufügen" title="Zur Wochenablage hinzufügen">+</button></div>`).join(''));
     details.dataset.offset = String(offset + result.items.length);
     details.dataset.done = details.dataset.offset >= result.total ? '1' : '0';
     details.querySelector('.week-local-empty').hidden = result.total > 0;
@@ -265,7 +404,7 @@ function offerWeekUndo(move, recipe, index) {
   notice.append(text, button, progress); container.append(notice);
   const timer = setTimeout(() => notice.remove(), 5000);
   button.addEventListener('click', async () => {
-    if (weekQueueWriting || weekSaving || weekShoppingBusy || weekDrag) { toast('Bitte warte, bis die aktuelle Wochenänderung abgeschlossen ist.'); return; }
+    if (weekQueueWriting || weekSaving || weekShoppingBusy) { toast('Bitte warte, bis die aktuelle Wochenänderung abgeschlossen ist.'); return; }
     clearTimeout(timer); button.disabled = true; notice.classList.add('is-busy'); weekQueueWriting = true;
     try {
       const queue = await post('/api/calendar/undo-removal', {move_id:move.move_id});
@@ -288,16 +427,17 @@ async function queueWeekMove(source, target, identifier, custom) {
   const to = target === 'shelf' ? week.shelf : target === 'trash' ? null : week.days.find(day => day.date === target)?.recipes;
   const index = from?.findIndex(item => item.calendar_id === identifier && item.custom === custom) ?? -1;
   if (!from || index < 0 || (target !== 'trash' && !to)) return;
-  if (to?.some(item => item.calendar_id === identifier && item.custom === custom)) { toast('Das Rezept ist dort bereits eingeplant.'); return; }
+  const destinationHasRecipe = !!to?.some(item => item.calendar_id === identifier && item.custom === custom);
+  if (destinationHasRecipe && target !== 'shelf') { toast('Das Rezept ist dort bereits eingeplant.'); return; }
   const recipe = from.splice(index, 1)[0];
   const move = {week:week.days[0].date, source, target, recipe_id:identifier, custom, recipe, move_id:globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`};
-  if (to) to.push(recipe);
+  if (to && !destinationHasRecipe) to.push(recipe);
   weekQueueWriting = true; showWeek();
   try {
     const queue = await post('/api/calendar/placement', move);
     weekQueueWriting = false; adoptWeekQueue(queue);
     if (state.status) state.status.calendar_queue = queue;
-    if (target === 'trash') offerWeekUndo(move, recipe, index);
+    if (target === 'trash' || (target === 'shelf' && queue.items?.some(item => item.move_id === move.move_id && item.target === 'trash'))) offerWeekUndo(move, recipe, index);
   } catch (error) {
     toast(`Die Änderung konnte nicht bestätigt werden. Bitte prüfe die Woche: ${error.message}`);
     weekQueueWriting = false;
@@ -308,7 +448,7 @@ async function queueWeekMove(source, target, identifier, custom) {
   }
 }
 async function saveUnfiledWeek(week) {
-  if (weekBadgesBusy) { setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 1000); return; }
+  if (weekBadgesBusy || previewNoteBusy) { setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 1000); return; }
   if (weekArchiveBusy || weekSaving || weekQueueWriting || weekShoppingBusy || (!week.needs_collection_setup && !week.days.some(day => day.recipes.some(recipe => recipe.unfiled)))) return;
   weekArchiveBusy = true;
   let resolveArchive;
@@ -329,9 +469,11 @@ async function addWeekShopping() {
   const day = displayedWeek.days[0].date;
   weekShoppingBusy = true; showWeek();
   try {
+    if (previewNoteBusy) await previewNoteDone;
     if (weekBadgesBusy) await weekBadgesDone;
     if (weekArchiveBusy) await weekArchiveDone;
     const result = await post('/api/calendar/shopping', {day});
+    refreshCartCount().catch(() => {});
     if (result.status === 'empty') toast('In dieser Woche sind ab heute keine Rezepte eingeplant.');
     else if (!result.added) toast('Die Rezepte dieser Woche stehen bereits in deinem Einkaufswagen.');
     else toast(`${result.added} ${result.added === 1 ? 'Rezept wurde' : 'Rezepte wurden'} zum Einkaufswagen hinzugefügt.`);
@@ -339,6 +481,7 @@ async function addWeekShopping() {
   finally { weekShoppingBusy = false; showWeek(); }
 }
 function updateWeekBadges(recipeId, values) {
+  if (typeof values.has_note === 'boolean') rememberPreviewNote(recipeId, values.has_note);
   if (!displayedWeek) return;
   for (const recipe of [...displayedWeek.days.flatMap(day => day.recipes), ...(displayedWeek.shelf || [])]) {
     if (recipe.id === recipeId) Object.assign(recipe, values);
@@ -349,6 +492,8 @@ function updateWeekBadges(recipeId, values) {
     const recipe = [...displayedWeek.days.flatMap(day => day.recipes), ...(displayedWeek.shelf || [])].find(entry => entry.id === id);
     const layer = item.querySelector('.week-badge-layer');
     if (recipe && layer) layer.innerHTML = weekRecipeBadges(recipe);
+    const difficulty = item.querySelector('.week-recipe-difficulty');
+    if (recipe && difficulty && values.difficulty != null) difficulty.textContent = difficultyLabel(recipe.difficulty);
   });
 }
 function scheduleWeekBadges(week, delay = 500) {
@@ -359,7 +504,7 @@ async function loadWeekBadges(week) {
   if (state.view !== 'meine-woche' || displayedWeek !== week || week.badgesLoaded) return;
   const ids = [...new Set([...week.days.flatMap(day => day.recipes), ...(week.shelf || [])].map(recipe => recipe.id))];
   if (!ids.length) return;
-  if (weekBadgesBusy || weekArchiveBusy || weekSaving || weekQueueWriting || weekShoppingBusy || weekDrag || state.status?.sync?.running || $('#recipe-dialog').open) { scheduleWeekBadges(week, 1000); return; }
+  if (weekBadgesBusy || previewNoteBusy || previewShelfBusy || previewInteractionBusy || weekArchiveBusy || weekSaving || weekQueueWriting || weekShoppingBusy || state.status?.sync?.running || $('#recipe-dialog').open) { scheduleWeekBadges(week, 1000); return; }
   const versions = Object.fromEntries(ids.map(id => [id, noteBadgeVersion[id] || 0]));
   weekBadgesBusy = true;
   let resolveBadges;
@@ -376,6 +521,7 @@ async function loadWeekBadges(week) {
         const values = {};
         if (item.total_seconds != null) values.total_seconds = item.total_seconds;
         if (item.servings != null) values.servings = item.servings;
+        if (item.difficulty != null) values.difficulty = item.difficulty;
         if (item.has_note != null && (noteBadgeVersion[item.id] || 0) === versions[item.id]) values.has_note = item.has_note;
         updateWeekBadges(item.id, values);
       });
@@ -405,12 +551,13 @@ async function renderRoute() {
   if (state.view === 'einstellungen') { renderSettings(); return; }
   if (state.view === 'einkaufswagen') { await renderCart(request); return; }
   if (state.view === 'meine-woche') {
-    content.innerHTML = `<div class="week-heading"><div class="page-title"><span class="eyebrow">ZEIT FÜR GUTE IDEEN</span><h1>Meine Woche</h1></div><div id="week-heading-toolbar" aria-live="polite"></div><div class="week-trash" data-week-day="trash" aria-label="Aus der Woche entfernen">${icon('trash')}<span>Aus der Woche entfernen</span></div></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div><section id="week-lists" class="week-local-lists"></section>`;
+    content.innerHTML = `<div class="week-heading"><div class="page-title"><span class="eyebrow">ZEIT FÜR GUTE IDEEN</span><h1>Meine Woche</h1></div><div id="week-heading-toolbar" aria-live="polite"></div></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div><section id="week-lists" class="week-local-lists"></section>`;
     renderWeekLists();
     if ((weekSaving || weekQueueWriting || weekShoppingBusy) && displayedWeek) { showWeek(); return; }
     displayedWeek = null;
     try {
       if (weekBadgesBusy) await weekBadgesDone;
+      if (previewNoteBusy) await previewNoteDone;
       if (request !== state.request) return;
       const week = await api(`/api/calendar/week?day=${emptyCurrentWeek().days[0].date}`);
       if (request !== state.request) return;
@@ -449,7 +596,7 @@ async function renderRoute() {
   const title = state.query ? `Rezepte für „${state.query}“` : (collection?.name || 'Alle deine Rezepte');
   const description = collection ? collection.description || (collection.kind === 'local' ? 'Deine lokal gespeicherte Rezeptliste.' : 'Alle Rezepte aus dieser Cookidoo-Rezeptliste.') : 'Deine gespeicherten Rezepte. Einmal gesammelt, überall griffbereit.';
   const filterPanel = collection ? `<form id="recipe-filters" class="recipe-filters"><div class="recipe-ingredient-combobox"><label for="recipe-ingredient-filter">Zutaten (alle enthalten)</label><input id="recipe-ingredient-filter" name="ingredient" type="text" maxlength="2000" autocomplete="off" placeholder="Zutaten auswählen oder eingeben" value="${escapeHTML(state.filters.ingredient)}" role="combobox" aria-autocomplete="list" aria-controls="recipe-ingredient-options" aria-expanded="false"><div id="recipe-ingredient-options" class="ingredient-suggestions" role="listbox" aria-label="Zutaten in dieser Liste" hidden></div></div><label>Mindestens Portionen<select name="min_servings"><option value="">Beliebig</option>${filterOptions.servings.map(n => `<option value="${n}" ${String(n) === state.filters.minServings ? 'selected' : ''}>${n} Portionen</option>`).join('')}</select></label><div class="filter-actions"><button class="button button-primary" type="submit">Filtern</button><button class="button" type="button" data-action="reset-filters">Zurücksetzen</button></div><fieldset class="time-filter"><legend>Gesamtzeit höchstens</legend><div class="time-options">${[['','Beliebig'],['20','20 Min.'],['30','30 Min.'],['40','40 Min.'],['60','60 Min.']].map(([value, label]) => `<label class="time-choice"><input type="radio" name="max_minutes" value="${value}" ${state.filters.maxMinutes === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</div></fieldset></form>` : '';
-  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${escapeHTML(title)}</h1><p>${escapeHTML(description)}</p></div>${filterPanel}<div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option>${collection ? `<option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option>` : ''}</select></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
+  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${escapeHTML(title)}</h1><p>${escapeHTML(description)}</p>${collection?.kind === 'local' ? `<button class="button list-delete" type="button" data-delete-local-list="${escapeHTML(collection.id)}">${icon('trash')}Liste löschen</button>` : ''}</div>${filterPanel}<div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option>${collection ? `<option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option>` : ''}</select></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
   if (collection?.kind === 'local') {
     content.insertAdjacentHTML('beforeend', `<section class="add-recipes"><div class="section-heading"><div><h2>Weitere Rezepte hinzufügen</h2><p>Diese Rezepte sind noch nicht in dieser Liste.</p></div></div><label class="candidate-search">Rezepte suchen<input id="candidate-search" type="search" maxlength="200" autocomplete="off" placeholder="Rezeptname eingeben" value="${escapeHTML(state.candidateQuery)}"></label><div id="candidate-list" class="candidate-list"></div><p id="candidate-empty" class="candidate-empty" hidden></p><button id="candidate-more" class="button load-more" hidden>Weitere Rezepte anzeigen${icon('arrow')}</button></section>`);
   }
@@ -460,42 +607,57 @@ async function renderCart(request = state.request) {
   const cart = await api('/api/cart');
   if (request !== state.request || state.view !== 'einkaufswagen') return;
   const recipes = cart.items.filter(item => item.kind === 'recipe');
+  setCartCount(recipes.length);
   const extras = cart.items.filter(item => item.kind === 'additional');
   const groups = new Map();
   recipes.forEach(entry => entry.data.ingredients.forEach((ingredient, position) => {
-    const key = ingredient.key || `${entry.id}:${position}`;
+    if (ingredient.is_water) return;
+    const key = `${ingredient.owned ? '1' : '0'}:${ingredient.key || `${entry.id}:${position}`}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({entry, ingredient, position});
   }));
   const status = {pending:'Bereit', processing:'Wird übertragen', done:'Übertragen', existing:'Bereits in Cookidoo', uncertain:'Übertragung ungeklärt'};
   const rowStatus = entry => `<span class="cart-status ${entry.status === 'uncertain' ? 'cart-status-error' : ''}">${escapeHTML(status[entry.status] || entry.status)}</span>`;
   const resolve = entry => entry.status === 'uncertain' ? `<div class="cart-resolve"><p>Bitte prüfe den Eintrag in Cookidoo.</p><button type="button" class="button" data-cart-resolve="${entry.id}" data-status="done">Dort vorhanden</button><button type="button" class="button" data-cart-resolve="${entry.id}" data-status="pending">Dort nicht vorhanden</button></div>` : '';
-  const recipeRows = recipes.map(entry => `<article class="cart-recipe" data-cart-recipe><button type="button" class="cart-recipe-link" data-recipe="${escapeHTML(entry.recipe_id)}">${photo(entry.data.image_file, entry.data.name)}<span><strong>${escapeHTML(entry.data.name)}</strong>${entry.data.servings ? `<small>${escapeHTML(entry.data.servings)} Portionen</small>` : ''}</span></button>${entry.data.ingredients_complete === false ? '<span class="cart-status-error">Zutaten fehlen · bitte nach Synchronisierung erneut hinzufügen</span>' : ''}${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</article>`).join('');
-  const ingredientRows = [...groups.values()].sort((a,b) => (a[0].ingredient.name || a[0].ingredient.text).localeCompare(b[0].ingredient.name || b[0].ingredient.text, 'de')).map(items => {
+  const recipeRows = recipes.map(entry => `<article class="cart-recipe" data-cart-recipe><button type="button" class="cart-recipe-link" data-recipe="${escapeHTML(entry.recipe_id)}"><span class="cart-preview-photo" data-preview-observe="${escapeHTML(entry.recipe_id)}">${photo(entry.data.image_file, entry.data.name)}${previewNote(entry.recipe_id)}<span class="week-badge-layer">${weekRecipeBadges({...entry.data, has_note:false})}</span></span><span><strong>${escapeHTML(entry.data.name)}</strong>${entry.data.difficulty ? `<small>${escapeHTML(difficultyLabel(entry.data.difficulty))}</small>` : ''}</span></button>${entry.data.ingredients_complete === false ? '<span class="cart-status-error">Zutaten fehlen · bitte nach Synchronisierung erneut hinzufügen</span>' : ''}${entry.status === 'pending' ? '' : rowStatus(entry)}<button type="button" class="cart-recipe-remove" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} aus dem Einkaufswagen entfernen" title="Aus dem Einkaufswagen entfernen">${icon('trash')}</button>${resolve(entry)}</article>`).join('');
+  const ingredientRows = owned => {
+    const byCategory = new Map();
+    [...groups.values()].filter(items => !!items[0].ingredient.owned === owned).sort((a,b) => (a[0].ingredient.name || a[0].ingredient.text).localeCompare(b[0].ingredient.name || b[0].ingredient.text, 'de')).forEach(items => {
+      const category = items[0].ingredient.category || 'Sonstiges';
+      if (!byCategory.has(category)) byCategory.set(category, []);
+      byCategory.get(category).push(items);
+    });
+    return [...byCategory].sort(([a],[b]) => a === 'Sonstiges' ? 1 : b === 'Sonstiges' ? -1 : a.localeCompare(b, 'de')).map(([category, categoryItems]) => `<section class="cart-category"><h3>${escapeHTML(category)}</h3><div class="cart-ingredients-list">${categoryItems.map(items => {
     const title = items[0].ingredient.name || items[0].ingredient.text;
     const quantities = items.map(({ingredient}) => ingredient.text.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|Stück)\b/i));
     const total = items.length > 1 && quantities.every(Boolean) && quantities.every(q => q[2].toLocaleLowerCase('de-DE') === quantities[0][2].toLocaleLowerCase('de-DE')) ? `${quantities.reduce((sum, q) => sum + Number(q[1].replace(',', '.')), 0).toLocaleString('de-DE')} ${quantities[0][2]}` : '';
     const heading = items.length > 1 ? `<div class="cart-ingredient-heading"><strong>${escapeHTML(title)}</strong>${total ? `<span class="cart-total">${escapeHTML(total)} insgesamt</span>` : ''}</div>` : '';
-    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
-  }).join('');
-  const extraRows = extras.map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows || '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${ingredientRows ? `<div class="cart-ingredients-list">${ingredientRows}</div>` : '<p>Füge ein Rezept hinzu, um seine Zutaten zu sehen.</p>'}</section><section class="cart-section"><h2>Weitere Artikel</h2>${extraRows}<form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
+    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(ingredient.name || ingredient.text, ingredient.category)}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
+    }).join('')}</div></section>`).join('');
+  };
+  const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
+  const extraRows = extras.filter(entry => !entry.data.is_water).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
+  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${ownedIngredients ? `<h3 class="cart-owned-heading">Bereits vorhanden</h3>${ownedIngredients}` : ''}${!neededIngredients && !ownedIngredients ? '<p>Füge ein Rezept hinzu, um seine Zutaten zu sehen.</p>' : ''}</section><section class="cart-section"><h2>Weitere Artikel</h2>${extraRows}<form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
 }
 
 function pantryIcon(name, category) {
   const value = name.toLocaleLowerCase('de-DE');
+  if (/ingwer|ginger/.test(value)) return '<svg class="ingredient-ginger" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 15.2c.7-2.1 2.5-3.3 4.7-3.5l-.8-2.4a2.2 2.2 0 0 1 4.2-1.4l.9 2.5 2.5-.6-.5-2a2 2 0 0 1 3.9-.9l.6 2.4c2 .3 3.2 1.7 2.8 3.5-.3 1.5-1.6 2.3-3.2 2.7l-.1 1.2c-.1 2-1.8 3.3-3.8 2.8l-2.7-.7c-1.7 1.3-4 1.5-5.8.6-1.7-.9-3.3-2.3-2.7-4.2Z" fill="#d6a568" stroke="#795833" stroke-width="1.2"/><path d="M7.8 12.1l1 2.1m3.4-3.4.7 2.1m5.1-2.8.2 1.8M7.6 16.6l1.4.4m5-1 1.3.4" fill="none" stroke="#a77a49" stroke-width="1" stroke-linecap="round"/></svg>';
+  if (/öl|oil/.test(value)) return '<svg class="ingredient-oil" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4v3.1c0 1.3.5 2.1 1.5 3.1l1.1 1.1c.6.6.9 1.4.9 2.2v8.1c0 1.3-1 2.4-2.3 2.4H8.8c-1.3 0-2.3-1.1-2.3-2.4v-8.1c0-.8.3-1.6.9-2.2l1.1-1.1C9.5 7.2 10 6.4 10 5.1Z" fill="#d2a742" stroke="#755d27" stroke-width="1.2"/><path d="M9.5 2h5v2.2h-5z" fill="#52714a" stroke="#3c5a37" stroke-width=".8"/><path d="M7.6 12h8.8v6.2H7.6z" fill="#f6efd3" stroke="none"/><path d="M12 12.9c-.8 1.1-1.7 2-1.7 2.8a1.7 1.7 0 0 0 3.4 0c0-.8-.9-1.7-1.7-2.8Z" fill="#84944d" stroke="none"/></svg>';
+  if (/paprika|bell peppers?/.test(value) && !/paprikapulver|paprika edels|chili|cayenne|gemahlen/.test(value)) return '<svg class="ingredient-pepper" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.7 6.1c-3.7-2.1-7.8.4-7.6 4.8.1 4.7 2.3 9.8 5.4 10 1.1.1 1.7-.4 2.5-.4s1.6.5 2.7.4c3-.2 5.1-5.3 5.3-10 .1-4.4-4-6.9-7.6-4.8Z" fill="#e85b4e" stroke="#aa3b32" stroke-width="1.1"/><path d="M11.9 6.6c-.9-2.1-.2-3.8 1.6-4.7l1 .9c-1.2.7-1.5 1.7-1.1 3.2" fill="#56864c" stroke="#3e693a" stroke-width="1"/><path d="M8 8.4c-1.1 2.8-.8 7.3.7 10M15.9 8.4c1.1 2.8.8 7.3-.7 10" fill="none" stroke="#f58e7e" stroke-width="1.1" stroke-linecap="round"/></svg>';
+  if (/\bghee\b|butterschmalz/.test(value)) return '<svg class="ingredient-ghee" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7.2h11v12.2c0 1.4-1.1 2.4-2.4 2.4H8.9c-1.3 0-2.4-1-2.4-2.4Z" fill="#e7b74d" stroke="#886b2e" stroke-width="1.2"/><path d="M6 4h12v3H6z" fill="#876b45" stroke="#614d35" stroke-width="1"/><path d="M7.4 11h9.2v6H7.4z" fill="#fff3d1" stroke="none"/><path d="M12 11.9c-.8 1-1.6 1.8-1.6 2.6a1.6 1.6 0 0 0 3.2 0c0-.8-.8-1.6-1.6-2.6Z" fill="#d5a335" stroke="none"/></svg>';
   const icons = [
     [/chili|cayenne|paprikapulver|paprika edels/, '🌶️'],
     [/knoblauch/, '🧄'], [/zwiebel/, '🧅'], [/kartoffel/, '🥔'], [/tomate/, '🍅'],
-    [/karotte|möhre/, '🥕'], [/gurke/, '🥒'], [/paprika/, '🫑'], [/brokkoli/, '🥦'],
+    [/karotte|möhre/, '🥕'], [/gurke/, '🥒'], [/brokkoli/, '🥦'],
     [/pilz|champignon/, '🍄'], [/salat/, '🥬'], [/zitrone/, '🍋'], [/orange/, '🍊'],
     [/banane/, '🍌'], [/apfel|äpfel/, '🍎'], [/beere|beeren/, '🫐'],
-    [/salz/, '🧂'], [/pfeffer/, '⚫'], [/zimt/, '🪵'], [/ingwer/, '🫚'],
+    [/salz/, '🧂'], [/pfeffer/, '⚫'], [/zimt/, '🪵'],
     [/kreuzkümmel|kümmel|koriander/, '🌱'], [/oregano|thymian|basilikum|rosmarin|petersilie|schnittlauch|dill|kräuter/, '🌿'],
     [/curry|kurkuma|muskat/, '🥄'], [/zucker/, '🍬'], [/mehl/, '🌾'], [/stärke/, '🥣'],
     [/milch|sahne|joghurt/, '🥛'], [/käse/, '🧀'], [/butter/, '🧈'], [/ei(?:er)?\b/, '🥚'],
-    [/öl/, '🫒'], [/hähnchen|huhn/, '🍗'], [/fleisch|rind|schwein/, '🥩'], [/fisch|lachs/, '🐟'],
-    [/reis/, '🍚'], [/nudel|pasta/, '🍝'], [/brot/, '🍞'], [/honig/, '🍯'], [/wasser/, '💧'],
+    [/hähnchen|huhn/, '🍗'], [/fleisch|rind|schwein/, '🥩'], [/fisch|lachs/, '🐟'],
+    [/reis/, '🍚'], [/nudel|pasta/, '🍝'], [/baguette/, '🥖'], [/brot/, '🍞'], [/honig/, '🍯'], [/wasser/, '💧'],
   ];
   for (const [pattern, symbol] of icons) if (pattern.test(value)) return symbol;
   const fallback = {'Gewürze':'🌿','Gemüse':'🥕','Obst':'🍎','Fleisch':'🥩','Fisch':'🐟','Soßen':'🥫','Öle und Fette':'🫒','Milchprodukte':'🥛','Vorräte und Konserven':'🥫','Backzutaten':'🌾','Getränke':'🥤','Kräuter (tiefgekühlt)':'🌿'};
@@ -505,7 +667,7 @@ function pantryCategoryCard(group, query) {
   const collapsed = collapsedPantry.has(group.id);
   const disabled = query || pantryReordering ? 'disabled' : '';
   const list = group.items.length ? `<ul class="pantry-items">${group.items.map(item => `<li><span class="pantry-item-icon" aria-hidden="true">${pantryIcon(item.name, group.name)}</span><div class="pantry-item-text"><strong>${escapeHTML(item.name)}</strong>${item.quantity ? `<span>${escapeHTML(item.quantity)}</span>` : ''}</div><button class="pantry-edit" data-pantry-edit="${item.id}" aria-label="${escapeHTML(item.name)} bearbeiten">Bearbeiten</button><button class="pantry-remove" data-pantry-remove="${item.id}" aria-label="${escapeHTML(item.name)} entfernen">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="pantry-empty">Noch keine Zutaten eingetragen.</p>';
-  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
+  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
 }
 function renderPantry() {
   if (state.view !== 'vorrat') return;
@@ -694,7 +856,7 @@ function applyRecipeFilters(params) {
 function candidateCard(recipe) {
   const outsideFilter = recipe.matches === false;
   const name = escapeHTML(recipe.name), id = escapeHTML(recipe.id);
-  return `<div class="candidate-row${outsideFilter ? ' outside-filter' : ''}"><button class="candidate-open" type="button" data-recipe="${id}" aria-label="${name} öffnen${outsideFilter ? ' · entspricht nicht dem Filter' : ''}"><span class="candidate-photo">${photo(recipe.image_file)}</span><span class="candidate-name">${name}</span></button><button class="candidate-add" type="button" data-add-recipe="${id}" aria-label="${name} zur Liste hinzufügen${outsideFilter ? ' · entspricht nicht dem Filter' : ''}" title="Zur Liste hinzufügen">+</button></div>`;
+  return `<div class="candidate-row${outsideFilter ? ' outside-filter' : ''}"><button class="candidate-open" type="button" data-recipe="${id}" aria-label="${name} öffnen${outsideFilter ? ' · entspricht nicht dem Filter' : ''}"><span class="candidate-photo" data-preview-observe="${id}">${photo(recipe.image_file)}${previewNote(recipe.id)}</span><span class="candidate-name">${name}</span></button>${previewWeekButton(recipe.id, recipe.name)}<button class="candidate-add" type="button" data-add-recipe="${id}" aria-label="${name} zur Liste hinzufügen${outsideFilter ? ' · entspricht nicht dem Filter' : ''}" title="Zur Liste hinzufügen">+</button></div>`;
 }
 async function loadCandidates(append = false, request = state.request) {
   const candidateRequest = ++state.candidateRequest;
@@ -717,20 +879,47 @@ function renderSettings() {
 function recipeDetails(recipe) {
   const parse = value => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } };
   const ingredients = parse(recipe.ingredients_json).map((item, position) => {
+    if (recipe.hidden_ingredient_positions?.includes(position)) return null;
     if (typeof item === 'string') return {text:item, available:recipe.ingredient_availability?.[position]};
     if (!item || typeof item !== 'object') return null;
     const description = typeof item.description === 'string' ? item.description.trim() : '';
     const name = typeof item.name === 'string' ? item.name.trim() : '';
     const preparation = typeof item.preparation === 'string' ? item.preparation.trim() : '';
     const text = description && name && !description.toLocaleLowerCase('de-DE').includes(name.toLocaleLowerCase('de-DE')) ? `${description} ${name}` : description || name;
-    return {text:text + (preparation && !text.includes(preparation) ? (preparation.startsWith(',') ? '' : ', ') + preparation : ''), available:recipe.ingredient_availability?.[position]};
+    return {name, text:text + (preparation && !text.includes(preparation) ? (preparation.startsWith(',') ? '' : ', ') + preparation : ''), available:recipe.ingredient_availability?.[position]};
   }).filter(item => item?.text);
   const groups = parse(recipe.instructions_json);
   const sections = groups.some(item => Array.isArray(item?.steps))
     ? groups.map(group => ({title: group.title || '', steps: (group.steps || []).filter(item => typeof item === 'string' && item)}))
     : [{title: '', steps: groups.map(item => typeof item === 'string' ? item : item?.text).filter(item => typeof item === 'string' && item)}];
   const steps = sections.filter(group => group.steps.length);
-  return `${ingredients.length ? `<details class="creation-detail recipe-accordion" id="recipe-ingredients" open><summary>Zutaten<span aria-hidden="true">⌄</span></summary><ul class="ingredient-list">${ingredients.map(item => { const status = item.available === true ? 'available' : item.available === false ? 'missing' : 'unknown'; const label = item.available === true ? 'Im Vorrat' : item.available === false ? 'Nicht im Vorrat' : 'Nicht zugeordnet'; return `<li><span class="ingredient-dot ${status}" role="img" aria-label="${label}" title="${label}"></span><span>${escapeHTML(item.text)}</span></li>`; }).join('')}</ul></details>` : ''}${steps.length ? `<details class="creation-detail recipe-accordion" id="recipe-preparation"><summary>Zubereitung<span aria-hidden="true">⌄</span></summary>${steps.map(group => `${group.title ? `<h4>${escapeHTML(group.title)}</h4>` : ''}<ol>${group.steps.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ol>`).join('')}</details>` : ''}`;
+  return `${ingredients.length ? `<details class="creation-detail recipe-accordion" id="recipe-ingredients" open><summary>Zutaten<span aria-hidden="true">⌄</span></summary><ul class="ingredient-list">${ingredients.map(item => { const status = item.available === true ? 'available' : item.available === false ? 'missing' : 'unknown'; const label = item.available === true ? 'Im Vorrat' : item.available === false ? 'Nicht im Vorrat' : 'Nicht zugeordnet'; return `<li><span class="ingredient-dot ${status}" role="img" aria-label="${label}" title="${label}"></span><span class="recipe-ingredient-icon" aria-hidden="true">${pantryIcon(item.name || item.text, '')}</span><span>${escapeHTML(item.text)}</span></li>`; }).join('')}</ul></details>` : ''}${steps.length ? `<details class="creation-detail recipe-accordion" id="recipe-preparation"><summary>Zubereitung<span aria-hidden="true">⌄</span></summary>${steps.map(group => `${group.title ? `<h4>${escapeHTML(group.title)}</h4>` : ''}<ol>${group.steps.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ol>`).join('')}</details>` : ''}`;
+}
+function renderRecipeTips(tips, custom = false) {
+  if (custom && Array.isArray(tips)) {
+    const marker = tips.findIndex(item => typeof item === 'string' && /^Notiz:[ \t]?/.test(item));
+    if (marker >= 0) tips = tips.slice(0, marker);
+  }
+  const values = Array.isArray(tips) ? tips.filter(item => typeof item === 'string' && item.trim()) : [];
+  return values.length ? `<details class="creation-detail recipe-accordion" id="recipe-tips"><summary>Tipps<span aria-hidden="true">⌄</span></summary><ul class="recipe-tips-list">${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul></details>` : '';
+}
+async function loadRecipeTips(recipe, note) {
+  const container = $('#recipe-tips-container');
+  if (!container) return;
+  if (recipe.tips_json != null) {
+    try { container.innerHTML = renderRecipeTips(JSON.parse(recipe.tips_json), recipe.id.startsWith('creation:')); } catch (_) { container.innerHTML = ''; }
+    return;
+  }
+  container.innerHTML = '<p class="recipe-tips-status">Tipps werden geladen …</p>';
+  try {
+    const result = await api(`/api/recipes/${encodeURIComponent(recipe.id)}/tips`);
+    if (inlineNote !== note || !$('#recipe-dialog').open) return;
+    recipe.tips_json = JSON.stringify(result.tips);
+    $('#recipe-tips-container').innerHTML = renderRecipeTips(result.tips, recipe.id.startsWith('creation:'));
+  } catch (_) {
+    if (inlineNote !== note || !$('#recipe-dialog').open) return;
+    $('#recipe-tips-container').innerHTML = '<p class="recipe-tips-status">Tipps konnten nicht geladen werden. <button type="button" class="text-link" data-retry-tips>Erneut versuchen</button></p>';
+  }
 }
 function setInlineNoteStatus(note, message, error = false) {
   if (inlineNote !== note || !$('#recipe-dialog').open) return;
@@ -749,11 +938,13 @@ async function loadRecipeNote(note) {
     const result = await api(`/api/notes/${encodeURIComponent(note.id)}`);
     if (request !== recipeNoteRequest || inlineNote !== note) return;
     note.original = result.text; note.draft = result.text; note.loaded = true;
+    noteBadgeVersion[note.id] = (noteBadgeVersion[note.id] || 0) + 1;
+    updateWeekBadges(note.id, {has_note:!!result.text.trim()});
     const field = $('#recipe-note-text');
     if (field) { field.value = result.text; field.readOnly = false; resizeInlineNote(field); }
     setInlineNoteStatus(note, '');
-  } catch (_) {
-    if (request === recipeNoteRequest) setInlineNoteStatus(note, 'Die Notiz konnte nicht geladen werden. Zum erneuten Laden ins Feld klicken.', true);
+  } catch (error) {
+    if (request === recipeNoteRequest) setInlineNoteStatus(note, `${error.message} Zum erneuten Laden ins Feld klicken.`, true);
   } finally { note.loading = false; }
 }
 async function saveInlineNote(note) {
@@ -789,6 +980,9 @@ async function ensureInlineNoteSaved() {
   return saved && note.draft === note.original;
 }
 async function openRecipe(id, fromWeek = false) {
+  previewInteractionBusy = true;
+  try {
+  if (previewNoteBusy) await previewNoteDone;
   if ($('#recipe-dialog').open && !await ensureInlineNoteSaved()) {
     if ($('#recipe-version') && inlineNote) $('#recipe-version').value = inlineNote.id;
     return;
@@ -800,14 +994,16 @@ async function openRecipe(id, fromWeek = false) {
   const difficulty = {easy:'Einfach',medium:'Mittel',advanced:'Anspruchsvoll',hard:'Anspruchsvoll'}[recipe.difficulty?.toLowerCase()];
   const versions = recipe.versions || [];
   const selector = versions.length > 1 ? `<label class="version-select">Rezeptversion<select id="recipe-version">${versions.map((version, index) => `<option value="${escapeHTML(version.id)}" ${version.id === recipe.id ? 'selected' : ''}>${version.origin_recipe_id ? `Meine Kreation${versions.filter(v => v.origin_recipe_id).length > 1 ? ` ${index}` : ''}` : 'Cookidoo-Original'}${version.servings ? ` · ${escapeHTML(version.servings)} Portionen` : ''}</option>`).join('')}</select></label>` : '';
-  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-today" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Heute kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
+  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}<div id="recipe-tips-container"></div>${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-today" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Heute kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
   if (!$('#recipe-dialog').open) $('#recipe-dialog').showModal();
   inlineNote = {id:recipe.id, original:'', draft:'', loaded:false, loading:false, saving:null, requested:false};
-  loadRecipeNote(inlineNote);
+  const currentNote = inlineNote;
+  loadRecipeNote(currentNote).then(() => loadRecipeTips(recipe, currentNote));
+  } finally { previewInteractionBusy = false; }
 }
 async function startSync() {
   if (!state.status?.connected) { $('#connect-dialog').showModal(); return; }
-  if (weekQueueWriting || weekDrag) { toast('Bitte schließe zuerst die Änderung an der Woche ab.'); return; }
+  if (weekQueueWriting) { toast('Bitte schließe zuerst die Änderung an der Woche ab.'); return; }
   const result = await post('/api/sync');
   state.status = await api('/api/status'); updateSync();
   if (result.started && !state.status.sync.running) { await loadLibrary(); toast(state.status.sync.message); }
@@ -847,81 +1043,86 @@ async function closeRecipeSafely() {
   return true;
 }
 $('#recipe-dialog').addEventListener('cancel', event => { event.preventDefault(); closeRecipeSafely(); });
-function finishWeekDrag(cancelled = false) {
-  if (!weekDrag) return;
-  const drag = weekDrag;
-  const destination = !cancelled && drag.moved ? document.elementFromPoint(drag.x, drag.y)?.closest('[data-week-day]')?.dataset.weekDay : null;
-  cancelAnimationFrame(drag.frame);
-  drag.ghost?.remove();
-  document.querySelectorAll('.week-drop-target,.week-drag-source').forEach(node => node.classList.remove('week-drop-target', 'week-drag-source'));
-  weekDrag = null;
-  document.body.classList.remove('week-is-dragging');
-  if (drag.moved) {
-    suppressWeekClick = true;
-    setTimeout(() => { suppressWeekClick = false; }, 400);
-    if (destination) queueWeekMove(drag.source, destination, drag.id, drag.custom);
-  }
-}
-function updateWeekDrag() {
-  if (!weekDrag?.moved) return;
-  const drag = weekDrag, scroll = $('.week-scroll');
-  if (!scroll) { finishWeekDrag(true); return; }
-  const bounds = scroll.getBoundingClientRect();
-  if (drag.x < bounds.left + 45) scroll.scrollLeft -= 12;
-  else if (drag.x > bounds.right - 45) scroll.scrollLeft += 12;
-  if (drag.y < 45) window.scrollBy(0, -10);
-  else if (drag.y > window.innerHeight - 45) window.scrollBy(0, 10);
-  drag.ghost.style.left = `${drag.x}px`; drag.ghost.style.top = `${drag.y}px`;
-  document.querySelectorAll('.week-drop-target').forEach(node => node.classList.remove('week-drop-target'));
-  const day = document.elementFromPoint(drag.x, drag.y)?.closest('[data-week-day]');
-  if (day && day.dataset.weekDay !== drag.source) day.classList.add('week-drop-target');
-  drag.frame = requestAnimationFrame(updateWeekDrag);
-}
-document.addEventListener('pointerdown', event => {
-  const image = event.target.closest('.week-recipe-photo');
-  const item = image?.closest('[data-week-recipe]');
-  if (!item || weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy || event.button !== 0 || weekDrag) return;
-  weekDrag = {pointer:event.pointerId, x:event.clientX, y:event.clientY, startX:event.clientX, startY:event.clientY, image, item, source:item.dataset.weekSource, id:item.dataset.weekRecipe, custom:item.dataset.weekCustom === '1', moved:false};
-  image.setPointerCapture(event.pointerId);
+let weekMouseDrag = null;
+document.addEventListener('dragstart', event => {
+  const card = event.target.closest('.week-recipe[draggable]');
+  if (!card) return;
+  const item = card.closest('[data-week-recipe]');
+  if (!item || weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy || previewShelfBusy || !displayedWeek) { event.preventDefault(); return; }
+  weekMouseDrag = {source:item.dataset.weekSource, id:item.dataset.weekRecipe, custom:item.dataset.weekCustom === '1'};
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', item.querySelector('.week-recipe-name')?.textContent || 'Rezept');
+  item.classList.add('week-dragging');
 });
-document.addEventListener('pointermove', event => {
-  if (!weekDrag || event.pointerId !== weekDrag.pointer) return;
-  weekDrag.x = event.clientX; weekDrag.y = event.clientY;
-  if (!weekDrag.moved && Math.hypot(event.clientX - weekDrag.startX, event.clientY - weekDrag.startY) > 8) {
-    weekDrag.moved = true;
-    document.body.classList.add('week-is-dragging');
-    weekDrag.item.classList.add('week-drag-source');
-    const ghost = document.createElement('div'); ghost.className = 'week-drag-ghost';
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.append(weekDrag.image.cloneNode(true), weekDrag.item.querySelector('.week-recipe-name').cloneNode(true));
-    document.body.append(ghost); weekDrag.ghost = ghost;
-    updateWeekDrag();
-  }
-  if (weekDrag.moved) event.preventDefault();
+document.addEventListener('dragover', event => {
+  if (!weekMouseDrag) return;
+  const target = event.target.closest('[data-week-day]');
+  document.querySelectorAll('.week-drop-target').forEach(node => { if (node !== target) node.classList.remove('week-drop-target'); });
+  if (!target || target.dataset.weekDay === weekMouseDrag.source) return;
+  event.preventDefault(); event.dataTransfer.dropEffect = 'move'; target.classList.add('week-drop-target');
 });
-document.addEventListener('pointerup', event => { if (weekDrag && event.pointerId === weekDrag.pointer) finishWeekDrag(); });
-document.addEventListener('pointercancel', event => { if (weekDrag && event.pointerId === weekDrag.pointer) finishWeekDrag(true); });
-document.addEventListener('dragstart', event => { if (event.target.closest('.week-recipe-photo')) event.preventDefault(); });
+function clearWeekMouseDrag() {
+  document.querySelectorAll('.week-dragging,.week-drop-target').forEach(node => node.classList.remove('week-dragging', 'week-drop-target'));
+  weekMouseDrag = null;
+}
+document.addEventListener('drop', event => {
+  if (!weekMouseDrag) return;
+  const target = event.target.closest('[data-week-day]');
+  const drag = weekMouseDrag;
+  if (target) event.preventDefault();
+  clearWeekMouseDrag();
+  if (target) queueWeekMove(drag.source, target.dataset.weekDay, drag.id, drag.custom);
+});
+document.addEventListener('dragend', clearWeekMouseDrag);
 document.addEventListener('toggle', event => {
   if (!event.target.matches?.('[data-week-list]') || !event.target.isConnected) return;
   if (event.target.open) { weekOpenLists.add(event.target.dataset.weekList); loadWeekList(event.target).catch(error => toast(error.message)); }
   else weekOpenLists.delete(event.target.dataset.weekList);
 }, true);
-document.addEventListener('click', event => { if (suppressWeekClick) { event.preventDefault(); event.stopImmediatePropagation(); suppressWeekClick = false; } }, true);
 window.addEventListener('beforeunload', event => { if (weekQueueWriting || weekShoppingBusy || (inlineNote?.loaded && (inlineNote.saving || inlineNote.draft !== inlineNote.original))) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', async event => {
+  const retryTips = event.target.closest('[data-retry-tips]');
+  if (retryTips && inlineNote) { await loadRecipeTips({id:inlineNote.id, tips_json:null}, inlineNote); return; }
   const close = event.target.closest('.close-dialog');
   if (close) { const dialog = close.closest('dialog'); if (dialog.id === 'recipe-dialog') await closeRecipeSafely(); else dialog.close(); return; }
+  const previewWeek = event.target.closest('[data-preview-week-add]');
+  if (previewWeek) { await addPreviewToWeek(previewWeek.dataset.previewWeekAdd); return; }
+  const weekAction = event.target.closest('[data-week-preview-action]');
+  if (weekAction) {
+    const item = weekAction.closest('[data-week-recipe]');
+    if (item && !previewShelfBusy) await queueWeekMove(item.dataset.weekSource, item.dataset.weekSource === 'shelf' ? 'trash' : 'shelf', item.dataset.weekRecipe, item.dataset.weekCustom === '1');
+    return;
+  }
   const recipe = event.target.closest('[data-recipe]');
   const addRecipe = event.target.closest('[data-add-recipe]');
   const weekAdd = event.target.closest('[data-week-add]');
   const weekListMore = event.target.closest('[data-week-list-more]');
+  const deleteLocalList = event.target.closest('[data-delete-local-list]');
+  const deletePantryCategory = event.target.closest('[data-pantry-delete-category]');
   const pantryAdd = event.target.closest('[data-pantry-add-category]');
   const pantryEdit = event.target.closest('[data-pantry-edit]');
   const pantryRemove = event.target.closest('[data-pantry-remove]');
   const pantryToggle = event.target.closest('[data-pantry-toggle]');
   const action = event.target.closest('[data-action]');
   try {
+    if (deleteLocalList) {
+      const list = state.collections.find(item => item.id === deleteLocalList.dataset.deleteLocalList && item.kind === 'local');
+      if (list && confirm(`Lokale Liste „${list.name}“ löschen? Die Zuordnungen zu dieser Liste werden entfernt. Rezepte, die nur hier gespeichert sind, erscheinen danach nicht mehr in der Sammlung.`)) {
+        deleteLocalList.disabled = true;
+        try { await api(`/api/local-collections/${encodeURIComponent(list.id)}`, {method:'DELETE'}); location.hash = '#listen'; await loadLibrary(); toast('Lokale Liste gelöscht.'); }
+        finally { deleteLocalList.disabled = false; }
+      }
+      return;
+    }
+    if (deletePantryCategory) {
+      const category = state.pantry.categories.find(item => item.id === Number(deletePantryCategory.dataset.pantryDeleteCategory));
+      if (category && confirm(`Vorratskategorie „${category.name}“ löschen? Alle darin enthaltenen Vorratseinträge werden ebenfalls gelöscht.`)) {
+        deletePantryCategory.disabled = true;
+        try { await api(`/api/pantry/categories/${category.id}`, {method:'DELETE'}); collapsedPantry.delete(category.id); await refreshPantry(); toast('Vorratskategorie gelöscht.'); }
+        finally { deletePantryCategory.disabled = false; }
+      }
+      return;
+    }
     if (weekAdd) await addRecipeToWeekShelf(weekAdd.dataset.weekAdd);
     if (weekListMore) await loadWeekList(weekListMore.closest('[data-week-list]'));
     if (event.target.closest('#recipe-note-preview') && event.target.id !== 'recipe-note-text') $('#recipe-note-text')?.focus();
@@ -983,6 +1184,7 @@ document.addEventListener('click', async event => {
           try {
             const planning = action.dataset.action === 'plan-today';
             const result = await post(`/api/recipes/${encodeURIComponent(action.dataset.actionRecipe)}/${planning ? 'plan-today' : 'shopping'}${action.dataset.actionCalendar === 'true' ? '?calendar=true' : ''}`);
+            if (!planning) refreshCartCount().catch(() => {});
             toast(planning ? (result.verified ? 'Für heute im Cookidoo-Kalender eingeplant.' : 'Cookidoo hat die Anfrage angenommen, aber der Kalendereintrag konnte nicht bestätigt werden. Bitte prüfe den Kalender, bevor du es erneut versuchst.') : result.added ? 'Zum Einkaufswagen hinzugefügt.' : 'Dieses Rezept steht bereits im Einkaufswagen.');
           } finally { action.disabled = false; }
           break;
@@ -1164,14 +1366,16 @@ document.addEventListener('change', async event => {
       const checkbox = event.target;
       const path = checkbox.dataset.cartIngredient ? `/api/cart/${encodeURIComponent(checkbox.dataset.cartIngredient)}/ingredients/${checkbox.dataset.position}` : `/api/cart/${encodeURIComponent(checkbox.dataset.cartOwned)}/owned`;
       checkbox.disabled = true;
-      try { await api(path, {method:'PUT', body:JSON.stringify({owned:checkbox.checked})}); }
+      try {
+        await api(path, {method:'PUT', body:JSON.stringify({owned:checkbox.checked})});
+        if (checkbox.dataset.cartIngredient && state.view === 'einkaufswagen') {
+          const entry = checkbox.dataset.cartIngredient, position = checkbox.dataset.position;
+          await renderCart();
+          document.querySelector(`[data-cart-ingredient="${CSS.escape(entry)}"][data-position="${CSS.escape(position)}"]`)?.focus({preventScroll:true});
+        }
+      }
       catch (error) { checkbox.checked = !checkbox.checked; throw error; }
       finally { checkbox.disabled = false; }
-      return;
-    }
-    if (event.target.matches('.week-move-select')) {
-      const item = event.target.closest('[data-week-recipe]');
-      if (event.target.value) queueWeekMove(item.dataset.weekSource, event.target.value, item.dataset.weekRecipe, item.dataset.weekCustom === '1');
       return;
     }
     if (event.target.id === 'recipe-version') await openRecipe(event.target.value);
@@ -1221,7 +1425,7 @@ setInterval(async () => {
   try {
     const previous = state.status;
     state.status = await api('/api/status'); updateSync();
-    const queueChanged = !weekDrag && adoptWeekQueue(state.status.calendar_queue);
+    const queueChanged = adoptWeekQueue(state.status.calendar_queue);
     if (queueChanged && state.view === 'meine-woche') {
       if ($('#recipe-dialog').open) weekQueueRefreshPending = true;
       else if (weekSaving && displayedWeek) showWeek();

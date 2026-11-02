@@ -31,6 +31,7 @@ def recipe_snapshot(recipe, pantry_names):
             items.append({'name': name, 'key': ingredient_group_key(name) if name else '', 'text': description, 'owned': ingredient_available(name, pantry_names) if name else False})
     return {'id': recipe['id'], 'name': recipe.get('name') or 'Rezept',
             'image_file': recipe.get('image_file'), 'servings': recipe.get('servings'),
+            'total_seconds': recipe.get('total_seconds'), 'difficulty': recipe.get('difficulty'),
             'image_url': recipe.get('image_url'), 'ingredients': items, 'ingredients_complete': complete}
 
 
@@ -43,7 +44,10 @@ async def remote_recipe_snapshot(service, identifier, custom, pantry_names):
     ingredients = [dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item for item in detail.ingredients]
     image_url = getattr(detail, 'image', None) or getattr(detail, 'thumbnail', None)
     image_file = (local or {}).get('image_file') or service.calendar_image_reference(image_url)
+    total_time = getattr(detail, 'total_time', None)
+    total_seconds = max(0, int(total_time.total_seconds())) if hasattr(total_time, 'total_seconds') else max(0, int(total_time)) if isinstance(total_time, (int, float)) else None
     return recipe_snapshot({'id': recipe_id, 'name': detail.name, 'servings': str(detail.serving_size) if detail.serving_size else None,
+                            'total_seconds': total_seconds, 'difficulty': str(getattr(detail, 'difficulty', '') or '') or None,
                             'image_file': image_file, 'image_url': str(image_url) if image_file and image_url else None,
                             'ingredients_json': json.dumps(ingredients, ensure_ascii=False)}, pantry_names)
 

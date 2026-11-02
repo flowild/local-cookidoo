@@ -21,7 +21,7 @@ from app.main import create_app
 from app.ingredients import ingredient_available, ingredient_display_name, ingredient_group_key, ingredient_name
 from app.security import Vault
 from app.storage import Database, now
-from app.sync import SyncService
+from app.sync import NoteRequestError, SyncService
 
 PASSWORD = 'test-only-password-123'
 ORIGIN = {'Origin': 'https://testserver'}
@@ -97,6 +97,39 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
         self.assertNotIn('secret', response.text)
 
+    def test_week_and_existing_shelf_use_local_recipe_difficulty(self):
+        service = self.app.state.sync
+        collections, recipes = snapshot()
+        recipes['r1']['difficulty'] = 'easy'
+        recipes['r1']['servings'] = '4'
+        self.app.state.database.save_snapshot(collections, recipes)
+        day = NS(id='2026-01-05', recipes=[NS(id='r1', name='Test')], customer_recipe_ids=[])
+        service.client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[day]))
+        payload = {'week':'2026-01-05','source':'preview','target':'shelf','recipe_id':'r1','custom':False,'move_id':'preview-1','recipe':{}}
+        self.assertEqual(self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN).status_code, 200)
+        owner = service.week_collection_owner()
+        def old_shelf(queue):
+            queue['shelves'][owner]['2026-01-05'][0].pop('difficulty')
+            return queue
+        self.app.state.database.calendar_queue_update(old_shelf)
+        response = self.client.get('/api/calendar/week?day=2026-01-05')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['days'][0]['recipes'][0]['difficulty'], 'easy')
+        self.assertEqual(response.json()['shelf'][0]['difficulty'], 'easy')
+        self.assertNotIn('difficulty', self.app.state.database.get('calendar_move_queue')['shelves'][owner]['2026-01-05'][0])
+
+    def test_week_badges_reuse_local_difficulty_without_extra_detail_request(self):
+        service = self.app.state.sync
+        collections, recipes = snapshot()
+        recipes['r1'].update(difficulty='medium', servings='4')
+        self.app.state.database.save_snapshot(collections, recipes)
+        service._read_recipe_note = AsyncMock(return_value=None)
+        service.client = NS(get_recipe_details=AsyncMock(), get_custom_recipe=AsyncMock())
+        response = self.client.get('/api/calendar/badges?recipe_id=r1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['items'][0]['difficulty'], 'medium')
+        service.client.get_recipe_details.assert_not_awaited()
+
     def test_calendar_recipe_opens_details_without_adding_to_library(self):
         detail = NS(name='Externes Rezept', ingredients=['2 Eier'], instructions=[], total_time=900, active_time=300,
                     serving_size=2, image=None, thumbnail=None,
@@ -138,16 +171,27 @@ class AppTests(unittest.TestCase):
                 raise RuntimeError('not available')
             return 'private note content'
         service._read_recipe_note = AsyncMock(side_effect=note)
-        detail = NS(total_time=1200, serving_size=4)
+        detail = NS(total_time=1200, serving_size=4, difficulty='easy')
         service.client = NS(get_recipe_details=AsyncMock(return_value=detail), get_custom_recipe=AsyncMock(return_value=detail))
         response = self.client.get('/api/calendar/badges?recipe_id=r1&recipe_id=creation:own&recipe_id=r1')
         self.assertEqual(response.status_code, 200)
         items = response.json()['items']
         self.assertEqual(len(items), 2)
-        self.assertEqual(items[0], {'id':'r1', 'has_note':True, 'total_seconds':1800, 'servings':'4'})
-        self.assertEqual(items[1], {'id':'creation:own', 'has_note':None, 'total_seconds':1200, 'servings':'4'})
+        self.assertEqual(items[0], {'id':'r1', 'has_note':True, 'total_seconds':1800, 'servings':'4', 'difficulty':'easy'})
+        self.assertEqual(items[1], {'id':'creation:own', 'has_note':None, 'total_seconds':1200, 'servings':'4', 'difficulty':'easy'})
         self.assertNotIn('private note content', response.text)
         self.assertEqual(self.client.get('/api/calendar/badges?recipe_id=invalid%2Fid').status_code, 409)
+
+    def test_preview_note_status_does_not_fetch_recipe_details(self):
+        service = self.app.state.sync
+        service._read_recipe_note = AsyncMock(return_value='private note')
+        service.client = NS(get_recipe_details=AsyncMock(), get_custom_recipe=AsyncMock())
+        response = self.client.get('/api/calendar/badges?notes_only=true&recipe_id=r1')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['items'][0]['has_note'])
+        self.assertNotIn('private note', response.text)
+        service.client.get_recipe_details.assert_not_awaited()
+        service.client.get_custom_recipe.assert_not_awaited()
 
     def test_unfiled_week_recipe_creates_and_confirms_cookidoo_list(self):
         from unittest.mock import Mock
@@ -353,6 +397,54 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'recipe_id':'r2', 'move_id':'library-3'}, headers=ORIGIN).status_code, 409)
         self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'target':'2026-01-06', 'move_id':'library-4'}, headers=ORIGIN).status_code, 409)
 
+    def test_preview_adds_collection_recipe_to_shelf_without_calendar_write(self):
+        service = self.app.state.sync; service.client = NS()
+        collections, recipes = snapshot()
+        self.app.state.database.save_snapshot(collections, recipes)
+        payload = {'week':'2026-01-05', 'source':'preview', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'move_id':'preview-1', 'recipe':{'id':'r1','name':'Manipuliert'}}
+        self.assertEqual(self.client.post('/api/calendar/placement', json=payload).status_code, 403)
+        response = self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['phase'], 'idle')
+        shelf = service.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05']
+        self.assertEqual(shelf[0]['name'], recipes['r1']['name'])
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'move_id':'preview-2'}, headers=ORIGIN).status_code, 409)
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**payload, 'target':'2026-01-06', 'move_id':'preview-3'}, headers=ORIGIN).status_code, 409)
+
+    def test_preview_adds_verified_remote_recipe_and_rejects_account_change(self):
+        service = self.app.state.sync; service.client = NS()
+        payload = {'week':'2026-01-05', 'source':'preview', 'target':'shelf', 'recipe_id':'remote', 'custom':False, 'move_id':'remote-1', 'recipe':{'name':'Manipuliert'}}
+        service.calendar_recipe_details = AsyncMock(return_value={'id':'remote', 'name':'Remote'})
+        response = self.client.post('/api/calendar/placement', json=payload, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['shelf_recipe']['name'], 'Remote')
+        self.assertEqual(response.json()['items'], [])
+        async def changed_account(identifier):
+            service.database.set('account', {'email':'other@example.invalid', 'region':'de'})
+            return {'id':identifier, 'name':'Remote'}
+        service.calendar_recipe_details = AsyncMock(side_effect=changed_account)
+        response = self.client.post('/api/calendar/placement', json={**payload, 'recipe_id':'remote2', 'move_id':'remote-2'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 409)
+        self.assertNotIn(service.week_collection_owner(), service.database.get('calendar_move_queue')['shelves'])
+
+    def test_moving_day_recipe_already_in_shelf_preserves_shelf_and_can_undo(self):
+        service = self.app.state.sync; service.client = NS()
+        self.app.state.database.save_snapshot(*snapshot())
+        base = {'week':'2026-01-05', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'recipe':{'name':'Test'}}
+        self.assertEqual(self.client.post('/api/calendar/placement', json={**base, 'source':'preview', 'move_id':'preview-1'}, headers=ORIGIN).status_code, 200)
+        response = self.client.post('/api/calendar/placement', json={**base, 'source':'2026-01-06', 'move_id':'merge-1'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['items'][0]['target'], 'trash')
+        self.assertIn('not_before', response.json()['items'][0])
+        shelf = service.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05']
+        self.assertEqual(len(shelf), 1)
+        self.assertEqual(shelf[0]['id'], 'r1')
+        undo = self.client.post('/api/calendar/undo-removal', json={'move_id':'merge-1'}, headers=ORIGIN)
+        self.assertEqual(undo.status_code, 200)
+        self.assertEqual(undo.json()['items'], [])
+        shelf = service.database.get('calendar_move_queue')['shelves'][service.week_collection_owner()]['2026-01-05']
+        self.assertEqual(len(shelf), 1)
+
     def test_week_shelf_deletion_is_local_after_queued_removal(self):
         service = self.app.state.sync; service.client = NS()
         payload = {'week':'2026-01-05', 'source':'2026-01-06', 'target':'shelf', 'recipe_id':'r1', 'custom':False, 'move_id':'shelf-1', 'recipe':{'name':'Test'}}
@@ -464,6 +556,21 @@ class AppTests(unittest.TestCase):
             response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
             self.assertEqual(response.status_code, 409)
 
+    def test_recipe_tips_load_and_cache_for_catalog_and_creations(self):
+        collections, recipes = snapshot()
+        collections[0]['members'].append({'id':'creation:own'})
+        recipes['creation:own'] = {'id':'creation:own', 'name':'Eigenes Rezept', 'updated_at':now()}
+        self.app.state.database.save_snapshot(collections, recipes)
+        client = NS(get_recipe_details=AsyncMock(return_value=NS(notes=['<b>Erster Tipp</b> &amp; mehr'])),
+                    get_custom_recipe=AsyncMock(return_value=NS(hints=['Eigener Tipp', 'Noch ein Tipp'])))
+        self.app.state.sync.client = client
+        self.assertEqual(self.client.get('/api/recipes/r1/tips').json(), {'tips':['Erster Tipp & mehr']})
+        self.assertEqual(self.client.get('/api/recipes/creation:own/tips').json(), {'tips':['Eigener Tipp', 'Noch ein Tipp']})
+        self.assertEqual(json.loads(self.app.state.database.recipe('r1')['tips_json']), ['Erster Tipp & mehr'])
+        self.assertEqual(self.client.get('/api/recipes/r1/tips').json(), {'tips':['Erster Tipp & mehr']})
+        client.get_recipe_details.assert_awaited_once_with('r1')
+        client.get_custom_recipe.assert_awaited_once_with('own')
+
     def test_recipe_notes_create_update_delete_and_conflict(self):
         service = self.app.state.sync
         service.client = NS()
@@ -483,12 +590,12 @@ class AppTests(unittest.TestCase):
         service = self.app.state.sync
         service.client = NS()
         service._recipe_note_request = AsyncMock(side_effect=[None, None, {'text':'Notiz'}, {'text':'Notiz'}, None, None])
-        response = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'', 'text':'Notiz'})
+        response = self.client.put('/api/notes/r1', headers=ORIGIN, json={'expected':'', 'text':'Notiz'})
         self.assertEqual(response.json(), {'text':'Notiz'})
-        self.assertEqual(service._recipe_note_request.await_args_list[1].args, ('post', 'own', {'recipeId':'own', 'text':'Notiz'}))
-        response = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'Notiz', 'text':''})
+        self.assertEqual(service._recipe_note_request.await_args_list[1].args, ('post', 'r1', {'recipeId':'r1', 'text':'Notiz'}))
+        response = self.client.put('/api/notes/r1', headers=ORIGIN, json={'expected':'Notiz', 'text':''})
         self.assertEqual(response.json(), {'text':''})
-        self.assertEqual(service._recipe_note_request.await_args_list[4].args, ('delete', 'own'))
+        self.assertEqual(service._recipe_note_request.await_args_list[4].args, ('delete', 'r1'))
 
     def test_recipe_notes_failure_does_not_report_success(self):
         service = self.app.state.sync
@@ -498,6 +605,52 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
         self.assertNotIn('private text', response.text)
         self.assertEqual(self.client.put('/api/notes/r1', json={'expected':'', 'text':'Notiz'}).status_code, 403)
+
+    def test_custom_note_targets_hints_preserves_recipe_and_checks_conflicts(self):
+        service = self.app.state.sync
+        state = {'hints':'Tipp eins\nTipp zwei', 'image':'original-image', 'instructions':['step']}
+        async def read(identifier):
+            return URL('https://cookidoo.de/test'), {'recipeContent':dict(state)}, state['hints']
+        async def request(method, url, operation, **kwargs):
+            self.assertEqual(method, 'patch')
+            self.assertEqual(set(kwargs['json']), {'hints'})
+            state['hints'] = kwargs['json']['hints']
+        service._read_custom_note_source = AsyncMock(side_effect=read)
+        service.client = NS(_request_json=AsyncMock(side_effect=request))
+        self.assertEqual(self.client.get('/api/notes/creation:own').json(), {'text':''})
+        result = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'', 'text':'Erste Zeile\nZweite Zeile'})
+        self.assertEqual(result.json(), {'text':'Erste Zeile\nZweite Zeile'})
+        self.assertEqual(state['hints'], 'Tipp eins\nTipp zwei\nNotiz: Erste Zeile\nZweite Zeile')
+        self.assertEqual(state['image'], 'original-image')
+        badge = self.client.get('/api/calendar/badges?notes_only=true&recipe_id=creation:own').json()['items'][0]
+        self.assertTrue(badge['has_note'])
+        result = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'alt', 'text':'anderer Text'})
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(service.client._request_json.await_count, 1)
+        result = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'Erste Zeile\nZweite Zeile', 'text':''})
+        self.assertEqual(result.json(), {'text':''})
+        self.assertEqual(state['hints'], 'Tipp eins\nTipp zwei\n')
+
+    def test_custom_note_rejects_ambiguous_and_concurrent_hint_changes(self):
+        service = self.app.state.sync
+        service.client = NS(_request_json=AsyncMock())
+        service._read_custom_note_source = AsyncMock(return_value=(URL('https://cookidoo.de/test'), {'recipeContent':{}}, 'Notiz: eins\nNotiz: zwei'))
+        self.assertEqual(self.client.get('/api/notes/creation:own').status_code, 409)
+        service._read_custom_note_source = AsyncMock(side_effect=[(URL('https://cookidoo.de/test'), {'recipeContent':{}}, 'Tipp'), (URL('https://cookidoo.de/test'), {'recipeContent':{}}, 'Tipp geändert')])
+        result = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'', 'text':'Text'})
+        self.assertEqual(result.status_code, 409)
+        service.client._request_json.assert_not_awaited()
+
+    def test_custom_note_unconfirmed_or_changed_recipe_never_reports_success(self):
+        service = self.app.state.sync
+        url = URL('https://cookidoo.de/test')
+        service.client = NS(_request_json=AsyncMock())
+        before = (url, {'recipeContent':{'hints':'Tipp', 'image':'original'}}, 'Tipp')
+        changed = (url, {'recipeContent':{'hints':'Tipp\nNotiz: Text', 'image':'other'}}, 'Tipp\nNotiz: Text')
+        service._read_custom_note_source = AsyncMock(side_effect=[before, before, changed])
+        result = self.client.put('/api/notes/creation:own', headers=ORIGIN, json={'expected':'', 'text':'Text'})
+        self.assertEqual(result.status_code, 502)
+        self.assertNotIn('other', result.text)
 
     def test_recipe_note_transport_uses_configured_cookidoo_origin(self):
         class Response:
@@ -812,6 +965,39 @@ class AppTests(unittest.TestCase):
         self.assertTrue(database.set_local_membership(local, 'r1', False))
         self.assertEqual(database.recipes(collection=local)['total'], 0)
 
+    def test_delete_local_collection_preserves_recipe_and_cannot_delete_cookidoo(self):
+        db = self.app.state.database
+        db.save_snapshot(*snapshot())
+        local = self.client.post('/api/local-collections', json={'name':'Testliste'}, headers=ORIGIN).json()['id']
+        self.client.put(f'/api/local-collections/{local}/recipes/r1', json={'present':True}, headers=ORIGIN)
+        self.assertEqual(self.client.delete(f'/api/local-collections/{local}').status_code, 403)
+        self.assertEqual(self.client.delete('/api/local-collections/custom:list1', headers=ORIGIN).status_code, 404)
+        self.assertEqual(self.client.delete(f'/api/local-collections/{local}', headers=ORIGIN).status_code, 200)
+        self.assertIsNotNone(db.recipe('r1'))
+        self.assertTrue(any(item['id'] == 'custom:list1' for item in db.collections()))
+        self.assertFalse(any(item['id'] == local for item in db.collections()))
+
+    def test_delete_pantry_category_removes_only_its_items_and_stays_deleted(self):
+        db = self.app.state.database
+        categories = db.pantry()['categories']
+        first, second = categories[0]['id'], categories[1]['id']
+        db.save_pantry_item(first, 'Salz', '')
+        db.save_pantry_item(second, 'Zwiebel', '')
+        self.assertEqual(self.client.delete(f'/api/pantry/categories/{first}').status_code, 403)
+        self.assertEqual(self.client.delete(f'/api/pantry/categories/{first}', headers=ORIGIN).status_code, 200)
+        self.assertEqual([item['name'] for item in db.pantry()['items']], ['Zwiebel'])
+        self.assertEqual(self.client.delete(f'/api/pantry/categories/{first}', headers=ORIGIN).status_code, 404)
+        for category in db.pantry()['categories']:
+            self.assertEqual(self.client.delete(f"/api/pantry/categories/{category['id']}", headers=ORIGIN).status_code, 200)
+        self.assertEqual(Database(self.tmp.name).pantry()['categories'], [])
+
+    def test_spaghetti_noodles_and_pasta_are_equivalent(self):
+        for recipe_ingredient in ('Spaghetti', 'Nudeln', 'Pasta'):
+            for pantry_ingredient in ('Spaghetti', 'Nudeln', 'Pasta'):
+                self.assertTrue(ingredient_available(recipe_ingredient, [pantry_ingredient]))
+                self.assertEqual(ingredient_group_key(recipe_ingredient), ingredient_group_key(pantry_ingredient))
+        self.assertFalse(ingredient_available('Spaghettikürbis', ['Nudeln']))
+
     def test_pantry_categories_items_export_and_sync_independence(self):
         pantry = self.client.get('/api/pantry').json()
         spices = next(c for c in pantry['categories'] if c['name'] == 'Gewürze')
@@ -946,6 +1132,13 @@ class AppTests(unittest.TestCase):
         self.client.post('/api/pantry/items', json={'name':'Speisestärke', 'category_id':category}, headers=ORIGIN)
         self.assertEqual(self.client.get('/api/recipes/r1').json()['ingredient_availability'], {'0':True, '1':True, '2':False})
         self.assertTrue(ingredient_available('Speisestärke', ['Stärke']))
+
+    def test_bio_vanilla_matches_vanilla_extract_without_matching_other_vanilla_products(self):
+        for name in ('Bio-Vanille', 'Bio Vanille', 'Bio-Vanilleextrakt', 'vanilla extract'):
+            self.assertTrue(ingredient_available('Vanilleextrakt', [name]), name)
+            self.assertEqual(ingredient_group_key(name), ingredient_group_key('Vanilleextrakt'))
+        for name in ('Vanillezucker', 'Vanilleschote', 'Vanillepudding', 'Vanillearoma'):
+            self.assertFalse(ingredient_available('Vanilleextrakt', [name]), name)
 
     def test_generic_oil_accepts_cooking_oils_but_specific_oils_stay_distinct(self):
         for oil in ('Olivenöl', 'Rapsöl', 'Sonnenblumenöl', 'Sesamöl', 'Kokosöl', 'Kürbiskernöl'):
@@ -1090,7 +1283,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
             async def count_managed_collections(self): return (0, 0)
             async def list_custom_recipes(self): return [NS(id='abc', name='Eigenes Rezept', total_time=600)]
             async def get_custom_recipe(self, recipe_id):
-                return NS(name='Eigenes Rezept', total_time=600, active_time=300, serving_size=2, ingredients=['2 Eier'], instructions=['Verruehren'], image=None, thumbnail=None)
+                return NS(name='Eigenes Rezept', total_time=600, active_time=300, serving_size=2, ingredients=['2 Eier'], instructions=['Verruehren'], hints=['Eigener Tipp'], image=None, thumbnail=None)
         self.service.client = Fake()
         self.service.begin()
         await self.service.task
@@ -1099,6 +1292,7 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         recipe = self.db.recipe('creation:abc')
         self.assertEqual(json.loads(recipe['ingredients_json']), ['2 Eier'])
         self.assertEqual(json.loads(recipe['instructions_json']), ['Verruehren'])
+        self.assertEqual(json.loads(recipe['tips_json']), ['Eigener Tipp'])
         self.assertIn('/created-recipes/de-DE/abc/edit', recipe['source_url'])
 
     async def test_creation_origins_only_accept_trusted_cookidoo_links(self):

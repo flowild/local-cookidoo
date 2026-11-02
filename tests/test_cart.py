@@ -33,6 +33,18 @@ class CartTests(unittest.TestCase):
     def add_recipe(self):
         return self.client.post('/api/recipes/r1/shopping', headers=ORIGIN).json()
 
+    def test_status_counts_only_recipes_of_the_current_cart(self):
+        self.assertEqual(self.client.get('/api/status').json()['cart_recipe_count'], 0)
+        self.add_recipe()
+        self.add_recipe()
+        self.client.post('/api/cart/items', json={'name':'Milch'}, headers=ORIGIN)
+        self.assertEqual(self.client.get('/api/status').json()['cart_recipe_count'], 1)
+        self.db.set('account', {'email':'other@example.invalid', 'region':'de'})
+        self.assertEqual(self.client.get('/api/status').json()['cart_recipe_count'], 0)
+        self.db.set('account', {'email':'test@example.invalid', 'region':'de'})
+        self.client.delete('/api/cart', headers=ORIGIN)
+        self.assertEqual(self.client.get('/api/status').json()['cart_recipe_count'], 0)
+
     def cart(self):
         return self.client.get('/api/cart').json()['items']
 
@@ -50,6 +62,64 @@ class CartTests(unittest.TestCase):
         self.db.set('account', {'email':'test@example.invalid', 'region':'de'})
         self.assertEqual(len(self.cart()), 1)
         self.assertEqual(len(self.db.export()['cart']), 1)
+
+    def test_cart_recipe_duration_snapshot_and_older_entries(self):
+        self.db.save_snapshot([{'id':'c1', 'source_id':'c1', 'kind':'custom', 'name':'Liste', 'members':[{'id':'r1'}]}],
+                              {'r1': {'id':'r1', 'name':'Testrezept', 'total_seconds':3000, 'difficulty':'easy', 'ingredients_json':'[]', 'updated_at':now()}})
+        self.add_recipe()
+        data = self.cart()[0]['data']
+        self.assertEqual((data['total_seconds'], data['difficulty']), (3000, 'easy'))
+        self.db.cart_update(self.app.state.sync.cart_owner(), self.cart()[0]['id'], data={**data, 'total_seconds':None, 'difficulty':None})
+        legacy = self.cart()[0]['data']
+        self.assertEqual((legacy['total_seconds'], legacy['difficulty']), (3000, 'easy'))
+        self.assertIsNone(self.db.cart(self.app.state.sync.cart_owner())[0]['data']['total_seconds'])
+
+    def test_existing_cart_spaghetti_group_uses_current_alias(self):
+        owner = self.app.state.sync.cart_owner()
+        self.db.cart_add(owner, 'recipe', {'id':'old', 'name':'Test', 'ingredients':[{'name':'Spaghetti', 'key':'spaghetti', 'text':'100 g Spaghetti', 'owned':False}]}, 'old')
+        self.assertEqual(self.cart()[0]['data']['ingredients'][0]['key'], 'nudeln')
+        self.assertEqual(self.db.cart(owner)[0]['data']['ingredients'][0]['key'], 'spaghetti')
+
+    def test_cart_ingredient_categories_and_water_are_display_metadata(self):
+        category = self.db.add_pantry_category('Eigene Gruppe')
+        self.db.save_pantry_item(category, 'Zwiebel', '')
+        ingredients = [{'name':'Zwiebeln', 'description':'2 Zwiebeln'}, {'name':'Ghee', 'description':'40 g Ghee'}, {'name':'Wasser', 'description':'500 g Wasser'}, {'name':'Kokoswasser', 'description':'50 g Kokoswasser'}, {'name':'Unbekanntes Lebensmittel', 'description':'1 Unbekanntes Lebensmittel'}]
+        self.db.save_snapshot([{'id':'c1', 'source_id':'c1', 'kind':'custom', 'name':'Liste', 'members':[{'id':'r1'}]}],
+                              {'r1': {'id':'r1', 'name':'Testrezept', 'ingredients_json':json.dumps(ingredients), 'updated_at':now()}})
+        self.add_recipe()
+        values = {item['name']: item for item in self.cart()[0]['data']['ingredients']}
+        self.assertEqual(values['Zwiebeln']['category'], 'Eigene Gruppe')
+        self.assertEqual(values['Ghee']['category'], 'Öle und Fette')
+        self.assertEqual(values['Unbekanntes Lebensmittel']['category'], 'Sonstiges')
+        self.assertTrue(values['Wasser']['is_water'])
+        self.assertFalse(values['Kokoswasser']['is_water'])
+        stored = self.db.cart(self.app.state.sync.cart_owner())[0]['data']['ingredients']
+        self.assertNotIn('category', stored[0])
+        self.assertEqual(len(stored), 5)
+
+    def test_water_hidden_in_ingredients_and_suggestions_preserves_positions(self):
+        ingredients = ['500 g Wasser', {'name':'Kokoswasser','description':'100 g Kokoswasser'}, {'name':'heißes Wasser','description':'200 g heißes Wasser'}, {'name':'Zwiebel','description':'1 Zwiebel'}]
+        self.db.save_snapshot([{'id':'c1', 'source_id':'c1', 'kind':'custom', 'name':'Liste', 'members':[{'id':'r1'}]}],
+                              {'r1': {'id':'r1', 'name':'Testrezept', 'ingredients_json':json.dumps(ingredients), 'updated_at':now()}})
+        result = self.client.get('/api/recipes/r1').json()
+        self.assertEqual(result['hidden_ingredient_positions'], [0, 2])
+        self.assertEqual(json.loads(result['ingredients_json']), ingredients)
+        options = self.client.get('/api/collections/c1/filter-options').json()['ingredients']
+        self.assertIn('Kokoswasser', options)
+        self.assertNotIn('Wasser', options)
+        suggestions = self.client.get('/api/ingredients/suggestions?q=wasser').json()['items']
+        self.assertEqual([item['name'] for item in suggestions], ['Kokoswasser'])
+        category = self.db.pantry()['categories'][0]['id']
+        self.db.save_pantry_item(category, 'Wasser', '')
+        self.assertFalse(any(item['name'] == 'Wasser' for item in self.client.get('/api/pantry').json()['items']))
+        self.assertTrue(any(item['name'] == 'Wasser' for item in self.db.pantry()['items']))
+
+    def test_remote_recipe_also_hides_water_without_shifting_ingredients(self):
+        data = {'id':'remote', 'ingredients_json':json.dumps(['Wasser', 'Kokoswasser']), 'is_local':False}
+        self.app.state.sync.calendar_recipe_details = AsyncMock(return_value=data)
+        result = self.client.get('/api/recipes/remote?calendar=true').json()
+        self.assertEqual(result['hidden_ingredient_positions'], [0])
+        self.assertFalse(result['is_local'])
 
     def test_confirmed_transfer_does_not_repeat_and_preserves_existing(self):
         self.add_recipe()
@@ -156,3 +226,11 @@ class CartTests(unittest.TestCase):
         self.assertEqual(len(self.cart()), 1)
         self.db.set('account', {'email':'different@example.invalid', 'region':'de'})
         self.assertEqual(self.cart(), [])
+
+    def test_vanilla_extract_is_marked_available_from_bio_vanilla(self):
+        category = self.db.pantry()['categories'][0]['id']
+        self.db.save_pantry_item(category, 'Bio-Vanille', '')
+        data = {'r2': {'id':'r2', 'name':'Test', 'ingredients_json':json.dumps([{'name':'Vanilleextrakt', 'description':'1 TL Vanilleextrakt'}]), 'updated_at':now()}}
+        self.db.save_snapshot([{'id':'c2', 'source_id':'c2', 'kind':'custom', 'name':'Liste', 'members':[{'id':'r2'}]}], data)
+        self.assertTrue(self.client.post('/api/recipes/r2/shopping', headers=ORIGIN).json()['added'])
+        self.assertTrue(self.cart()[0]['data']['ingredients'][0]['owned'])

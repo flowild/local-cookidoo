@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import json
 import logging
 import os
 import re
@@ -18,6 +19,7 @@ from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
+from .ingredients import ingredient_group_key, ingredient_name, shopping_category
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -157,7 +159,7 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/status')
     def status():
-        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'calendar_queue': service.calendar_queue()}
+        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'calendar_queue': service.calendar_queue(), 'cart_recipe_count': database.cart_recipe_count(service.cart_owner())}
 
     @app.post('/api/google-api-key')
     async def set_google_api_key(request: Request):
@@ -187,9 +189,9 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(502, 'Deine Woche konnte nicht von Cookidoo geladen werden. Bitte versuche es erneut.') from None
 
     @app.get('/api/calendar/badges')
-    async def calendar_badges(recipe_id: list[str] = Query(default=[])):
+    async def calendar_badges(recipe_id: list[str] = Query(default=[]), notes_only: bool = False):
         try:
-            return await service.calendar_badges(recipe_id)
+            return await service.calendar_badges(recipe_id, notes_only=notes_only)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         except Exception as error:
@@ -214,11 +216,23 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(409, str(error)) from None
 
     @app.post('/api/calendar/placement')
-    def enqueue_calendar_placement(payload: CalendarPlacement):
+    async def enqueue_calendar_placement(payload: CalendarPlacement):
         try:
-            return service.enqueue_calendar_placement(payload.week, payload.source, payload.target, payload.recipe_id, payload.custom, payload.move_id, payload.recipe)
+            verified = None
+            if payload.source == 'preview':
+                owner = service.week_collection_owner()
+                identifier = ('creation:' if payload.custom else '') + payload.recipe_id
+                verified = database.recipe(identifier)
+                if verified is None:
+                    verified = await service.calendar_recipe_details(identifier)
+                if owner != service.week_collection_owner():
+                    raise ValueError('Das Cookidoo-Konto wurde inzwischen geändert.')
+            return service.enqueue_calendar_placement(payload.week, payload.source, payload.target, payload.recipe_id, payload.custom, payload.move_id, payload.recipe, verified_preview=verified)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Week placement preparation failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Das Rezept konnte nicht für die Wochenablage geladen werden.') from None
 
     @app.post('/api/calendar/undo-removal')
     def undo_calendar_removal(payload: CalendarUndo):
@@ -266,9 +280,27 @@ def create_app(directory=None, secure_cookies=None):
     @app.get('/api/cart')
     def get_cart():
         items = database.cart(cart_owner())
+        pantry = database.pantry()
+        category_names = {category['id']: category['name'] for category in pantry['categories']}
+        pantry_categories = {ingredient_group_key(item['name']): category_names[item['category_id']] for item in pantry['items'] if item['category_id'] in category_names}
         for item in items:
-            if item['kind'] == 'recipe' and item['data'].get('image_url'):
-                service.calendar_image_reference(item['data']['image_url'])
+            if item['kind'] == 'recipe':
+                for ingredient in item['data'].get('ingredients', []):
+                    name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
+                    ingredient['key'] = ingredient_group_key(name) or ingredient.get('key', '')
+                    ingredient['category'] = shopping_category(name, pantry_categories)
+                    ingredient['is_water'] = ingredient_group_key(name) == 'wasser'
+            elif item['kind'] == 'additional':
+                item['data']['is_water'] = ingredient_group_key(item['data'].get('name', '')) == 'wasser'
+        for item in items:
+            if item['kind'] == 'recipe':
+                if item['data'].get('image_url'):
+                    service.calendar_image_reference(item['data']['image_url'])
+                if item['data'].get('total_seconds') is None or not item['data'].get('difficulty'):
+                    recipe = database.recipe(item['recipe_id']) or {}
+                    for key in ('total_seconds', 'difficulty'):
+                        if item['data'].get(key) is None and recipe.get(key) is not None:
+                            item['data'][key] = recipe[key]
         if not service.cart_transferring:
             for item in items:
                 if item['status'] == 'processing':
@@ -414,6 +446,12 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(400, 'Bitte gib einen Namen für die Liste ein.')
         return {'id': database.create_local_collection(name)}
 
+    @app.delete('/api/local-collections/{collection_id}')
+    def delete_local_collection(collection_id: str):
+        if not database.delete_local_collection(collection_id):
+            raise HTTPException(404, 'Diese lokale Rezeptliste wurde nicht gefunden.')
+        return {'ok': True}
+
     @app.put('/api/local-collections/{collection_id}/recipes/{recipe_id}')
     def update_local_membership(collection_id: str, recipe_id: str, payload: Membership):
         if not database.set_local_membership(collection_id, recipe_id, payload.present):
@@ -422,13 +460,21 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/pantry')
     def pantry():
-        return database.pantry()
+        result = database.pantry()
+        result['items'] = [item for item in result['items'] if ingredient_group_key(item['name']) != 'wasser']
+        return result
 
     @app.get('/api/ingredients/suggestions')
     def ingredient_suggestions(q: str = Query('', max_length=100)):
         if not q.strip():
             return {'items': []}
         return {'items': database.ingredient_suggestions(q.strip())}
+
+    @app.delete('/api/pantry/categories/{category_id}')
+    def delete_pantry_category(category_id: int):
+        if not database.delete_pantry_category(category_id):
+            raise HTTPException(404, 'Diese Vorratskategorie wurde nicht gefunden.')
+        return {'ok': True}
 
     @app.post('/api/pantry/categories')
     def create_pantry_category(payload: PantryCategory):
@@ -487,14 +533,31 @@ def create_app(directory=None, secure_cookies=None):
             if not calendar:
                 raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
             try:
-                return await service.calendar_recipe_details(recipe_id)
+                result = await service.calendar_recipe_details(recipe_id)
             except ValueError as error:
                 raise HTTPException(409, str(error)) from None
             except Exception as error:
                 logging.getLogger(__name__).warning('Calendar recipe detail read failed: %s', type(error).__name__)
                 raise HTTPException(502, 'Die Rezeptdetails konnten nicht aus Cookidoo geladen werden.') from None
-        result['is_local'] = True
+        else:
+            result['is_local'] = True
+        try:
+            ingredients = json.loads(result.get('ingredients_json') or '[]')
+        except (TypeError, ValueError):
+            ingredients = []
+        result['hidden_ingredient_positions'] = [index for index, value in enumerate(ingredients if isinstance(ingredients, list) else [])
+                                                 if ingredient_group_key(ingredient_name(value) or (ingredient_name(value.get('description', '')) if isinstance(value, dict) else '')) == 'wasser']
         return result
+
+    @app.get('/api/recipes/{recipe_id}/tips')
+    async def recipe_tips(recipe_id: str):
+        try:
+            return await service.load_recipe_tips(recipe_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo recipe tips unavailable: %s', type(error).__name__)
+            raise HTTPException(502, 'Die Tipps konnten nicht geladen werden. Bitte versuche es erneut.') from None
 
     async def cookidoo_recipe_action(recipe_id: str, action: str, calendar: bool = False):
         if database.recipe(recipe_id) is None and not (calendar and re.fullmatch(r'(?:creation:)?[A-Za-z0-9_-]{1,120}', recipe_id)):

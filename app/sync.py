@@ -34,6 +34,12 @@ REGIONS = {
 }
 
 
+class NoteRequestError(RuntimeError):
+    def __init__(self, status):
+        super().__init__('Cookidoo note request failed')
+        self.status = status
+
+
 def seconds(value):
     if isinstance(value, timedelta):
         return max(0, int(value.total_seconds()))
@@ -55,6 +61,34 @@ def plain_step(value):
     parser = TextOnly()
     parser.feed(value or '')
     return ''.join(parser.parts).strip()
+
+
+def split_custom_note_text(hints):
+    if not isinstance(hints, str):
+        raise ValueError('Die Tipps der eigenen Kreation konnten nicht sicher gelesen werden.')
+    matches = list(re.finditer(r'^Notiz:[ \t]?', hints, re.MULTILINE))
+    if len(matches) > 1:
+        raise ValueError('Die Tipps enthalten mehrere Notiz-Markierungen. Bitte prüfe sie zuerst in Cookidoo.')
+    if not matches:
+        return hints, ''
+    marker = matches[0]
+    return hints[:marker.start()], hints[marker.end():]
+
+
+def split_custom_note(hints):
+    if not isinstance(hints, list) or any(not isinstance(value, str) for value in hints):
+        raise ValueError('Die Tipps der eigenen Kreation konnten nicht sicher gelesen werden.')
+    tips, note = split_custom_note_text('\n'.join(hints))
+    return tips.splitlines(), note
+
+
+def recipe_tips(detail, custom=False):
+    values = getattr(detail, 'hints' if custom else 'notes', None)
+    if not isinstance(values, (list, tuple)):
+        return []
+    if custom:
+        values, _ = split_custom_note(list(values))
+    return [text for value in values if isinstance(value, str) and (text := plain_step(value).strip())]
 
 
 def friendly_error(error):
@@ -184,7 +218,8 @@ class SyncService:
             if response.status == 404:
                 return None
             if response.status not in (200, 201, 204):
-                raise RuntimeError('Cookidoo note request failed')
+                logger.warning('Cookidoo note HTTP status: %d', response.status)
+                raise NoteRequestError(response.status)
             if response.status == 204 or method == 'delete':
                 return None
             return await response.json()
@@ -194,8 +229,23 @@ class SyncService:
         if result is None:
             return None
         if not isinstance(result, dict) or not isinstance(result.get('text'), str):
+            logger.warning('Cookidoo note response format invalid: %s', 'object' if isinstance(result, dict) else type(result).__name__)
             raise RuntimeError('Invalid Cookidoo note response')
         return result['text']
+
+    async def _read_custom_note_source(self, source_id):
+        await self.client._ensure_endpoints()
+        path = self.client._path('customer-recipes:recipe-details').format(**self.client._cfg.localization.__dict__, id=source_id)
+        url = self.client.api_endpoint / path
+        raw = await self.client._request_json('get', url, 'read custom recipe hints', headers={'ACCEPT': CUSTOM_RECIPES_PATH_ACCEPT})
+        if not isinstance(raw, dict) or not isinstance(raw.get('recipeContent'), dict):
+            raise ValueError('Die Tipps der eigenen Kreation konnten nicht sicher gelesen werden.')
+        hints = raw['recipeContent'].get('hints', '')
+        if isinstance(hints, list) and all(isinstance(value, str) for value in hints):
+            hints = '\n'.join(hints)
+        if not isinstance(hints, str):
+            raise ValueError('Die Tipps der eigenen Kreation konnten nicht sicher gelesen werden.')
+        return url, raw, hints
 
     async def recipe_note(self, recipe_id, text=None, expected=None, save=False):
         if self.lock.locked() or self.state['running']:
@@ -206,6 +256,39 @@ class SyncService:
         async with self.lock:
             if not self.client:
                 raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            if recipe_id.startswith('creation:'):
+                url, before, hints = await self._read_custom_note_source(source_id)
+                original_tips, current = split_custom_note_text(hints)
+                if not save:
+                    return {'text': current}
+                if current != expected:
+                    raise ValueError('Die Notiz wurde inzwischen in Cookidoo geändert. Bitte lade sie erneut, bevor du speicherst.')
+                if text == current:
+                    return {'text': text}
+                if re.search(r'^Notiz:[ \t]?', text, re.MULTILINE):
+                    raise ValueError('Eine weitere Zeile mit „Notiz:“ ist nicht möglich. Bitte formuliere sie um.')
+                prefix = original_tips
+                if text and prefix and not prefix.endswith('\n'):
+                    prefix += '\n'
+                new_hints = prefix + (f'Notiz: {text}' if text else '')
+                _, latest, latest_hints = await self._read_custom_note_source(source_id)
+                if latest_hints != hints:
+                    raise ValueError('Die Tipps wurden inzwischen in Cookidoo geändert. Bitte lade sie erneut, bevor du speicherst.')
+                try:
+                    await self.client._request_json('patch', url, 'save custom recipe note',
+                                                    json={'hints': new_hints}, headers={'CONTENT-TYPE': 'application/json'},
+                                                    parse_response=False)
+                    _, confirmed, confirmed_hints = await self._read_custom_note_source(source_id)
+                    old_content = dict(latest['recipeContent']); old_content.pop('hints', None)
+                    new_content = dict(confirmed['recipeContent']); new_content.pop('hints', None)
+                    if confirmed_hints != new_hints or old_content != new_content:
+                        raise RuntimeError('Cookidoo custom note verification failed')
+                except Exception as error:
+                    logger.warning('Cookidoo custom note write or verification failed: %s', type(error).__name__)
+                    raise RuntimeError('Die Notiz konnte nicht bestätigt werden. Bitte prüfe sie in Cookidoo, bevor du erneut speicherst.') from None
+                finally:
+                    self.database.invalidate_recipe_tips(recipe_id)
+                return {'text': text}
             current = await self._read_recipe_note(source_id)
             if not save:
                 return {'text': current or ''}
@@ -272,12 +355,12 @@ class SyncService:
         self.database.calendar_queue_update(update)
         return self.calendar_queue()
 
-    def enqueue_calendar_placement(self, week, source, target, recipe_id, custom, move_id, recipe):
+    def enqueue_calendar_placement(self, week, source, target, recipe_id, custom, move_id, recipe, verified_preview=None):
         if not self.client:
             raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
         monday = week - timedelta(days=week.weekday())
         dates = {(monday + timedelta(days=i)).isoformat() for i in range(7)}
-        if source not in dates | {'shelf', 'library'} or target not in dates | {'shelf', 'trash'} or source == target or (source == 'library' and target != 'shelf'):
+        if source not in dates | {'shelf', 'library', 'preview'} or target not in dates | {'shelf', 'trash'} or source == target or (source in ('library', 'preview') and target != 'shelf'):
             raise ValueError('Ungültiges Ziel für diese Woche.')
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', recipe_id):
             raise ValueError('Ungültige Rezeptkennung.')
@@ -288,13 +371,18 @@ class SyncService:
             recipe = self.database.recipe(local_id) if in_local_list else None
             if not recipe:
                 raise ValueError('Das Rezept ist nicht mehr in einer lokalen Liste.')
+        if source == 'preview':
+            recipe = verified_preview
+            if not recipe or recipe.get('id') != (('creation:' if custom else '') + recipe_id):
+                raise ValueError('Das Rezept konnte nicht bestätigt werden.')
         owner = self.week_collection_owner()
         # Only retain the display fields needed by the week view.
         snapshot = {'id': ('creation:' if custom else '') + recipe_id, 'calendar_id': recipe_id,
                     'custom': custom, 'name': str(recipe.get('name') or 'Rezept')[:300],
                     'image_file': recipe.get('image_file') if isinstance(recipe.get('image_file'), str) and len(recipe['image_file']) <= 2048 else None,
                     'total_seconds': recipe.get('total_seconds') if isinstance(recipe.get('total_seconds'), (int, float)) else None,
-                    'servings': str(recipe.get('servings') or '')[:80], 'has_note': bool(recipe.get('has_note'))}
+                    'servings': str(recipe.get('servings') or '')[:80], 'difficulty': str(recipe.get('difficulty') or '')[:80] or None,
+                    'has_note': bool(recipe.get('has_note'))}
         item = {'source': source, 'target': target, 'week': monday.isoformat(), 'recipe_id': recipe_id,
                 'custom': custom, 'move_id': move_id, 'recipe': snapshot}
         created = datetime.now(timezone.utc)
@@ -321,14 +409,20 @@ class SyncService:
                 snapshot.update(shelf.pop(match))
             if target == 'shelf':
                 if match is not None:
-                    raise ValueError('Das Rezept liegt bereits in der Ablage.')
-                shelf.append(snapshot)
-            if source != 'library' and (source != 'shelf' or target != 'trash'):
+                    if source in ('library', 'preview'):
+                        raise ValueError('Das Rezept liegt bereits in der Ablage.')
+                    # The shelf already has this recipe: remove only its calendar
+                    # placement and retain the existing shelf entry atomically.
+                    item['target'] = 'trash'
+                    item['not_before'] = (created + timedelta(seconds=10)).isoformat()
+                else:
+                    shelf.append(snapshot)
+            if source not in ('library', 'preview') and (source != 'shelf' or target != 'trash'):
                 items.append(item)
                 queue.update(owner=owner, phase='waiting', items=items, due=due, error=None)
             elif items:
                 queue['due'] = due
-            if target == 'trash':
+            if item['target'] == 'trash':
                 records = [entry for entry in queue.get('undo_removals', []) if entry.get('expires', '') > created.isoformat()]
                 records.append({'owner': owner, 'move_id': move_id, 'week': monday.isoformat(), 'source': source,
                                 'recipe': snapshot, 'expires': (created + timedelta(seconds=30)).isoformat()})
@@ -336,7 +430,10 @@ class SyncService:
             queue['recent_placements'] = (queue.get('recent_placements', []) + [move_id])[-100:]
             return queue
         self.database.calendar_queue_update(update)
-        return self.calendar_queue()
+        result = self.calendar_queue()
+        if source == 'preview':
+            result['shelf_recipe'] = snapshot
+        return result
 
     def undo_calendar_removal(self, move_id):
         owner = self.week_collection_owner()
@@ -495,7 +592,7 @@ class SyncService:
                     image_file = self.calendar_image_reference(getattr(remote, 'thumbnail', None) or getattr(remote, 'image', None))
                 safe_id = quote(source_id, safe='')
                 source_url = (f'{website}/created-recipes/{language}/{safe_id}/edit' if custom else f'{website}/recipes/recipe/{language}/{safe_id}')
-                return {'id': local_id, 'calendar_id': source_id, 'custom': custom, 'name': name or ('Eigene Kreation' if custom else 'Rezept'), 'image_file': image_file, 'source_url': source_url, 'unfiled': not custom and not (local or {}).get('collections'), 'total_seconds': (local or {}).get('total_seconds') or seconds(getattr(remote, 'total_time', None)), 'servings': (local or {}).get('servings') or getattr(remote, 'serving_size', None)}
+                return {'id': local_id, 'calendar_id': source_id, 'custom': custom, 'name': name or ('Eigene Kreation' if custom else 'Rezept'), 'image_file': image_file, 'source_url': source_url, 'unfiled': not custom and not (local or {}).get('collections'), 'total_seconds': (local or {}).get('total_seconds') or seconds(getattr(remote, 'total_time', None)), 'servings': (local or {}).get('servings') or getattr(remote, 'serving_size', None), 'difficulty': (local or {}).get('difficulty') or str(getattr(remote, 'difficulty', '') or '') or None}
 
             for entry in entries:
                 day = str(entry.id)
@@ -513,10 +610,14 @@ class SyncService:
             tracked = self.database.get('week_unfiled_collection') or {}
             needs_setup = tracked.get('owner') != self.week_collection_owner() or not tracked.get('id')
             stored = self.database.get('calendar_move_queue') or {}
-            shelf = stored.get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), [])
+            shelf = [dict(recipe) for recipe in stored.get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), [])]
+            for recipe in shelf:
+                if not recipe.get('difficulty'):
+                    local = self.database.recipe(recipe['id'])
+                    recipe['difficulty'] = (local or {}).get('difficulty')
             return {'today': today.isoformat(), 'days': [{'date': day, 'recipes': recipes} for day, recipes in days.items()], 'shelf': shelf, 'needs_collection_setup': needs_setup}
 
-    async def calendar_badges(self, recipe_ids):
+    async def calendar_badges(self, recipe_ids, notes_only=False):
         """Fetch note presence and missing recipe metadata without exposing note text."""
         if self.lock.locked() or self.state['running']:
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
@@ -534,20 +635,27 @@ class SyncService:
                     local = self.database.recipe(recipe_id) or {}
                     total_seconds = local.get('total_seconds')
                     servings = local.get('servings')
+                    difficulty = local.get('difficulty')
                     has_note = None
                     try:
-                        note = await self._read_recipe_note(source_id)
+                        if custom:
+                            _, _, hints = await self._read_custom_note_source(source_id)
+                            _, note = split_custom_note_text(hints)
+                        else:
+                            note = await self._read_recipe_note(source_id)
                         has_note = bool(note and note.strip())
                     except Exception as error:
                         logger.warning('Calendar note presence unavailable: %s', type(error).__name__)
-                    if not total_seconds or not servings:
+                    if not notes_only and (not total_seconds or not servings or not difficulty):
                         try:
                             detail = await (self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id))
-                            total_seconds = total_seconds or seconds(detail.total_time)
-                            servings = servings or (str(detail.serving_size) if detail.serving_size else None)
+                            total_seconds = total_seconds or seconds(getattr(detail, 'total_time', None))
+                            detail_servings = getattr(detail, 'serving_size', None)
+                            servings = servings or (str(detail_servings) if detail_servings else None)
+                            difficulty = difficulty or str(getattr(detail, 'difficulty', '') or '') or None
                         except Exception as error:
                             logger.warning('Calendar recipe metadata unavailable: %s', type(error).__name__)
-                    return {'id': recipe_id, 'has_note': has_note, 'total_seconds': total_seconds, 'servings': servings}
+                    return {'id': recipe_id, 'has_note': has_note, 'total_seconds': total_seconds, 'servings': servings, 'difficulty': difficulty}
 
             return {'items': await asyncio.gather(*(badges(item) for item in dict.fromkeys(recipe_ids)))}
 
@@ -615,6 +723,25 @@ class SyncService:
             self.begin()
         return {'added': len(missing), 'sync_started': should_sync}
 
+    async def load_recipe_tips(self, recipe_id):
+        source_id = recipe_id.removeprefix('creation:')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', source_id):
+            raise ValueError('Ungültige Rezeptkennung.')
+        local = self.database.recipe(recipe_id)
+        if local is not None and local.get('tips_json') is not None:
+            return {'tips': json.loads(local['tips_json'])}
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            custom = recipe_id.startswith('creation:')
+            detail = await (self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id))
+            tips = recipe_tips(detail, custom)
+            if local is not None:
+                self.database.cache_recipe_tips(recipe_id, json.dumps(tips, ensure_ascii=False))
+            return {'tips': tips}
+
     async def calendar_recipe_details(self, recipe_id):
         """Load a calendar recipe without changing the local library."""
         custom = recipe_id.startswith('creation:')
@@ -654,6 +781,7 @@ class SyncService:
                     'servings': str(detail.serving_size) if detail.serving_size else None,
                     'difficulty': str(getattr(detail, 'difficulty', '') or '') or None,
                     'ingredients_json': json.dumps(ingredients, ensure_ascii=False),
+                    'tips_json': json.dumps(recipe_tips(detail, custom), ensure_ascii=False),
                     'instructions_json': json.dumps(instructions, ensure_ascii=False),
                     'ingredient_availability': availability, 'collections': [], 'versions': [], 'is_local': False}
 
@@ -1081,12 +1209,13 @@ class SyncService:
                         recent = previous and previous.get('detail_updated_at') and datetime.now(timezone.utc) - datetime.fromisoformat(previous['detail_updated_at']) < timedelta(days=14)
                         is_creation = recipe_id.startswith('creation:')
                         if not is_creation and recent and previous.get('instructions_json') is not None and previous.get('image_file') and (self.images / previous['image_file']).exists():
-                            for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'instructions_json', 'detail_updated_at'):
+                            for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'instructions_json', 'tips_json', 'detail_updated_at'):
                                 recipe[key] = previous[key]
                         else:
                             try:
                                 detail = await (self.client.get_custom_recipe(recipe_id[9:]) if is_creation else self.client.get_recipe_details(recipe_id))
                                 recipe.update(name=detail.name or recipe['name'], total_seconds=seconds(detail.total_time), active_seconds=seconds(detail.active_time), servings=str(detail.serving_size) if detail.serving_size else None, difficulty=str(getattr(detail, 'difficulty', '') or '') or None, ingredients_json=json.dumps(detail.ingredients, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False), detail_updated_at=now())
+                                recipe['tips_json'] = json.dumps(recipe_tips(detail, is_creation), ensure_ascii=False)
                                 if is_creation:
                                     recipe['instructions_json'] = json.dumps(detail.instructions, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False)
                                 else:

@@ -10,6 +10,11 @@ def ingredient_key(name):
 _PREPARATION = re.compile(r'^\s*(?:gemahlen|gerieben|gehackt|zerkleinert|in stücken|gewürfelt|geschnitten|geschält|frisch|getrocknet|tiefgekühlt|tk|kalt|heiss|warm|lauwarm|kochend|ohne knochen|ground|grated|chopped|diced|sliced|peeled|fresh|dried|frozen)\b', re.IGNORECASE)
 _ALIASES = {
     'stärke': 'speisestärke',
+    'bio-vanille': 'vanilleextrakt',
+    'bio vanille': 'vanilleextrakt',
+    'bio-vanilleextrakt': 'vanilleextrakt',
+    'bio vanilleextrakt': 'vanilleextrakt',
+    'vanilla extract': 'vanilleextrakt',
     'cumin': 'kreuzkümmel',
     'kreuzkümmelsamen': 'kreuzkümmel',
     'muskat': 'muskatnuss',
@@ -31,7 +36,7 @@ _ALIASES = {
     'milk': 'milch', 'cream': 'sahne', 'butter': 'butter', 'egg': 'eier', 'eggs': 'eier', 'ei': 'eier',
     'flour': 'mehl', 'sugar': 'zucker', 'salt': 'salz', 'water': 'wasser',
     'oil': 'öl', 'cooking oil': 'öl', 'vegetable oil': 'pflanzenöl', 'olive oil': 'olivenöl', 'sunflower oil': 'sonnenblumenöl', 'rapeseed oil': 'rapsöl', 'canola oil': 'rapsöl',
-    'rice': 'reis', 'pasta': 'nudeln', 'noodles': 'nudeln', 'nudel': 'nudeln',
+    'rice': 'reis', 'pasta': 'nudeln', 'noodles': 'nudeln', 'nudel': 'nudeln', 'spaghetti': 'nudeln',
     'parsley': 'petersilie', 'chives': 'schnittlauch', 'basil': 'basilikum', 'rosemary': 'rosmarin', 'thyme': 'thymian',
     'cinnamon': 'zimt', 'turmeric': 'kurkuma', 'ginger': 'ingwer', 'nutmeg': 'muskatnuss', 'black pepper': 'schwarzer pfeffer',
     'lemon': 'zitrone', 'lemons': 'zitrone', 'lime': 'limette', 'limes': 'limette',
@@ -134,3 +139,30 @@ def ingredient_name(value):
     text = re.split(r'\s*,\s*|\s*\(', text, maxsplit=1)[0].strip()
     text = _EXTRA.sub('', text).strip(' ,.;')
     return ' '.join(text.split())
+
+
+# Warenbereiche für Zutaten ohne persönliche Vorratszuordnung.
+_SHOPPING_CATEGORIES = (
+    ('Gewürze', r'gewürz|gewuerz|pfeffer|salz|curry|kurkuma|kümmel|cumin|koriander|paprikapulver|zimt|muskat|chilipulver|chili.?flocken|oregano|thymian|rosmarin'),
+    ('Obst', r'apfel|äpfel|birne|zitrone|limette|orange|banane|beere|mango|ananas|pfirsich|obst'),
+    ('Gemüse', r'knoblauch|zwiebel|lauch|karotte|möhre|paprika|tomate|kartoffel|sellerie|brokkoli|blumenkohl|zucchini|gurke|spinat|chili|champignon|pilz|ingwer|salat|petersilie|basilikum|schnittlauch|gemüse|kraut'),
+    ('Fisch', r'fisch|lachs|thunfisch|garnelen|shrimp|seelachs|kabeljau|forelle|meeresfrüchte'),
+    ('Fleisch', r'hähnchen|hühn|chicken|rind|schwein|lamm|hackfleisch|fleisch|speck|wurst|schinken|pute'),
+    ('Milchprodukte', r'milch|sahne|joghurt|quark|käse|parmesan|mozzarella|schmand|crème fraîche|creme fraiche|mascarpone'),
+    ('Öle und Fette', r'öl|butter|ghee|margarine|schmalz'),
+    ('Backzutaten', r'mehl|stärke|zucker|backpulver|hefe|vanille|kakao|schokolade|kuvertüre|puderzucker|süßungsmittel|honig'),
+    ('Brot und Backwaren', r'brot|baguette|brötchen|toast|croissant|tortilla'),
+    ('Soßen', r'soße|sauce|sosse|paste|pesto|senf|ketchup|mayonnaise|essig'),
+    ('Vorräte und Konserven', r'brühe|bouillon|fond|reis|nudel|pasta|linsen|bohnen|kichererbsen|erbsen|mais|konserve|dose|tomatenmark|couscous|quinoa|haferflocken'),
+    ('Getränke', r'wein|bier|saft|kaffee|tee|likör|rum'),
+    ('Eier', r'^ei(?:er)?$'),
+)
+
+def shopping_category(name, pantry_categories=None):
+    key = ingredient_group_key(name)
+    if pantry_categories and key in pantry_categories:
+        return pantry_categories[key]
+    for category, pattern in _SHOPPING_CATEGORIES:
+        if re.search(pattern, key, re.IGNORECASE):
+            return category
+    return 'Sonstiges'

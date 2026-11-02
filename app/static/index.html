@@ -12,8 +12,8 @@
   <link rel="icon" href="/static/brand.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <script src="/static/theme.js?v=31"></script>
-  <link rel="stylesheet" href="/static/style.css?v=65">
-  <script src="/static/app.js?v=65" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=95">
+  <script src="/static/app.js?v=95" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -68,7 +68,7 @@
     <header class="topbar">
       <a class="mobile-brand" href="#uebersicht"><img src="/static/brand.svg" width="32" height="32" alt="">rezeptgarten</a>
       <label class="search-box"><svg><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"><kbd>Suche</kbd></label>
-      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><button id="sync-button" class="button button-primary"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
+      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="mobile-settings" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a><button id="sync-button" class="button button-primary" aria-label="Synchronisieren"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
     </header>
     <main id="main" tabindex="-1">
       <div id="sync-progress" class="sync-progress" role="status" aria-live="polite" hidden><svg class="spinning"><use href="#i-sync"/></svg><div><strong id="sync-message">Rezeptlisten werden geladen …</strong><span id="sync-counter"></span></div><progress id="sync-meter" max="1" value="0" aria-label="Synchronisierungsfortschritt"></progress></div>
@@ -84,7 +84,6 @@
   <a href="#meine-woche" data-nav="meine-woche"><svg><use href="#i-calendar"/></svg><span>Woche</span></a>
   <a href="#einkaufswagen" data-nav="einkaufswagen"><svg><use href="#i-cart"/></svg><span>Einkauf</span></a>
   <a href="#vorrat" data-nav="vorrat"><svg><use href="#i-bowl"/></svg><span>Vorrat</span></a>
-  <a href="#einstellungen" data-nav="einstellungen"><svg><use href="#i-settings"/></svg><span>Einstellungen</span></a>
 </nav>
 <dialog id="connect-dialog" class="modal" aria-labelledby="connect-title">
   <button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button>

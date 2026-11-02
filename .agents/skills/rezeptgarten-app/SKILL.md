@@ -45,11 +45,15 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - In „Meine Woche“ stehen sieben Tage auf Desktop ohne horizontales Scrollen in einer Reihe; auf dem Handy bleibt diese seitlich scrollbar. Pfeile wechseln die angezeigte Woche, „Diese Woche“ springt zur aktuellen Woche; Rezeptbilder und Links sind in den Tageskacheln sichtbar.
 
-- Rezepte in „Meine Woche“ lassen sich am Bild per Maus oder Touch sowie über die am unteren Ende der Tageskarte ausgerichtete Tagesauswahl verschieben. Die Ansicht aktualisiert sich sofort; nach fünf Minuten ohne weitere Änderung folgt der Abgleich. Vorgemerkte Verschiebungen liegen dauerhaft auf dem Server und bleiben auch nach Schließen oder Neuladen der App erhalten.
+- Wochen- und Ablagerezepte verwenden das Design der Rezeptlisten: Bild und ein Bereich für den vollständig umgebrochenen Namen sowie den verfügbaren Schwierigkeitsgrad. Die sieben Tage bleiben auf Desktop nebeneinander; fehlende Angaben werden bei Bedarf im Hintergrund ergänzt.
+
+- In „Meine Woche“ lassen sich Kacheln mit der Maus zwischen Tagen und Ablage ziehen; auf Touchgeräten bleiben die Bilder zum Öffnen und Scrollen frei. Unter den Rezepten gibt es keine Griffleiste oder Zielauswahl. Das X auf einem Tagesrezept verschiebt es in die Ablage. Die Ansicht aktualisiert sich sofort; nach fünf Minuten ohne weitere Änderung folgt der Kalenderabgleich. Vorgemerkte Änderungen bleiben auch nach Schließen oder Neuladen der App erhalten.
 
 - Persönliche Rezeptnotizen sind über die Rezeptdetails erreichbar; die Wochenansicht zeigt bei vorhandener Notiz ein Symbol sowie Dauer und Portionen auf dem Bild; die Portionen stehen unten rechts. Das Feld lädt den Cookidoo-Stand und speichert bei Enter oder Fokusverlust; Umschalt+Enter erzeugt einen Zeilenumbruch. Bei Fehlern und Konflikten bleibt der Text erhalten.
 
 - Wochenrezepte öffnen immer in der internen Detailansicht, auch wenn sie nicht lokal gespeichert sind. Ihre Daten werden bei Bedarf von Cookidoo geladen; ein externer Link erscheint nur als „In Cookidoo öffnen“.
+
+- Rezeptvorschauen zeigen links oben vorhandene Notizen und rechts oben einen Knopf für die lokale Ablage der aktuellen Berliner Kalenderwoche. In „Meine Woche“ verschiebt dort stattdessen ein X Tagesrezepte in die Ablage der angezeigten Woche, und ein Papierkorb entfernt Ablagerezepte mit Rückgängig. Liegt ein Tagesrezept bereits in der Ablage, bleibt der Ablageeintrag erhalten und der Tageseintrag wird rückgängig machbar entfernt. Der Notizstatus wird für sichtbare Vorschauen im Hintergrund geladen und nach Änderungen aktualisiert.
 
 - Nicht zugeordnete Katalogrezepte aus angesehenen Wochen werden nach Prüfung in einer eigenen Cookidoo-Liste gesammelt; eigene Kreationen bleiben in „Meine Kreationen“.
 
@@ -61,9 +65,11 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - „Mein Einkaufswagen“ liegt zwischen Woche und Vorrat. Rezeptaktionen und Wocheneinkauf speichern kontobezogene Schnappschüsse lokal; Zutaten können als vorhanden markiert und weitere Artikel hinzugefügt werden. Der Vorrat belegt die Markierung vor. Übertragung zu Cookidoo erfolgt nur auf ausdrücklichen Knopfdruck. Unsichere Ergebnisse bleiben sichtbar und werden erst nach ausdrücklicher Prüfung erneut freigegeben.
 
-- Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Rezepte lassen sich per Bild oder Tagesauswahl zwischen Tagen und Ablage bewegen; beim Ziehen wird der Kopfbereich als Papierkorb eingeblendet. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
+- Das Einkaufswagensymbol in der Kopfzeile öffnet den lokalen Wagen. Die kleine Zahl zeigt die kontobezogene Anzahl der enthaltenen Rezepte, auch nach Änderungen und einem Kontowechsel; Zusatzartikel werden nicht mitgezählt.
 
-- Beim Ziehen folgt eine Vorschau mit Rezeptbild und -name dem Zeiger beziehungsweise Finger.
+- Die Zutaten im Einkaufswagen sind kompakte Zeilen mit Checkbox, Mengenangabe und dezentem Rezeptnamen. Abgehakte Zutaten stehen unmittelbar nach dem Ändern unter den noch benötigten; gleiche Zutaten werden innerhalb ihres jeweiligen Zustands gruppiert. Auf Desktop können mehrere Spalten erscheinen, auf dem Handy eine. Checkboxen dürfen nicht die allgemeine volle Eingabebreite erben.
+
+- Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Das X verschiebt ein Tagesrezept dorthin; der Papierkorb entfernt ein Ablagerezept mit Rückgängig. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
 
 - Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort frei; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
 
@@ -71,6 +77,28 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Beim Entfernen aus der Wochenplanung oder Ablage bietet ein schwebender Hinweis fünf Sekunden lang Rückgängig an. Der Vorratsabgleich erkennt Stärke und Speisestärke als gleichwertig.
 
+- „Bio-Vanille“ wird beim Zutaten- und Vorratsabgleich als Vanilleextrakt erkannt. Vanillezucker, Vanilleschoten und andere Vanilleprodukte bleiben getrennt.
+
 - Ein Fortschrittskreis zeigt die verbleibenden fünf Sekunden zum Rückgängigmachen; bei reduzierter Bewegung aktualisiert er sich in Sekundenschritten.
 
 - Nach einem fehlgeschlagenen Wochenwechsel bleiben Listenrezepte gesperrt, bis die ausgewählte Woche geladen wurde; niemals die vorherige Woche still weiterverwenden.
+
+- Rezepte im Einkaufswagen erscheinen als responsive Bildkacheln nebeneinander; der Papierkorb oben rechts entfernt das Rezept. Dauer und Portionsangaben stehen, soweit verfügbar, auf dem Bild und beim Darüberfahren bewegt sich das Bild leicht. Ältere Einkaufswageneinträge ergänzen fehlende Rezeptangaben beim Anzeigen aus der lokalen Sammlung. Abweichende Übertragungsstatus und Hinweise bleiben sichtbar; der Status „Bereit“ und der Wochenknopf entfallen in diesen Kacheln.
+
+- Einkaufszutaten erscheinen nach Warenbereichen gruppiert. Vorhandene Vorratszuordnungen haben Vorrang, weitere Zutaten erhalten eine passende Standardgruppe oder „Sonstiges“. Wasser wird weder bei benötigten noch bei vorhandenen Zutaten angezeigt; gespeicherte Einkaufsdaten bleiben erhalten.
+
+- Einkaufszutaten zeigen neben dem Häkchen ein kleines Symbol passend zur Zutat oder zum Warenbereich, wie im Vorrat.
+
+- Zutaten in Rezeptdetails zeigen dieselben kleinen Symbole wie im Einkaufswagen und behalten die Vorratskennzeichnung.
+
+- Wasser wird appweit in Zutatenansichten, Einkaufswagen, Vorrat und Zutaten-Auswahl ausgeblendet; Rezeptdaten und Zubereitung bleiben erhalten. Andere Zutaten wie Kokoswasser bleiben sichtbar.
+
+- Auf dem Handy stehen sechs Hauptbereiche in einer unteren Navigationszeile; die Einstellungen sind über das Zahnrad in der Kopfzeile erreichbar.
+
+- Bei eigenen Kreationen steht die App-Notiz am Ende der Cookidoo-Tipps ab „Notiz:“. Das gezielte Cookidoo-PATCH ändert nur das Tippfeld; vor dem Schreiben werden Notiz und Tipps auf Konflikte geprüft, danach Antwort und übrige Rezeptfelder bestätigt. Mehrdeutige Markierungen und unbestätigte Schreibvorgänge werden gemeldet. Ein Test an einer isolierten Rezeptkopie am 02.11.2026 bestätigte den unveränderten Rezeptinhalt und das Bild; die Testkopie wurde gelöscht.
+
+- Rezeptdetails zeigen vorhandene Cookidoo-Tipps in einem zunächst eingeklappten Bereich unter der Zubereitung. Katalog-Zusatzinformationen und Hinweise eigener Kreationen werden beim Synchronisieren gespeichert; fehlende Daten älterer Rezepte werden bei Bedarf nachgeladen.
+
+- Lokale Rezeptlisten und Vorratskategorien können nach ausdrücklicher Bestätigung gelöscht werden. Beim Löschen einer Vorratskategorie werden deren Vorratseinträge mit gelöscht; bei lokalen Listen entfallen nur die Listenzuordnungen.
+
+- Spaghetti, Nudeln und Pasta gelten beim Zutaten- und Vorratsabgleich als gleichwertig; gespeicherte Einkaufswagenzutaten werden bei der Anzeige anhand der aktuellen Regeln gruppiert.

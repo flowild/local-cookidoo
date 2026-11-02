@@ -66,11 +66,14 @@ class Database:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS cart_unique_recipe ON cart_entries(owner,recipe_id) WHERE kind='recipe';
             ''')
-            if not db.execute('SELECT 1 FROM pantry_categories LIMIT 1').fetchone():
+            if not db.execute('SELECT 1 FROM pantry_categories LIMIT 1').fetchone() and not db.execute("SELECT 1 FROM settings WHERE key='pantry_initialized'").fetchone():
                 db.executemany('INSERT INTO pantry_categories(name,position) VALUES(?,?)', [(name, index) for index, name in enumerate(('Gewürze', 'Gemüse', 'Obst', 'Fleisch', 'Fisch', 'Soßen', 'Öle und Fette', 'Milchprodukte', 'Vorräte und Konserven', 'Backzutaten', 'Getränke', 'Sonstiges'))])
+            db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('pantry_initialized','true')")
             columns = {row['name'] for row in db.execute('PRAGMA table_info(recipes)')}
             if 'instructions_json' not in columns:
                 db.execute('ALTER TABLE recipes ADD COLUMN instructions_json TEXT')
+            if 'tips_json' not in columns:
+                db.execute('ALTER TABLE recipes ADD COLUMN tips_json TEXT')
             if 'origin_recipe_id' not in columns:
                 db.execute('ALTER TABLE recipes ADD COLUMN origin_recipe_id TEXT')
             pantry_columns = {row['name'] for row in db.execute('PRAGMA table_info(pantry_items)')}
@@ -113,6 +116,10 @@ class Database:
         with self.connect() as db:
             rows = db.execute('SELECT * FROM cart_entries WHERE owner=? ORDER BY created_at,id', (owner,)).fetchall()
         return [{**dict(row), 'data': json.loads(row['data'])} for row in rows]
+
+    def cart_recipe_count(self, owner):
+        with self.connect() as db:
+            return db.execute("SELECT COUNT(*) FROM cart_entries WHERE owner=? AND kind='recipe'", (owner,)).fetchone()[0]
 
     def cart_add(self, owner, kind, data, recipe_id=None):
         with self.connect() as db:
@@ -192,7 +199,7 @@ class Database:
             for row in rows:
                 name = row['name']
                 key = ingredient_group_key(name)
-                if not key:
+                if not key or key == 'wasser':
                     continue
                 group = groups.setdefault(key, {'name': ingredient_display_name(name), 'variants': set(), 'recipes': set()})
                 group['variants'].add(ingredient_key(name))
@@ -212,6 +219,15 @@ class Database:
             if db.execute('SELECT 1 FROM pantry_categories WHERE casefold(name)=casefold(?)', (name,)).fetchone():
                 return None
             return db.execute('INSERT INTO pantry_categories(name,position) VALUES(?,COALESCE((SELECT MAX(position)+1 FROM pantry_categories),0))', (name,)).lastrowid
+
+    def delete_pantry_category(self, category_id):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM pantry_categories WHERE id=?', (category_id,)).fetchone():
+                return False
+            db.execute('DELETE FROM pantry_items WHERE category_id=?', (category_id,))
+            db.execute('DELETE FROM pantry_categories WHERE id=?', (category_id,))
+            return True
 
     def reorder_pantry_categories(self, category_ids):
         with self.connect() as db:
@@ -412,14 +428,14 @@ class Database:
         grouped = {}
         for name in names:
             key = ingredient_group_key(name)
-            if key:
+            if key and key != 'wasser':
                 grouped.setdefault(key, ingredient_display_name(name))
         ingredients = sorted(grouped.values(), key=ingredient_key)
         return {'ingredients': ingredients, 'ingredient_aliases': {name: ingredient_aliases(name) for name in ingredients}, 'servings': sorted(servings), 'minutes': sorted(minutes)}
 
     def recipe(self, recipe_id):
         with self.connect() as db:
-            row = db.execute('SELECT id,name,image_file,source_url,total_seconds,active_seconds,servings,difficulty,ingredients_json,instructions_json,origin_recipe_id FROM recipes WHERE id=?', (recipe_id,)).fetchone()
+            row = db.execute('SELECT id,name,image_file,source_url,total_seconds,active_seconds,servings,difficulty,ingredients_json,instructions_json,tips_json,origin_recipe_id FROM recipes WHERE id=?', (recipe_id,)).fetchone()
             if not row:
                 return None
             item = dict(row)
@@ -440,11 +456,23 @@ class Database:
                 JOIN ingredient_catalog c ON c.id=ri.ingredient_id WHERE ri.recipe_id=?''', (recipe_id,))}
         return item
 
+    def cache_recipe_tips(self, recipe_id, tips_json):
+        with self.connect() as db:
+            db.execute('UPDATE recipes SET tips_json=? WHERE id=? AND tips_json IS NULL', (tips_json, recipe_id))
+
+    def invalidate_recipe_tips(self, recipe_id):
+        with self.connect() as db:
+            db.execute('UPDATE recipes SET tips_json=NULL WHERE id=?', (recipe_id,))
+
     def create_local_collection(self, name):
         identifier = 'local:' + uuid.uuid4().hex
         with self.connect() as db:
             db.execute("INSERT INTO collections(id,source_id,kind,name,description,position) VALUES(?,?,'local',?,'',COALESCE((SELECT MAX(position)+1 FROM collections),0))", (identifier, identifier, name))
         return identifier
+
+    def delete_local_collection(self, collection_id):
+        with self.connect() as db:
+            return db.execute("DELETE FROM collections WHERE id=? AND kind='local'", (collection_id,)).rowcount == 1
 
     def set_local_membership(self, collection_id, recipe_id, present):
         with self.connect() as db:
