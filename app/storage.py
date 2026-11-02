@@ -59,6 +59,12 @@ class Database:
                     original_json TEXT NOT NULL, PRIMARY KEY(recipe_id,position)
                 );
                 CREATE INDEX IF NOT EXISTS recipe_ingredient_catalog ON recipe_ingredients(ingredient_id);
+                CREATE TABLE IF NOT EXISTS cart_entries (
+                    id TEXT PRIMARY KEY, owner TEXT NOT NULL, kind TEXT NOT NULL,
+                    recipe_id TEXT, data TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS cart_unique_recipe ON cart_entries(owner,recipe_id) WHERE kind='recipe';
             ''')
             if not db.execute('SELECT 1 FROM pantry_categories LIMIT 1').fetchone():
                 db.executemany('INSERT INTO pantry_categories(name,position) VALUES(?,?)', [(name, index) for index, name in enumerate(('Gewürze', 'Gemüse', 'Obst', 'Fleisch', 'Fisch', 'Soßen', 'Öle und Fette', 'Milchprodukte', 'Vorräte und Konserven', 'Backzutaten', 'Getränke', 'Sonstiges'))])
@@ -102,6 +108,52 @@ class Database:
             categories = [dict(row) for row in db.execute('SELECT id,name FROM pantry_categories ORDER BY position,id')]
             items = [dict(row) for row in db.execute('SELECT id,category_id,name,quantity,ingredient_id FROM pantry_items ORDER BY casefold(name),id')]
         return {'categories': categories, 'items': items}
+
+    def cart(self, owner):
+        with self.connect() as db:
+            rows = db.execute('SELECT * FROM cart_entries WHERE owner=? ORDER BY created_at,id', (owner,)).fetchall()
+        return [{**dict(row), 'data': json.loads(row['data'])} for row in rows]
+
+    def cart_add(self, owner, kind, data, recipe_id=None):
+        with self.connect() as db:
+            cursor = db.execute('INSERT OR IGNORE INTO cart_entries(id,owner,kind,recipe_id,data,status,created_at) VALUES(?,?,?,?,?,?,?)',
+                                (uuid.uuid4().hex, owner, kind, recipe_id, json.dumps(data, ensure_ascii=False), 'pending', now()))
+            return bool(cursor.rowcount)
+
+    def cart_add_recipes(self, owner, recipes):
+        added = 0
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            for recipe in recipes:
+                result = db.execute('INSERT OR IGNORE INTO cart_entries(id,owner,kind,recipe_id,data,status,created_at) VALUES(?,?,?,?,?,?,?)',
+                                    (uuid.uuid4().hex, owner, 'recipe', recipe['id'], json.dumps(recipe, ensure_ascii=False), 'pending', now()))
+                added += result.rowcount
+        return added
+
+    def cart_adopt_unassigned(self, old_owner, new_owner):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM cart_entries WHERE owner=? LIMIT 1', (new_owner,)).fetchone():
+                return False
+            db.execute('UPDATE cart_entries SET owner=? WHERE owner=?', (new_owner, old_owner))
+            return True
+
+    def cart_update(self, owner, identifier, *, data=None, status=None, expected=None, expected_data=None):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT data,status FROM cart_entries WHERE owner=? AND id=?', (owner, identifier)).fetchone()
+            if not row or (expected is not None and row['status'] != expected) or (expected_data is not None and json.loads(row['data']) != expected_data):
+                return False
+            db.execute('UPDATE cart_entries SET data=?,status=? WHERE owner=? AND id=?',
+                       (json.dumps(data, ensure_ascii=False) if data is not None else row['data'], status or row['status'], owner, identifier))
+            return True
+
+    def cart_delete(self, owner, identifier=None):
+        with self.connect() as db:
+            if identifier:
+                return bool(db.execute('DELETE FROM cart_entries WHERE owner=? AND id=? AND status != ?', (owner, identifier, 'processing')).rowcount)
+            db.execute('DELETE FROM cart_entries WHERE owner=? AND status != ?', (owner, 'processing'))
+            return True
 
     @staticmethod
     def catalog_id(db, name):
@@ -447,4 +499,5 @@ class Database:
         with self.connect() as db:
             catalog = [dict(row) for row in db.execute('SELECT id,name,name_key FROM ingredient_catalog')]
             recipe_ingredients = [dict(row) for row in db.execute('SELECT recipe_id,position,ingredient_id,original_json FROM recipe_ingredients')]
-        return {'format': 'rezeptgarten-v1', 'exported_at': now(), 'collections': self.collections(), 'recipes': recipes, 'members': members, 'pantry': self.pantry(), 'ingredient_catalog': catalog, 'recipe_ingredients': recipe_ingredients}
+            cart = [dict(row) for row in db.execute('SELECT * FROM cart_entries ORDER BY created_at,id')]
+        return {'format': 'rezeptgarten-v1', 'exported_at': now(), 'collections': self.collections(), 'recipes': recipes, 'members': members, 'pantry': self.pantry(), 'ingredient_catalog': catalog, 'recipe_ingredients': recipe_ingredients, 'cart': cart}

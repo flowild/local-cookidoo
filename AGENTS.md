@@ -43,10 +43,10 @@ serverseitig vorgemerkt und nach fünf Minuten Ruhezeit über den gemeinsamen
 Cookidoo-Client übertragen, auch wenn der Browser geschlossen ist.
 Das Ziel muss bestätigt sein, bevor der Ursprung entfernt wird; unklare Ergebnisse
 und nicht übertragene Folgeänderungen müssen sichtbar gemeldet werden.
-„In den Einkaufswagen“ berücksichtigt nur Rezepte ab heute innerhalb der gewählten
-Woche, einschließlich vorgemerkter Verschiebungen. Bereits gelistete Rezepte bleiben
-unverändert; Vorratszutaten werden in Cookidoo als vorhanden abgehakt. Teilerfolge
-und unbestätigte Schreibvorgänge müssen sichtbar gemeldet werden.
+„In den Einkaufswagen“ übernimmt Rezepte ab heute innerhalb der gewählten Woche
+einschließlich vorgemerkter Verschiebungen und der taglosen Ablage in den lokalen
+Einkaufswagen. Die Übernahme ist eine Momentaufnahme; spätere Wochenänderungen ändern
+den Wagen nicht automatisch.
 Wochenrezepte öffnen intern; fehlen sie in der lokalen Sammlung, lädt die App ihre
 Details bei Bedarf aus Cookidoo.
 Nicht zugeordnete Cookidoo-Katalogrezepte aus angesehenen Wochen werden nach einer
@@ -89,3 +89,16 @@ Löschungen müssen beim Rückgängigmachen sicher entfallen.
 Fehlgeschlagene Wochenabfragen dürfen keine Einträge in einer zuvor angezeigten
 Woche verändern. Vorgemerkte Änderungen eines anderen Kontos dürfen nicht verworfen
 werden. Vorratsmarkierungen auf der Einkaufsliste müssen bestätigt werden.
+
+## Mein Einkaufswagen
+
+Der kontobezogene lokale Einkaufswagen liegt zwischen „Meine Woche“ und „Mein Vorrat“.
+Alle Hinzufügen-Knöpfe schreiben lokal; ausschließlich „An Cookidoo übertragen“
+schreibt nach Cookidoo. Rezeptversionen und Zutaten werden als Schnappschuss gespeichert,
+Zusatzartikel und Vorhanden-Markierungen sind lokal bearbeitbar. Der Vorrat belegt
+die Markierungen vor. Bereits in Cookidoo enthaltene Rezepte bleiben unverändert.
+Der Transfer verwendet den gemeinsamen Cookidoo-Client und Lock, bestätigt Erfolge,
+speichert ungeklärte Ergebnisse dauerhaft und wiederholt sie nicht automatisch.
+Nach Prüfung in Cookidoo kann der Nutzer ungeklärte Einträge ausdrücklich auf vorhanden
+oder erneut übertragbar setzen. Lokale Daten bleiben bis zum ausdrücklichen Entfernen
+oder Leeren erhalten; die SQLite-Sicherung und der Export enthalten den Wagen.

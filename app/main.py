@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, friendly_error
+from .cart import recipe_snapshot, transfer as transfer_cart
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -82,6 +84,23 @@ class CalendarPlacement(BaseModel):
 class RecipeNote(BaseModel):
     text: str = Field(max_length=5000)
     expected: str = Field(max_length=5000)
+
+
+class CartRecipe(BaseModel):
+    recipe_id: str = Field(min_length=1, max_length=129)
+    calendar: bool = False
+
+
+class CartItem(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class CartOwned(BaseModel):
+    owned: bool
+
+
+class CartResolution(BaseModel):
+    status: Literal['done', 'pending']
 
 
 def create_app(directory=None, secure_cookies=None):
@@ -227,13 +246,127 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.post('/api/calendar/shopping')
     async def add_week_to_shopping(payload: CalendarWeekSelection):
+        if service.cart_transferring:
+            raise HTTPException(409, 'Bitte warte, bis die Übertragung abgeschlossen ist.')
         try:
             return await service.add_week_to_shopping(payload.day)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         except Exception as error:
             logging.getLogger(__name__).warning('Week shopping preparation failed: %s', type(error).__name__)
-            raise HTTPException(502, 'Die Wochenplanung oder Einkaufsliste konnte nicht gelesen werden. Es wurden keine Rezepte hinzugefügt.') from None
+            raise HTTPException(502, 'Die Wochenplanung oder Rezeptzutaten konnten nicht geladen werden. Der Einkaufswagen wurde nicht verändert.') from None
+
+    def cart_owner():
+        return service.cart_owner()
+
+    def cart_editable():
+        if service.cart_transferring:
+            raise HTTPException(409, 'Bitte warte, bis die Übertragung abgeschlossen ist.')
+
+    @app.get('/api/cart')
+    def get_cart():
+        items = database.cart(cart_owner())
+        for item in items:
+            if item['kind'] == 'recipe' and item['data'].get('image_url'):
+                service.calendar_image_reference(item['data']['image_url'])
+        if not service.cart_transferring:
+            for item in items:
+                if item['status'] == 'processing':
+                    database.cart_update(cart_owner(), item['id'], status='uncertain', expected='processing')
+                    item['status'] = 'uncertain'
+        return {'items': items, 'transferring': service.cart_transferring}
+
+    async def add_cart_recipe(recipe_id, calendar=False):
+        cart_editable()
+        if not re.fullmatch(r'(?:creation:)?[A-Za-z0-9_-]{1,120}', recipe_id):
+            raise HTTPException(400, 'Ungültige Rezeptkennung.')
+        owner = cart_owner()
+        recipe = database.recipe(recipe_id)
+        if recipe is None:
+            if not calendar:
+                raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
+            try:
+                recipe = await service.calendar_recipe_details(recipe_id)
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from None
+            except Exception as error:
+                logging.getLogger(__name__).warning('Cart recipe lookup failed: %s', type(error).__name__)
+                raise HTTPException(502, 'Die Rezeptzutaten konnten nicht geladen werden.') from None
+        cart_editable()
+        if owner != cart_owner():
+            raise HTTPException(409, 'Das Cookidoo-Konto wurde inzwischen geändert.')
+        pantry_names = [item['name'] for item in database.pantry()['items']]
+        added = database.cart_add(owner, 'recipe', recipe_snapshot(recipe, pantry_names), recipe_id)
+        return {'added': added}
+
+    @app.post('/api/cart/recipes')
+    async def cart_add_recipe(payload: CartRecipe):
+        return await add_cart_recipe(payload.recipe_id, payload.calendar)
+
+    @app.post('/api/cart/items')
+    def cart_add_item(payload: CartItem):
+        cart_editable()
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, 'Bitte gib einen Artikel ein.')
+        database.cart_add(cart_owner(), 'additional', {'name': name, 'owned': False})
+        return {'ok': True}
+
+    @app.put('/api/cart/{entry_id}/ingredients/{position}')
+    def cart_ingredient(entry_id: str, position: int, payload: CartOwned):
+        cart_editable()
+        owner = cart_owner()
+        row = next((item for item in database.cart(owner) if item['id'] == entry_id), None)
+        if not row or row['kind'] != 'recipe' or position < 0 or position >= len(row['data']['ingredients']):
+            raise HTTPException(404, 'Diese Zutat wurde nicht gefunden.')
+        original_data = copy.deepcopy(row['data'])
+        row['data']['ingredients'][position]['owned'] = payload.owned
+        if not database.cart_update(owner, entry_id, data=row['data'], expected='pending', expected_data=original_data):
+            raise HTTPException(409, 'Der Eintrag wurde bereits übertragen oder verändert.')
+        return {'ok': True}
+
+    @app.put('/api/cart/{entry_id}/owned')
+    def cart_item_owned(entry_id: str, payload: CartOwned):
+        cart_editable()
+        owner = cart_owner()
+        row = next((item for item in database.cart(owner) if item['id'] == entry_id and item['kind'] == 'additional'), None)
+        if not row:
+            raise HTTPException(404, 'Dieser Artikel wurde nicht gefunden.')
+        original_data = copy.deepcopy(row['data'])
+        row['data']['owned'] = payload.owned
+        if not database.cart_update(owner, entry_id, data=row['data'], expected='pending', expected_data=original_data):
+            raise HTTPException(409, 'Der Eintrag wurde bereits übertragen oder verändert.')
+        return {'ok': True}
+
+    @app.post('/api/cart/{entry_id}/resolve')
+    def cart_resolve(entry_id: str, payload: CartResolution):
+        cart_editable()
+        if not database.cart_update(cart_owner(), entry_id, status=payload.status, expected='uncertain'):
+            raise HTTPException(409, 'Dieser Eintrag benötigt keine Bestätigung.')
+        return {'ok': True}
+
+    @app.delete('/api/cart/{entry_id}')
+    def cart_remove(entry_id: str):
+        cart_editable()
+        if not database.cart_delete(cart_owner(), entry_id):
+            raise HTTPException(404, 'Dieser Eintrag wurde nicht gefunden.')
+        return {'ok': True}
+
+    @app.delete('/api/cart')
+    def cart_clear():
+        cart_editable()
+        database.cart_delete(cart_owner())
+        return {'ok': True}
+
+    @app.post('/api/cart/transfer')
+    async def cart_transfer():
+        try:
+            return await transfer_cart(service)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cart transfer preparation failed: %s', type(error).__name__)
+            raise HTTPException(502, 'Cookidoo konnte nicht gelesen werden. Der Einkaufswagen bleibt erhalten.') from None
 
     @app.get('/api/notes/{recipe_id}')
     async def get_recipe_note(recipe_id: str):
@@ -380,7 +513,7 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.post('/api/recipes/{recipe_id}/shopping')
     async def add_to_shopping(recipe_id: str, calendar: bool = False):
-        return await cookidoo_recipe_action(recipe_id, 'shopping', calendar)
+        return await add_cart_recipe(recipe_id, calendar)
 
     @app.get('/api/images/{filename}')
     async def image(filename: str, size: Literal['thumb'] | None = None):

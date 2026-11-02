@@ -21,6 +21,7 @@ from cookidoo_api.types import CookidooAuthData, CookidooConfig, CookidooLocaliz
 from PIL import Image, ImageOps
 
 from .storage import now
+from .cart import remote_recipe_snapshot
 from .ingredients import ingredient_available, ingredient_name
 from .recipe_text import readable_instructions
 
@@ -78,6 +79,7 @@ class SyncService:
         self.calendar_image_sources = {}
         self.calendar_image_tasks = {}
         self.lock = asyncio.Lock()
+        self.cart_transferring = False
         self.task = None
         self.scheduler = None
         self.calendar_scheduler = None
@@ -147,7 +149,14 @@ class SyncService:
             if self.session:
                 await self.session.close()
             self.client, self.session = client, session
+            old_account = self.database.get('account')
+            last_cart_owner = self.database.get('cart_last_owner')
+            unassigned_owner = hashlib.sha256(b'\0').hexdigest()
+            new_owner = hashlib.sha256((region + '\0' + email).encode()).hexdigest()
+            if not old_account and not last_cart_owner:
+                self.database.cart_adopt_unassigned(unassigned_owner, new_owner)
             self.database.set('account', {'email': email, 'region': region})
+            self.database.set('cart_last_owner', new_owner)
             self.state['message'] = ''
 
     async def disconnect(self):
@@ -155,6 +164,8 @@ class SyncService:
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
         async with self.lock:
             self.vault.clear()
+            if self.database.get('account'):
+                self.database.set('cart_last_owner', self.week_collection_owner())
             self.database.set('account', None)
             self.client = None
             if self.session:
@@ -220,6 +231,11 @@ class SyncService:
     def week_collection_owner(self):
         account = self.database.get('account') or {}
         return hashlib.sha256((account.get('region', '') + '\0' + account.get('email', '')).encode()).hexdigest()
+
+    def cart_owner(self):
+        if self.database.get('account'):
+            return self.week_collection_owner()
+        return self.database.get('cart_last_owner') or self.week_collection_owner()
 
     def calendar_queue(self):
         queue = self.database.get('calendar_move_queue') or {}
@@ -715,21 +731,6 @@ class SyncService:
                 logger.warning('Calendar move removal or verification failed: %s', type(error).__name__)
             return {'status': 'uncertain', 'message': 'Das Rezept wurde am Zieltag bestätigt. Ob der ursprüngliche Eintrag entfernt wurde, konnte nicht bestätigt werden. Bitte prüfe Cookidoo.'}
 
-    async def mark_pantry_ingredients(self, ingredients, pantry_names):
-        """Mark matching ingredients as owned and verify Cookidoo's response."""
-        available = {}
-        for ingredient in ingredients:
-            name = ingredient.name or ingredient_name(getattr(ingredient, 'description', '') or '')
-            if name and not ingredient.is_owned and ingredient_available(name, pantry_names):
-                ingredient.is_owned = True
-                available[str(ingredient.id)] = ingredient
-        if available:
-            confirmed = await self.client.edit_ingredient_items_ownership(list(available.values()))
-            confirmed_ids = {str(item.id) for item in confirmed if item.is_owned}
-            if not set(available).issubset(confirmed_ids):
-                raise ValueError('Pantry ownership could not be verified')
-        return len(available)
-
     async def add_week_to_shopping(self, selected_day):
         """Add future recipes from one week and mark pantry ingredients owned."""
         if self.lock.locked() or self.state['running']:
@@ -790,37 +791,17 @@ class SyncService:
                     selected.append(key)
             if not selected:
                 return {'status': 'empty', 'added': 0, 'existing': 0, 'marked': 0}
-            # Never re-add recipes already on the user's shopping list.
-            existing = {str(item.id).removeprefix('creation:') for item in await self.client.get_shopping_list_recipes()}
-            if self.calendar_queue() != queue or (self.database.get('calendar_move_queue') or {}).get('shelves', {}).get(self.week_collection_owner(), {}).get(monday.isoformat(), []) != shelf:
-                raise ValueError('Die Wochenplanung wurde gerade geändert. Bitte versuche es erneut.')
-            missing = [(identifier, custom) for identifier, custom in selected if identifier not in existing]
-            existing_count = len(selected) - len(missing)
-            if not missing:
-                return {'status': 'ok', 'added': 0, 'existing': existing_count, 'marked': 0}
             pantry_names = [item['name'] for item in self.database.pantry()['items']]
-            added = marked = 0
-            for custom in (False, True):
-                identifiers = [identifier for identifier, is_custom in missing if is_custom == custom]
-                if not identifiers:
-                    continue
-                method = self.client.add_ingredient_items_for_custom_recipes if custom else self.client.add_ingredient_items_for_recipes
-                try:
-                    ingredients = await method(identifiers)
-                    added += len(identifiers)
-                except Exception as error:
-                    logger.warning('Week shopping recipe addition failed: %s', type(error).__name__)
-                    return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
-                            'message': 'Das Hinzufügen konnte nicht vollständig bestätigt werden. Bitte prüfe die Cookidoo-Einkaufsliste, bevor du es erneut versuchst.'}
-                try:
-                    marked += await self.mark_pantry_ingredients(ingredients, pantry_names)
-                except Exception as error:
-                    logger.warning('Week shopping pantry marking failed: %s', type(error).__name__)
-                    return {'status': 'partial', 'added': added, 'existing': existing_count, 'marked': marked,
-                            'message': 'Rezepte wurden hinzugefügt, aber vorhandene Zutaten konnten nicht vollständig bestätigt werden. Bitte prüfe die Cookidoo-Einkaufsliste.'}
-            return {'status': 'ok', 'added': added, 'existing': existing_count, 'marked': marked}
+            owner = self.week_collection_owner()
+            recipes = [await remote_recipe_snapshot(self, identifier, custom, pantry_names) for identifier, custom in selected]
+            if self.calendar_queue() != queue or (self.database.get('calendar_move_queue') or {}).get('shelves', {}).get(owner, {}).get(monday.isoformat(), []) != shelf:
+                raise ValueError('Die Wochenplanung wurde gerade geändert. Bitte versuche es erneut.')
+            added = self.database.cart_add_recipes(self.cart_owner(), recipes)
+            return {'status': 'ok', 'added': added, 'existing': len(recipes) - added}
 
     async def recipe_action(self, recipe_id, action):
+        if action != 'plan':
+            raise ValueError('Diese Rezeptaktion wird nicht unterstützt.')
         if self.lock.locked() or self.state['running']:
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
         async with self.lock:
@@ -841,15 +822,6 @@ class SyncService:
                     logger.warning('Calendar verification failed: %s', type(error).__name__)
                     verified = False
                 return {'date': day.isoformat(), 'verified': verified}
-            method = self.client.add_ingredient_items_for_custom_recipes if custom else self.client.add_ingredient_items_for_recipes
-            items = await method([source_id])
-            try:
-                pantry_names = [item['name'] for item in self.database.pantry()['items']]
-                marked = await self.mark_pantry_ingredients(items, pantry_names)
-            except Exception as error:
-                logger.warning('Shopping list added but pantry matching failed: %s', type(error).__name__)
-                return {'partial': True}
-            return {'partial': False, 'marked': marked}
 
     async def schedule(self):
         while True:

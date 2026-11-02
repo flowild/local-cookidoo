@@ -57,7 +57,9 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Bildkacheln verwenden lokal erzeugte WebP-Vorschauen bis 480 Pixel, die Detailansicht das Bild bis 960 Pixel. Erfolgreiche Bildantworten sind einen Tag privat im Browser cachebar; andere persönliche API-Antworten und der Service-Worker-Cache bleiben davon ausgeschlossen.
 
-- „In den Einkaufswagen“ überträgt nur Rezepte ab dem heutigen Berliner Datum aus der angezeigten Woche. Vorgemerkte Verschiebungen werden berücksichtigt; Zutaten im lokalen Vorrat werden in Cookidoo als vorhanden markiert.
+- „In den Einkaufswagen“ übernimmt Rezepte ab dem heutigen Berliner Datum aus der angezeigten Woche sowie die Wochenablage in den lokalen Einkaufswagen. Vorgemerkte Verschiebungen werden berücksichtigt; spätere Wochenänderungen ändern die Übernahme nicht automatisch.
+
+- „Mein Einkaufswagen“ liegt zwischen Woche und Vorrat. Rezeptaktionen und Wocheneinkauf speichern kontobezogene Schnappschüsse lokal; Zutaten können als vorhanden markiert und weitere Artikel hinzugefügt werden. Der Vorrat belegt die Markierung vor. Übertragung zu Cookidoo erfolgt nur auf ausdrücklichen Knopfdruck. Unsichere Ergebnisse bleiben sichtbar und werden erst nach ausdrücklicher Prüfung erneut freigegeben.
 
 - Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Rezepte lassen sich per Bild oder Tagesauswahl zwischen Tagen und Ablage bewegen; beim Ziehen wird der Kopfbereich als Papierkorb eingeblendet. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
 

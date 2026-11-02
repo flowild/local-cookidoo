@@ -390,55 +390,64 @@ class AppTests(unittest.TestCase):
         service.database.calendar_queue_update(expired)
         self.assertEqual(self.client.post('/api/calendar/undo-removal', json={'move_id':'delete-1'}, headers=ORIGIN).status_code, 409)
 
-    def test_week_shopping_includes_shelf_and_excludes_queued_trash(self):
-        from datetime import datetime
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
-        entries = [NS(id='2026-01-08', recipes=[NS(id='shelved', is_custom=False), NS(id='deleted', is_custom=False)], customer_recipe_ids=[])]
-        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=entries), get_shopping_list_recipes=AsyncMock(return_value=[]), add_ingredient_items_for_recipes=AsyncMock(return_value=[]))
-        service = self.app.state.sync; service.client = client
-        base = {'week':'2026-01-05', 'source':'2026-01-08', 'custom':False, 'recipe':{'name':'Test'}}
-        self.client.post('/api/calendar/placement', json={**base, 'target':'shelf', 'recipe_id':'shelved', 'move_id':'one'}, headers=ORIGIN)
-        self.client.post('/api/calendar/placement', json={**base, 'target':'trash', 'recipe_id':'deleted', 'move_id':'two'}, headers=ORIGIN)
-        with patch('app.sync.datetime', FixedDateTime):
-            result = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json()['added'], 1)
-        client.add_ingredient_items_for_recipes.assert_awaited_once_with(['shelved'])
-
-    def test_week_shopping_uses_selected_week_future_days_queue_and_pantry(self):
+    def test_week_shopping_uses_queue_shelf_and_never_writes_to_cookidoo(self):
         from datetime import datetime
         class FixedDateTime(datetime):
             @classmethod
             def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
         def recipe(identifier): return NS(id=identifier, is_custom=False)
-        def day(value, ids, custom=()): return NS(id=value, recipes=[recipe(i) for i in ids], customer_recipe_ids=list(custom))
-        entries = [day('2026-01-05',['past']), day('2026-01-06',['moved']),
-                   day('2026-01-07',['today','duplicate']), day('2026-01-08',['move-out','duplicate'],['own']),
-                   day('2026-01-11',['sunday','existing']), day('2026-01-12',['next-week'])]
-        water = NS(id='water', name='Wasser', is_owned=False)
-        onion = NS(id='onion', name='Zwiebel', is_owned=False)
-        flour = NS(id='flour', name='Mehl', is_owned=False)
+        entries = [NS(id='2026-01-06', recipes=[recipe('past'), recipe('moved')], customer_recipe_ids=[]),
+                   NS(id='2026-01-07', recipes=[recipe('today')], customer_recipe_ids=[]),
+                   NS(id='2026-01-08', recipes=[recipe('removed')], customer_recipe_ids=['own'])]
+        service = self.app.state.sync
         client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=entries),
-                    get_shopping_list_recipes=AsyncMock(return_value=[NS(id='existing')]),
-                    add_ingredient_items_for_recipes=AsyncMock(return_value=[water,onion,flour]),
-                    add_ingredient_items_for_custom_recipes=AsyncMock(return_value=[]),
-                    edit_ingredient_items_ownership=AsyncMock(side_effect=lambda items: items))
-        service = self.app.state.sync; service.client = client
-        category = self.app.state.database.pantry()['categories'][0]['id']
-        self.app.state.database.save_pantry_item(category, 'Zwiebel', '')
-        self.app.state.database.set('calendar_move_queue', {'owner':service.week_collection_owner(), 'phase':'waiting', 'due':'2099-01-01T00:00:00+00:00', 'error':None,
+                    add_ingredient_items_for_recipes=AsyncMock())
+        service.client = client
+        service.database.set('calendar_move_queue', {'owner':service.week_collection_owner(), 'phase':'waiting', 'due':'2099-01-01T00:00:00+00:00', 'error':None,
             'items':[{'source':'2026-01-06','target':'2026-01-09','recipe_id':'moved','custom':False},
-                     {'source':'2026-01-08','target':'2026-01-05','recipe_id':'move-out','custom':False}]})
-        self.assertEqual(self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}).status_code, 403)
-        with patch('app.sync.datetime', FixedDateTime):
+                     {'week':'2026-01-05','source':'2026-01-08','target':'trash','recipe_id':'removed','custom':False}],
+            'shelves':{service.week_collection_owner():{'2026-01-05':[{'calendar_id':'shelf','custom':False}]}}})
+        async def details(_, identifier, custom, pantry):
+            return {'id': ('creation:' if custom else '') + identifier, 'name':identifier, 'ingredients':[]}
+        with patch('app.sync.datetime', FixedDateTime), patch('app.sync.remote_recipe_snapshot', side_effect=details):
             response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(response.json(), {'status':'ok','added':5,'existing':1,'marked':2})
-        client.add_ingredient_items_for_recipes.assert_awaited_once_with(['today','duplicate','moved','sunday'])
-        client.add_ingredient_items_for_custom_recipes.assert_awaited_once_with(['own'])
-        self.assertTrue(water.is_owned); self.assertTrue(onion.is_owned); self.assertFalse(flour.is_owned)
-        self.assertEqual({item.id for item in client.edit_ingredient_items_ownership.await_args.args[0]}, {'water','onion'})
+            again = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['added'], 4)
+        self.assertEqual(again.json()['added'], 0)
+        self.assertEqual({item['recipe_id'] for item in service.database.cart(service.week_collection_owner())}, {'today','moved','creation:own','shelf'})
+        client.add_ingredient_items_for_recipes.assert_not_awaited()
+        self.assertEqual(self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}).status_code, 403)
+
+    def test_week_shopping_does_not_change_cart_when_details_fail(self):
+        from datetime import datetime
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
+        service = self.app.state.sync
+        service.client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[
+            NS(id='2026-01-07', recipes=[NS(id='r1', is_custom=False), NS(id='r2', is_custom=False)], customer_recipe_ids=[])]))
+        with patch('app.sync.datetime', FixedDateTime), patch('app.sync.remote_recipe_snapshot', new=AsyncMock(side_effect=[{'id':'r1'}, RuntimeError('failed')])):
+            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(service.database.cart(service.week_collection_owner()), [])
+
+    def test_week_shopping_future_week_respects_week_boundaries(self):
+        from datetime import datetime
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
+        service = self.app.state.sync
+        service.client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[
+            NS(id='2026-01-12', recipes=[NS(id='monday', is_custom=False)], customer_recipe_ids=[]),
+            NS(id='2026-01-18', recipes=[NS(id='sunday', is_custom=False)], customer_recipe_ids=[]),
+            NS(id='2026-01-19', recipes=[NS(id='next', is_custom=False)], customer_recipe_ids=[])]))
+        async def details(_, identifier, custom, pantry):
+            return {'id':identifier, 'name':identifier, 'ingredients':[]}
+        with patch('app.sync.datetime', FixedDateTime), patch('app.sync.remote_recipe_snapshot', side_effect=details):
+            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-14'}, headers=ORIGIN)
+        self.assertEqual(response.json()['added'], 2)
+        self.assertEqual({item['recipe_id'] for item in service.database.cart(service.cart_owner())}, {'monday','sunday'})
 
     def test_week_shopping_past_week_and_uncertain_queue_do_not_write(self):
         from datetime import datetime
@@ -446,81 +455,14 @@ class AppTests(unittest.TestCase):
             @classmethod
             def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
         service = self.app.state.sync
-        client = NS(get_recipes_in_calendar_week=AsyncMock(), add_ingredient_items_for_recipes=AsyncMock())
-        service.client = client
+        service.client = NS(get_recipes_in_calendar_week=AsyncMock())
         with patch('app.sync.datetime', FixedDateTime):
             response = self.client.post('/api/calendar/shopping', json={'day':'2025-12-29'}, headers=ORIGIN)
-        self.assertEqual(response.json()['status'], 'empty')
-        client.get_recipes_in_calendar_week.assert_not_awaited()
-        service.database.set('calendar_move_queue', {'owner':service.week_collection_owner(),'phase':'error','items':[{'source':'2026-01-05','target':'2026-01-06','recipe_id':'r1','custom':False}],'due':None,'error':'unknown'})
-        with patch('app.sync.datetime', FixedDateTime):
+            self.assertEqual(response.json()['status'], 'empty')
+            service.client.get_recipes_in_calendar_week.assert_not_awaited()
+            service.database.set('calendar_move_queue', {'owner':service.week_collection_owner(),'phase':'error','items':[{'source':'2026-01-05','target':'2026-01-06','recipe_id':'r1','custom':False}],'due':None,'error':'unknown'})
             response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(response.status_code, 409)
-        client.add_ingredient_items_for_recipes.assert_not_awaited()
-
-    def test_week_shopping_future_week_includes_monday_but_not_following_week(self):
-        from datetime import datetime
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
-        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[
-                        NS(id='2026-01-12',recipes=[NS(id='monday',is_custom=False)],customer_recipe_ids=[]),
-                        NS(id='2026-01-18',recipes=[NS(id='sunday',is_custom=False)],customer_recipe_ids=[]),
-                        NS(id='2026-01-19',recipes=[NS(id='next',is_custom=False)],customer_recipe_ids=[])]),
-                    get_shopping_list_recipes=AsyncMock(return_value=[]),
-                    add_ingredient_items_for_recipes=AsyncMock(return_value=[]))
-        self.app.state.sync.client = client
-        with patch('app.sync.datetime', FixedDateTime):
-            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-14'}, headers=ORIGIN)
-        self.assertEqual(response.json()['added'], 2)
-        client.add_ingredient_items_for_recipes.assert_awaited_once_with(['monday','sunday'])
-
-    def test_week_shopping_reports_partial_failure_and_stops(self):
-        from datetime import datetime
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
-        item = NS(id='water', name='Wasser', is_owned=False)
-        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[NS(id='2026-01-07',recipes=[NS(id='r1',is_custom=False)],customer_recipe_ids=['own'])]),
-                    get_shopping_list_recipes=AsyncMock(return_value=[]), add_ingredient_items_for_recipes=AsyncMock(return_value=[item]),
-                    add_ingredient_items_for_custom_recipes=AsyncMock(), edit_ingredient_items_ownership=AsyncMock(side_effect=RuntimeError('failure')))
-        self.app.state.sync.client = client
-        with patch('app.sync.datetime', FixedDateTime):
-            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(response.json()['status'], 'partial')
-        self.assertEqual(response.json()['added'], 1)
-        client.add_ingredient_items_for_custom_recipes.assert_not_awaited()
-
-    def test_week_shopping_unconfirmed_add_does_not_continue_other_types(self):
-        from datetime import datetime
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
-        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[NS(id='2026-01-07',recipes=[NS(id='r1',is_custom=False)],customer_recipe_ids=['own'])]),
-                    get_shopping_list_recipes=AsyncMock(return_value=[]),
-                    add_ingredient_items_for_recipes=AsyncMock(side_effect=RuntimeError('uncertain')),
-                    add_ingredient_items_for_custom_recipes=AsyncMock())
-        self.app.state.sync.client = client
-        with patch('app.sync.datetime', FixedDateTime):
-            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(response.json()['status'], 'partial')
-        self.assertIn('prüfe', response.json()['message'])
-        client.add_ingredient_items_for_custom_recipes.assert_not_awaited()
-
-    def test_week_shopping_leaves_already_added_recipes_unchanged(self):
-        from datetime import datetime
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None): return cls(2026, 1, 7, 12, tzinfo=tz)
-        client = NS(get_recipes_in_calendar_week=AsyncMock(return_value=[NS(id='2026-01-07',recipes=[NS(id='r1',is_custom=False)],customer_recipe_ids=[])]),
-                    get_shopping_list_recipes=AsyncMock(return_value=[NS(id='r1')]),
-                    add_ingredient_items_for_recipes=AsyncMock(), edit_ingredient_items_ownership=AsyncMock())
-        self.app.state.sync.client = client
-        with patch('app.sync.datetime', FixedDateTime):
-            response = self.client.post('/api/calendar/shopping', json={'day':'2026-01-07'}, headers=ORIGIN)
-        self.assertEqual(response.json(), {'status':'ok','added':0,'existing':1,'marked':0})
-        client.add_ingredient_items_for_recipes.assert_not_awaited()
-        client.edit_ingredient_items_ownership.assert_not_awaited()
+            self.assertEqual(response.status_code, 409)
 
     def test_recipe_notes_create_update_delete_and_conflict(self):
         service = self.app.state.sync
@@ -1114,29 +1056,9 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         client.get_recipes_in_calendar_week.side_effect = None
         self.assertFalse((await self.service.recipe_action('r2', 'plan'))['verified'])
         self.assertEqual(client.add_custom_recipes_to_calendar.await_args.args[1], ['abc'])
-        result = await self.service.recipe_action('r1', 'shopping')
-        self.assertEqual(result, {'partial': False, 'marked': 2})
-        self.assertEqual([i.id for i in client.edit_ingredient_items_ownership.await_args.args[0]], ['a', 'b'])
-        self.assertFalse(items[2].is_owned)
-        await self.service.recipe_action('creation:abc', 'shopping')
-        client.add_ingredient_items_for_custom_recipes.assert_awaited_once_with(['abc'])
-
-    async def test_cookidoo_shopping_partial_failure_and_busy_state(self):
-        item = NS(id='a', name='Wasser', is_owned=False)
-        self.service.client = NS(add_ingredient_items_for_recipes=AsyncMock(return_value=[item]),
-                                 edit_ingredient_items_ownership=AsyncMock(side_effect=RuntimeError('failure')))
-        self.assertEqual(await self.service.recipe_action('r1', 'shopping'), {'partial': True})
-        self.service.state['running'] = True
         with self.assertRaises(ValueError):
             await self.service.recipe_action('r1', 'shopping')
-        self.service.client.add_ingredient_items_for_recipes.assert_awaited_once()
-
-    async def test_single_recipe_shopping_reports_unconfirmed_pantry_marking(self):
-        ingredient = NS(id='water', name='Wasser', is_owned=False)
-        self.service.client = NS(add_ingredient_items_for_recipes=AsyncMock(return_value=[ingredient]),
-                                 edit_ingredient_items_ownership=AsyncMock(return_value=[]))
-        result = await self.service.recipe_action('r1', 'shopping')
-        self.assertEqual(result, {'partial': True})
+        client.add_ingredient_items_for_recipes.assert_not_awaited()
 
     async def test_all_pages_saved_and_recipe_details_deduplicated(self):
         calls = []
@@ -1438,6 +1360,20 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.vault.read()['auth']['access_token'], 'fixture-access-token')
         self.assertNotIn(b'fixture-access-token', self.vault.path.read_bytes())
         self.assertNotIn(b'not-a-real-password', self.vault.path.read_bytes())
+
+    async def test_first_connection_adopts_unassigned_cart_but_account_change_does_not(self):
+        class Fake:
+            def __init__(self, session, cfg, on_auth_data_update): pass
+            async def login(self): pass
+        unassigned = self.service.cart_owner()
+        self.db.cart_add(unassigned, 'additional', {'name':'Milch', 'owned':False})
+        with patch('app.sync.Cookidoo', Fake):
+            await self.service.connect('first@example.invalid', 'test-password', 'de')
+            first = self.service.cart_owner()
+            self.assertEqual(len(self.db.cart(first)), 1)
+            await self.service.connect('second@example.invalid', 'test-password', 'de')
+            self.assertEqual(self.db.cart(self.service.cart_owner()), [])
+            self.assertEqual(len(self.db.cart(first)), 1)
 
 
 if __name__ == '__main__':

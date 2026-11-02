@@ -43,7 +43,8 @@ Daten, Zertifikatsartefakte und Testergebnisse aus.
 
 Backendtests in einer isolierten Quellkopie mit temporären Daten ausführen:
 `/opt/cookidoo-manager/.venv/bin/python -m unittest discover -s tests -v`.
-Zuletzt bestanden 39 Tests. Produktive Datenbanken niemals mit Testrezepten oder
+Beim Einkaufswagen-Deployment am 02.11.2026 bestanden 92 Tests in einer isolierten
+Quellkopie. Produktive Datenbanken niemals mit Testrezepten oder
 Testkonten befüllen. `tests/browser_check.py` erwartet eine getrennte Testinstanz
 auf Loopback-Port 8901 und einen SSH-Tunnel. Die historische `.qa-venv` verweist
 in der aktuellen Windows-Umgebung auf einen nicht mehr vorhandenen Interpreter.
@@ -60,3 +61,5 @@ Projekthinweisen aktuell halten.
 - Browser dürfen erfolgreiche Bildantworten einen Tag privat zwischenspeichern. `images/thumbnails` enthält regenerierbare 480-Pixel-Vorschauen; der Service Worker speichert weiterhin keine persönlichen API-Antworten.
 
 - Das Deployment-Archiv enthält ausschließlich explizit erlaubte Quelldateien aus App, Tests, Skripten und Deployment; lokale Konfiguration, Daten und verborgene Dateien bleiben ausgeschlossen.
+
+- Beim Einkaufswagen-Deployment wurden der bisherige Quellstand und eine konsistente SQLite-Sicherung vor dem Neustart unter `/var/backups/cookidoo-manager` abgelegt. Die neue Einkaufswagen-API, HTTPS, Service Worker sowie Desktop- und Handyansicht wurden lesend geprüft.

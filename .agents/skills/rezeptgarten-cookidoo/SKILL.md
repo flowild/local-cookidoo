@@ -30,11 +30,10 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   Interne IDs eigener Kreationen beginnen mit `creation:`; für Cookidoo den Präfix
   entfernen und die Methoden für eigene Kreationen verwenden.
 - „Heute kochen“ schreibt das ausgewählte Rezept für das heutige Datum in Berlin in
-  den Cookidoo-Kalender und liest zur Bestätigung den Kalender erneut. „Zur
-  Einkaufsliste hinzufügen“ überträgt das Rezept und markiert anhand des lokalen
-  Vorrats erkannte Zutaten als vorhanden. Fehler nach erfolgreichem Hinzufügen
-  müssen als Teilerfolg erkennbar sein. Es gibt keine allgemeine bidirektionale
-  Synchronisierung und derzeit keine eigene Einkaufslistenansicht.
+  den Cookidoo-Kalender und liest zur Bestätigung den Kalender erneut. Rezepte und
+  Zusatzartikel werden zunächst lokal im kontobezogenen Einkaufswagen gesammelt.
+  Erst ein ausdrücklicher Knopfdruck überträgt sie nach Cookidoo. Es gibt keine
+  allgemeine bidirektionale Synchronisierung.
 - Kalender und Einkaufsliste nur im Rahmen der Nutzeranweisung beschreiben; Tests
   verwenden isolierte Daten und Mocks. Die Darstellung in der Cookidoo-App kann eine
   Aktualisierung erfordern. Den echten Import nicht nur mit leeren Fakes beurteilen.
@@ -55,7 +54,7 @@ Bei relevanten Änderungen diesen Skill und die Projekthinweise aktuell halten.
 
 - Die serverseitige Wochenwarteschlange ist kontobezogen und übersteht Neustarts. Ein unterbrochener oder unbestätigter Schreibvorgang wird nicht automatisch wiederholt; der Nutzer muss Cookidoo prüfen und die verbleibenden Vormerkungen ausdrücklich verwerfen.
 
-- Der Wocheneinkauf ermittelt unter dem gemeinsamen Client-Lock nur Rezepte ab heute bis Sonntag der ausgewählten Woche, einschließlich serverseitig vorgemerkter Verschiebungen. Bereits auf der Einkaufsliste befindliche Rezepte werden nicht erneut hinzugefügt. Vorratszutaten werden als vorhanden markiert und die Markierung bestätigt; Teilerfolge und unklare Schreibvorgänge müssen angezeigt werden.
+- Der Wocheneinkauf ermittelt unter dem gemeinsamen Client-Lock Rezepte ab heute bis Sonntag der ausgewählten Woche, einschließlich serverseitig vorgemerkter Verschiebungen und der Wochenablage, und speichert Schnappschüsse lokal. Erst der separate Transfer schreibt nach Cookidoo; bereits dort vorhandene Rezepte bleiben unverändert. Bestätigte lokale Zutatenmarkierungen werden übertragen und geprüft. Teilerfolge und unklare Schreibvorgänge bleiben dauerhaft sichtbar und werden nicht blind wiederholt.
 
 - Die taglose Wochenablage wird lokal und kontobezogen gespeichert, da sie keinem Cookidoo-Kalendertag entspricht. Hinzufügen und Entfernen aus Cookidoo erfolgen über die bestehende fünfminütige Warteschlange; auch diese Änderungen werden bestätigt und unklare Ergebnisse nicht blind wiederholt.
 
@@ -63,4 +62,4 @@ Bei relevanten Änderungen diesen Skill und die Projekthinweise aktuell halten.
 
 - Rückgängig entfernt eine vorgemerkte Kalenderlöschung atomar aus der Warteschlange oder stellt ein Rezept in der Ablage wieder her. Bei manuellem Synchronisieren bleibt das Rückgängig-Zeitfenster geschützt; bereits laufende oder unbestätigte Vorgänge werden nicht blind zurückgesetzt.
 
-- Vormerkungen eines anderen Kontos können nicht verworfen werden. Vorratsmarkierungen werden sowohl beim Einzelrezept als auch beim Wocheneinkauf anhand der Cookidoo-Antwort bestätigt.
+- Vormerkungen eines anderen Kontos können nicht verworfen werden. Zutatenmarkierungen im Einkaufswagen werden beim ausdrücklichen Transfer anhand der Cookidoo-Antwort bestätigt.
