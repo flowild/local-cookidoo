@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -67,6 +67,15 @@ class CalendarMove(BaseModel):
 
 class CalendarWeekSelection(BaseModel):
     day: date
+
+
+class WeekPlaceholderPlacement(BaseModel):
+    week: date
+    placeholder: Literal['restaurant', 'fastfood', 'sushi', 'pasta', 'abendbrot', 'resteessen']
+    present: bool
+    target: str = Field(default='shelf', max_length=10)
+    instance_id: str | None = Field(default=None, min_length=1, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
+    create: bool = False
 
 
 class CalendarUndo(BaseModel):
@@ -181,12 +190,29 @@ def create_app(directory=None, secure_cookies=None):
     @app.get('/api/calendar/week')
     async def calendar_week(day: date | None = None):
         try:
-            return await service.calendar_week(day)
+            result = await service.calendar_week(day)
+            placements = database.week_placeholder_shelf(service.week_collection_owner(), result['days'][0]['date'])
+            result['placeholders'] = [item['placeholder'] for item in placements if item['target'] == 'shelf']
+            result['placeholder_placements'] = placements
+            return result
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         except Exception as error:
             logging.getLogger(__name__).warning('Cookidoo calendar read failed: %s', type(error).__name__)
             raise HTTPException(502, 'Deine Woche konnte nicht von Cookidoo geladen werden. Bitte versuche es erneut.') from None
+
+    @app.put('/api/calendar/placeholders')
+    def update_week_placeholder(payload: WeekPlaceholderPlacement):
+        if payload.week.weekday() != 0:
+            raise HTTPException(400, 'Bitte wähle eine gültige Kalenderwoche.')
+        if payload.target != 'shelf' and payload.target not in {(payload.week + timedelta(days=i)).isoformat() for i in range(7)}:
+            raise HTTPException(400, 'Bitte wähle einen Tag dieser Woche.')
+        owner = service.week_collection_owner()
+        changed = database.set_week_placeholder_shelf(owner, payload.week.isoformat(), payload.placeholder, payload.present, payload.target, payload.instance_id, payload.create)
+        if not changed and payload.instance_id:
+            raise HTTPException(404, 'Dieser Platzhalter wurde nicht gefunden. Bitte lade die Woche neu.')
+        placements = database.week_placeholder_shelf(owner, payload.week.isoformat())
+        return {'items': [item['placeholder'] for item in placements if item['target'] == 'shelf'], 'placements': placements}
 
     @app.get('/api/calendar/badges')
     async def calendar_badges(recipe_id: list[str] = Query(default=[]), notes_only: bool = False):

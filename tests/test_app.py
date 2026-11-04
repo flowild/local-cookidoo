@@ -3,6 +3,7 @@ import dataclasses
 import hashlib
 import io
 import json
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -66,6 +67,59 @@ class AppTests(unittest.TestCase):
         self.assertFalse((Path(self.tmp.name) / 'setup-code').exists())
         self.assertEqual(self.client.post('/api/settings', json={'sync_hours': 1}, headers={'Origin': 'https://evil.example'}).status_code, 403)
         self.assertEqual(self.client.post('/api/settings', json={'sync_hours': 1}, headers=ORIGIN).status_code, 200)
+
+    def test_week_placeholders_are_scoped_and_do_not_enter_calendar_queue(self):
+        db = self.app.state.database
+        payload = {'week': '2026-01-05', 'placeholder': 'sushi', 'present': True}
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json=payload).status_code, 403)
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json=payload, headers=ORIGIN).json()['items'], ['sushi'])
+        moved = self.client.put('/api/calendar/placeholders', json={**payload, 'target':'2026-01-07'}, headers=ORIGIN).json()
+        self.assertEqual(moved['items'], [])
+        self.assertEqual([(item['placeholder'], item['target']) for item in moved['placements']], [('sushi', '2026-01-07')])
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**payload, 'target':'2026-01-12'}, headers=ORIGIN).status_code, 400)
+        self.assertEqual(db.week_placeholder_shelf(self.app.state.sync.week_collection_owner(), '2026-01-05')[0]['target'], '2026-01-07')
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json=payload, headers=ORIGIN).json()['items'], ['sushi'])
+        other_week = {**payload, 'week': '2026-01-12', 'placeholder': 'abendbrot'}
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json=other_week, headers=ORIGIN).json()['items'], ['abendbrot'])
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**payload, 'week':'2026-01-06'}, headers=ORIGIN).status_code, 400)
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**payload, 'placeholder':'invalid'}, headers=ORIGIN).status_code, 422)
+        leftovers = self.client.put('/api/calendar/placeholders', json={**payload, 'placeholder':'resteessen', 'target':'2026-01-06'}, headers=ORIGIN)
+        self.assertEqual(leftovers.status_code, 200)
+        self.assertIn(('resteessen', '2026-01-06'), [(item['placeholder'], item['target']) for item in leftovers.json()['placements']])
+        self.assertFalse((db.get('calendar_move_queue') or {}).get('items'))
+        db.set('account', {'email':'another@example.test', 'region':'de'})
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**payload, 'present':False}, headers=ORIGIN).json()['items'], [])
+        db.set('account', None)
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**payload, 'present':False}, headers=ORIGIN).json()['items'], [])
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**other_week, 'present':True}, headers=ORIGIN).json()['items'], ['abendbrot'])
+
+    def test_existing_placeholder_shelf_is_migrated_without_losing_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = sqlite3.connect(str(Path(directory) / 'library.sqlite3'))
+            with db:
+                db.execute('CREATE TABLE week_placeholder_shelf (owner TEXT NOT NULL, week TEXT NOT NULL, placeholder TEXT NOT NULL, PRIMARY KEY(owner, week, placeholder))')
+                db.execute("INSERT INTO week_placeholder_shelf VALUES ('owner', '2026-01-05', 'sushi')")
+            db.close()
+            database = Database(directory)
+            rows = database.week_placeholder_shelf('owner', '2026-01-05')
+            self.assertEqual([(row['placeholder'], row['target']) for row in rows], [('sushi', 'shelf')])
+            self.assertTrue(rows[0]['id'])
+
+    def test_week_placeholders_allow_multiple_independent_instances(self):
+        base = {'week':'2026-01-05', 'placeholder':'sushi', 'present':True, 'target':'shelf'}
+        first = {**base, 'instance_id':'first', 'create':True}
+        second = {**base, 'instance_id':'second', 'create':True}
+        self.client.put('/api/calendar/placeholders', json=first, headers=ORIGIN)
+        self.client.put('/api/calendar/placeholders', json=first, headers=ORIGIN)
+        result = self.client.put('/api/calendar/placeholders', json=second, headers=ORIGIN).json()
+        self.assertEqual([item['id'] for item in result['placements']], ['first', 'second'])
+        result = self.client.put('/api/calendar/placeholders', json={**first, 'create':False, 'target':'2026-01-06'}, headers=ORIGIN).json()
+        self.assertEqual([(item['id'], item['target']) for item in result['placements']], [('first','2026-01-06'), ('second','shelf')])
+        result = self.client.put('/api/calendar/placeholders', json={**first, 'create':False}, headers=ORIGIN).json()
+        self.assertEqual([item['target'] for item in result['placements']], ['shelf', 'shelf'])
+        result = self.client.put('/api/calendar/placeholders', json={**first, 'create':False, 'present':False}, headers=ORIGIN).json()
+        self.assertEqual([item['id'] for item in result['placements']], ['second'])
+        self.assertEqual(self.client.put('/api/calendar/placeholders', json={**first, 'create':False, 'target':'2026-01-07'}, headers=ORIGIN).status_code, 404)
 
     def test_calendar_week_reads_cookidoo_and_fills_empty_days(self):
         from datetime import datetime, timedelta

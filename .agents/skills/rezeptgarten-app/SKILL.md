@@ -73,7 +73,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort frei; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
 
-- Unter der Wochenablage sind lokale Listen aufklappbar; ihre Rezepte lassen sich per Plus in der Ablage der angezeigten Woche speichern.
+- Unter der Wochenablage sind lokale Listen aufklappbar; ihre Rezepte lassen sich per Plus in der Ablage der angezeigten Woche speichern. Ein zusätzlicher Ablageknopf erscheint dort nicht.
 
 - Beim Entfernen aus der Wochenplanung oder Ablage bietet ein schwebender Hinweis fünf Sekunden lang Rückgängig an. Der Vorratsabgleich erkennt Stärke und Speisestärke als gleichwertig.
 
@@ -102,3 +102,5 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 - Lokale Rezeptlisten und Vorratskategorien können nach ausdrücklicher Bestätigung gelöscht werden. Beim Löschen einer Vorratskategorie werden deren Vorratseinträge mit gelöscht; bei lokalen Listen entfallen nur die Listenzuordnungen.
 
 - Spaghetti, Nudeln und Pasta gelten beim Zutaten- und Vorratsabgleich als gleichwertig; gespeicherte Einkaufswagenzutaten werden bei der Anzeige anhand der aktuellen Regeln gruppiert.
+
+Unter der Wochenablage stehen sechs feste Platzhalter einschließlich „Resteessen“ in einer einklappbaren Liste über den lokalen Listen. Über das Plus kommen sie auch mehrfach in die kontobezogene Ablage der angezeigten Woche und können dort einzeln entfernt werden. Ein X verschiebt Tagesplatzhalter zurück in die Ablage. Platzhalter können mit der Maus aus Liste und Ablage auf Wochentage und zwischen Tagen gezogen werden. Ihre Position wird kontobezogen und wochenweise gespeichert. Sie bleiben lokal und gelangen weder in Cookidoo noch in den Einkaufswagen.

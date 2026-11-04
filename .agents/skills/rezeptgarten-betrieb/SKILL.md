@@ -20,6 +20,9 @@ verschlüsselte Sitzung enthalten. Die vorbereitete Backupablage ist
 
 ## Zugang und Deployment
 
+App-Änderungen nach der Prüfung grundsätzlich auf die bestehende Instanz übertragen
+und die Bereitstellung prüfen, sofern der Nutzer nichts anderes vorgibt.
+
 Proxmox-Token sind für Routinearbeiten nicht nötig. SSH aus der Projektwurzel:
 
 ```powershell

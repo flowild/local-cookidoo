@@ -27,6 +27,12 @@ Antworten oder Git aufnehmen; keine privaten CA-Schlüssel vom Server kopieren.
 Produktive Daten und Konten erhalten und Tests mit isolierten Daten ausführen.
 Zugangsdaten nur an die eingerichtete und autorisierte Cookidoo-Zieladresse senden.
 
+## Deployment
+
+Änderungen an der App nach der Prüfung auf die bestehende Serverinstanz übertragen
+und dort ihre Bereitstellung prüfen. Den Projektskill rezeptgarten-betrieb beachten;
+Produktivdaten und Konten erhalten.
+
 ## Aktuell halten
 
 Bei relevanten Änderungen an Funktionen, Betrieb, Sicherheit, Tests oder Deployment
@@ -100,7 +106,7 @@ Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort zum
 Abgleich frei; der Kalenderabgleich folgt nach der laufenden Sammlungssynchronisierung.
 Fehlerhafte oder unklare Warteschlangeneinträge werden dabei nicht erneut ausgeführt.
 Unter der Wochenablage zeigen aufklappbare lokale Listen ihre Rezepte. Das Plus
-speichert ein ausgewähltes Listenrezept in der Ablage der angezeigten Woche.
+speichert ein ausgewähltes Listenrezept in der Ablage der angezeigten Woche; ein zusätzlicher Ablageknopf erscheint dort nicht.
 Nach dem Entfernen aus der Woche kann der Nutzer die Änderung fünf Sekunden lang
 rückgängig machen; ein Kreis zeigt die verbleibende Zeit. Vorgemerkte Cookidoo-
 Löschungen müssen beim Rückgängigmachen sicher entfallen.
@@ -110,6 +116,16 @@ Vanilleprodukte und Spaghettikürbis bleiben getrennt.
 Fehlgeschlagene Wochenabfragen dürfen keine Einträge in einer zuvor angezeigten
 Woche verändern. Vorgemerkte Änderungen eines anderen Kontos dürfen nicht verworfen
 werden. Vorratsmarkierungen auf der Einkaufsliste müssen bestätigt werden.
+
+Unter der Wochenablage stehen die festen Platzhalter „Im Restaurant essen“,
+„Fastfood“, „Sushi“, „Pasta mit Pesto“, „Abendbrot“ und „Resteessen“ in einer
+einklappbaren Liste über den lokalen Listen. Das Plus legt sie auch mehrfach
+kontobezogen in der Ablage der angezeigten Woche ab; dort lassen sie sich einzeln
+entfernen. Ein X verschiebt Tagesplatzhalter zurück in die Ablage. Platzhalter lassen
+sich mit der Maus aus der Liste oder Ablage auf Wochentage und zwischen Tagen ziehen.
+Die Position wird kontobezogen und wochenweise lokal gespeichert. Die Einträge
+enthalten keine Zutaten und werden nicht nach Cookidoo übertragen oder in den
+Einkaufswagen übernommen.
 
 ## Mein Einkaufswagen
 

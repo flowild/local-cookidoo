@@ -65,6 +65,10 @@ class Database:
                     created_at TEXT NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS cart_unique_recipe ON cart_entries(owner,recipe_id) WHERE kind='recipe';
+                CREATE TABLE IF NOT EXISTS week_placeholder_shelf (
+                    owner TEXT NOT NULL, week TEXT NOT NULL, placeholder TEXT NOT NULL,
+                    PRIMARY KEY(owner, week, placeholder)
+                );
             ''')
             if not db.execute('SELECT 1 FROM pantry_categories LIMIT 1').fetchone() and not db.execute("SELECT 1 FROM settings WHERE key='pantry_initialized'").fetchone():
                 db.executemany('INSERT INTO pantry_categories(name,position) VALUES(?,?)', [(name, index) for index, name in enumerate(('Gewürze', 'Gemüse', 'Obst', 'Fleisch', 'Fisch', 'Soßen', 'Öle und Fette', 'Milchprodukte', 'Vorräte und Konserven', 'Backzutaten', 'Getränke', 'Sonstiges'))])
@@ -76,6 +80,14 @@ class Database:
                 db.execute('ALTER TABLE recipes ADD COLUMN tips_json TEXT')
             if 'origin_recipe_id' not in columns:
                 db.execute('ALTER TABLE recipes ADD COLUMN origin_recipe_id TEXT')
+            placeholder_columns = {row['name'] for row in db.execute('PRAGMA table_info(week_placeholder_shelf)')}
+            if 'target' not in placeholder_columns:
+                db.execute("ALTER TABLE week_placeholder_shelf ADD COLUMN target TEXT NOT NULL DEFAULT 'shelf'")
+            if 'id' not in placeholder_columns:
+                db.execute('CREATE TABLE week_placeholder_shelf_new (id TEXT PRIMARY KEY, owner TEXT NOT NULL, week TEXT NOT NULL, placeholder TEXT NOT NULL, target TEXT NOT NULL)')
+                db.execute('INSERT INTO week_placeholder_shelf_new(id,owner,week,placeholder,target) SELECT lower(hex(randomblob(16))),owner,week,placeholder,target FROM week_placeholder_shelf ORDER BY rowid')
+                db.execute('DROP TABLE week_placeholder_shelf')
+                db.execute('ALTER TABLE week_placeholder_shelf_new RENAME TO week_placeholder_shelf')
             pantry_columns = {row['name'] for row in db.execute('PRAGMA table_info(pantry_items)')}
             if 'ingredient_id' not in pantry_columns:
                 db.execute('ALTER TABLE pantry_items ADD COLUMN ingredient_id INTEGER REFERENCES ingredient_catalog(id)')
@@ -111,6 +123,25 @@ class Database:
             categories = [dict(row) for row in db.execute('SELECT id,name FROM pantry_categories ORDER BY position,id')]
             items = [dict(row) for row in db.execute('SELECT id,category_id,name,quantity,ingredient_id FROM pantry_items ORDER BY casefold(name),id')]
         return {'categories': categories, 'items': items}
+
+    def week_placeholder_shelf(self, owner, week):
+        with self.connect() as db:
+            return [dict(row) for row in db.execute('SELECT id,placeholder,target FROM week_placeholder_shelf WHERE owner=? AND week=? ORDER BY rowid', (owner, week))]
+
+    def set_week_placeholder_shelf(self, owner, week, placeholder, present, target='shelf', identifier=None, create=False):
+        with self.connect() as db:
+            if identifier is None:
+                row = db.execute('SELECT id FROM week_placeholder_shelf WHERE owner=? AND week=? AND placeholder=? ORDER BY rowid LIMIT 1', (owner, week, placeholder)).fetchone()
+                identifier = row['id'] if row else uuid.uuid4().hex
+                create = row is None
+            if present:
+                if create:
+                    db.execute('INSERT OR IGNORE INTO week_placeholder_shelf(id,owner,week,placeholder,target) VALUES(?,?,?,?,?)', (identifier, owner, week, placeholder, target))
+                    return bool(db.execute('SELECT 1 FROM week_placeholder_shelf WHERE id=? AND owner=? AND week=? AND placeholder=?', (identifier, owner, week, placeholder)).fetchone())
+                else:
+                    return bool(db.execute('UPDATE week_placeholder_shelf SET target=? WHERE id=? AND owner=? AND week=? AND placeholder=?', (target, identifier, owner, week, placeholder)).rowcount)
+            else:
+                return bool(db.execute('DELETE FROM week_placeholder_shelf WHERE id=? AND owner=? AND week=? AND placeholder=?', (identifier, owner, week, placeholder)).rowcount)
 
     def cart(self, owner):
         with self.connect() as db:
@@ -528,4 +559,5 @@ class Database:
             catalog = [dict(row) for row in db.execute('SELECT id,name,name_key FROM ingredient_catalog')]
             recipe_ingredients = [dict(row) for row in db.execute('SELECT recipe_id,position,ingredient_id,original_json FROM recipe_ingredients')]
             cart = [dict(row) for row in db.execute('SELECT * FROM cart_entries ORDER BY created_at,id')]
-        return {'format': 'rezeptgarten-v1', 'exported_at': now(), 'collections': self.collections(), 'recipes': recipes, 'members': members, 'pantry': self.pantry(), 'ingredient_catalog': catalog, 'recipe_ingredients': recipe_ingredients, 'cart': cart}
+            placeholders = [dict(row) for row in db.execute('SELECT id,owner,week,placeholder,target FROM week_placeholder_shelf ORDER BY rowid')]
+        return {'format': 'rezeptgarten-v1', 'exported_at': now(), 'collections': self.collections(), 'recipes': recipes, 'members': members, 'pantry': self.pantry(), 'ingredient_catalog': catalog, 'recipe_ingredients': recipe_ingredients, 'cart': cart, 'week_placeholder_shelf': placeholders}
