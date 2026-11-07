@@ -2,13 +2,15 @@
 const $ = selector => document.querySelector(selector);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
-const photo = (file, alt = '', eager = false) => file ? `<img data-recipe-image src="/api/images/${encodeURIComponent(file)}${eager ? '' : '?size=thumb'}" alt="${escapeHTML(alt)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="image-placeholder" aria-label="Kein Rezeptbild verfügbar">${icon('bowl')}</span>`;
+const photo = (file, alt = '', eager = false) => file ? `<img data-recipe-image draggable="false" src="/api/images/${encodeURIComponent(file)}${eager ? '' : '?size=thumb'}" alt="${escapeHTML(alt)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="image-placeholder" aria-label="Kein Rezeptbild verfügbar">${icon('bowl')}</span>`;
 const state = {status:null, collections:[], recipes:[], total:0, offset:0, view:'uebersicht', collection:null, query:'', sort:'name', filters:{ingredient:'',minServings:'',maxMinutes:''}, request:0, candidateQuery:'', candidateOffset:0, candidateRequest:0, pantry:{categories:[],items:[]}, pantryFilter:'', pantryEdit:null};
 let deferredInstall = null, toastTimer, searchTimer, candidateTimer, polling = false;
 let suggestionTimer, suggestionRequest = 0, selectedIngredient = null, suggestionItems = [], suggestionIndex = -1;
 let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredientMatches = [], recipeIngredientIndex = -1;
 let featuredLocalDay = null;
 let weekOffset = 0;
+let weekVisibleDay = 0;
+try { const saved = localStorage.getItem('rezeptgarten-week-visible-day'); if (saved !== null && /^[0-6]$/.test(saved)) weekVisibleDay = Number(saved); } catch (_) {}
 let displayedWeek = null, weekMoves = [], weekSaving = false;
 let weekListRecipes = new Map(), weekOpenLists = new Set();
 let weekQueueWriting = false, weekQueueError = '', weekQueueSignature = '', weekQueueRefreshPending = false, weekShoppingBusy = false;
@@ -300,19 +302,20 @@ function weekPreviewAction(recipe, source) {
   return `<button class="preview-week-add week-preview-action" type="button" data-week-preview-action aria-label="${escapeHTML(recipe.name)} ${label}" title="${shelf ? 'Aus Woche entfernen' : 'In die Ablage verschieben'}" ${weekSaving || weekQueueWriting || weekQueueError || weekShoppingBusy || previewShelfBusy ? 'disabled' : ''}>${icon(shelf ? 'trash' : 'close')}</button>`;
 }
 const weekPlaceholderItems = [{id:'restaurant', name:'Im Restaurant essen', symbol:'🍴'}, {id:'fastfood', name:'Fastfood', symbol:'🍔'}, {id:'sushi', name:'Sushi', symbol:'🍣'}, {id:'pasta', name:'Pasta mit Pesto', symbol:'🍝'}, {id:'abendbrot', name:'Abendbrot', symbol:'🍞'}, {id:'resteessen', name:'Resteessen', symbol:'🍲'}];
+const weekNativeDrag = () => matchMedia('(pointer:coarse)').matches ? 'false' : 'true';
 let weekPlaceholderBusy = false;
 function renderWeekPlaceholder(placement, source, week) {
   const item = weekPlaceholderItems.find(entry => entry.id === placement.placeholder);
   if (!item) return '';
   const shelf = source === 'shelf';
   const action = shelf ? 'aus der Woche entfernen' : 'in die Wochenablage verschieben';
-  return `<li class="week-placeholder-card" draggable="true" data-placeholder-drag="${item.id}" data-placeholder-instance="${escapeHTML(placement.id)}" data-placeholder-source="${source}"><div class="week-placeholder-open"><span class="week-placeholder-card-icon placeholder-art-${item.id}" aria-hidden="true"><span></span></span><span class="week-recipe-info"><span class="week-recipe-name">${item.name}</span><span class="week-recipe-difficulty" aria-hidden="true">&nbsp;</span></span></div><button class="preview-week-add" type="button" data-week-placeholder-action="${item.id}" aria-label="${item.name} ${action}" title="${shelf ? 'Aus Woche entfernen' : 'In die Ablage verschieben'}">${icon(shelf ? 'trash' : 'close')}</button></li>`;
+  return `<li class="week-placeholder-card" draggable="${weekNativeDrag()}" data-placeholder-drag="${item.id}" data-placeholder-instance="${escapeHTML(placement.id)}" data-placeholder-source="${source}"><div class="week-placeholder-open"><span class="week-placeholder-card-icon placeholder-art-${item.id}" aria-hidden="true"><span></span></span><span class="week-recipe-info"><span class="week-recipe-name">${item.name}</span><span class="week-recipe-difficulty" aria-hidden="true">&nbsp;</span></span></div><button class="preview-week-add" type="button" data-week-placeholder-action="${item.id}" aria-label="${item.name} ${action}" title="${shelf ? 'Aus Woche entfernen' : 'In die Ablage verschieben'}">${icon(shelf ? 'trash' : 'close')}</button></li>`;
 }
 function weekDays(week, unavailable = false) {
   const format = new Intl.DateTimeFormat('de-DE', {weekday:'long', day:'numeric', month:'long', timeZone:'UTC'});
   const short = new Intl.DateTimeFormat('de-DE', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
   const narrow = new Intl.DateTimeFormat('de-DE', {weekday:'narrow', day:'numeric', month:'numeric', timeZone:'UTC'});
-  const renderRecipe = (recipe, source) => `<li class="week-preview" data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" draggable="true" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-info"><span class="week-recipe-name">${escapeHTML(recipe.name)}</span><span class="week-recipe-difficulty">${escapeHTML(difficultyLabel(recipe.difficulty))}</span></span></button>${weekPreviewAction(recipe, source)}</li>`;
+  const renderRecipe = (recipe, source) => `<li class="week-preview" data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" draggable="${weekNativeDrag()}" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-info"><span class="week-recipe-name">${escapeHTML(recipe.name)}</span><span class="week-recipe-difficulty">${escapeHTML(difficultyLabel(recipe.difficulty))}</span></span></button>${weekPreviewAction(recipe, source)}</li>`;
   return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span></h2>${day.recipes.length || week.placeholder_placements?.some(item => item.target === day.date) ? `<ul>${day.recipes.map(recipe => renderRecipe(recipe, day.date)).join('')}${(week.placeholder_placements || []).filter(item => item.target === day.date).map(item => renderWeekPlaceholder(item, day.date, week)).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div><section class="week-shelf" data-week-day="shelf"><h2>Ablage für diese Woche</h2>${week.shelf?.length || week.placeholders?.length ? `<ul>${(week.shelf || []).map(recipe => renderRecipe(recipe, 'shelf')).join('')}${(week.placeholder_placements || []).filter(item => item.target === 'shelf').map(item => renderWeekPlaceholder(item, 'shelf', week)).join('')}</ul>` : '<p>Rezepte hier ablegen, wenn der Tag noch offen ist.</p>'}</section>`;
 }
 function weekToolbar(message, error = false) {
@@ -342,20 +345,43 @@ function applyWeekMoves(week) {
     if (recipe && to && !to.recipes.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) to.recipes.push(recipe);
   }
 }
+function restoreWeekPosition() {
+  const scroll = $('.week-scroll');
+  if (!scroll || !matchMedia('(max-width:700px)').matches) return;
+  const day = scroll.querySelectorAll('.week-day')[weekVisibleDay];
+  if (day) scroll.scrollLeft += day.getBoundingClientRect().left + day.offsetWidth / 2 - (scroll.getBoundingClientRect().left + scroll.clientWidth / 2);
+}
+document.addEventListener('scroll', event => {
+  const scroll = event.target;
+  if (!scroll.matches?.('.week-scroll') || !matchMedia('(max-width:700px)').matches) return;
+  const center = scroll.getBoundingClientRect().left + scroll.clientWidth / 2;
+  const days = [...scroll.querySelectorAll('.week-day')];
+  if (!days.length) return;
+  const index = days.reduce((best, day, i) => {
+    const rect = day.getBoundingClientRect(), previous = days[best].getBoundingClientRect();
+    return Math.abs(rect.left + rect.width / 2 - center) < Math.abs(previous.left + previous.width / 2 - center) ? i : best;
+  }, 0);
+  if (index === weekVisibleDay) return;
+  weekVisibleDay = index;
+  try { localStorage.setItem('rezeptgarten-week-visible-day', String(index)); } catch (_) {}
+}, true);
 function showWeek() {
   if (state.view !== 'meine-woche' || !$('#week-content') || !displayedWeek) return;
+  clearWeekSwipeSelection();
   const scroll = $('.week-scroll')?.scrollLeft || 0;
   const message = weekQueueError || (weekShoppingBusy ? 'Rezepte werden zur Einkaufsliste hinzugefügt …' : weekSaving ? 'Änderungen werden mit Cookidoo abgeglichen …' : weekMoves.length ? 'Änderungen vorgemerkt · Abgleich fünf Minuten nach der letzten Änderung.' : '');
   $('#week-heading-toolbar').innerHTML = weekToolbar(message);
   $('#week-content').innerHTML = weekDays(displayedWeek);
-  $('.week-scroll').scrollLeft = scroll;
+  $('#week-content').insertAdjacentHTML('afterbegin', '<p class="week-swipe-hint">Kachel halten und wischen: Tag ↑ entfernen · ↓ Ablage. Ablage ↑ zum angezeigten Tag · ↓ entfernen. Tippen beendet die Auswahl.</p>');
+  if (matchMedia('(max-width:700px)').matches) restoreWeekPosition();
+  else $('.week-scroll').scrollLeft = scroll;
   updateWeekListButtons();
   updateWeekPlaceholderButtons();
 }
 function renderWeekPlaceholders() {
   const container = $('#week-placeholders');
   if (!container) return;
-  container.innerHTML = `<details class="week-local-list"><summary><span>Platzhalter</span><span class="week-local-count">${weekPlaceholderItems.length} Einträge</span></summary><div class="week-local-content"><div class="candidate-list">${weekPlaceholderItems.map(item => `<div class="candidate-row" draggable="true" data-placeholder-drag="${item.id}" data-placeholder-source="library"><span class="candidate-photo placeholder-icon" aria-hidden="true">${item.symbol}</span><span class="candidate-name">${item.name}</span><button class="candidate-add" type="button" data-week-placeholder-add="${item.id}" aria-label="${item.name} zur Wochenablage hinzufügen" title="Zur Wochenablage hinzufügen" disabled>+</button></div>`).join('')}</div></div></details>`;
+  container.innerHTML = `<details class="week-local-list"><summary><span>Platzhalter</span><span class="week-local-count">${weekPlaceholderItems.length} Einträge</span></summary><div class="week-local-content"><div class="candidate-list">${weekPlaceholderItems.map(item => `<div class="candidate-row" draggable="${weekNativeDrag()}" data-placeholder-drag="${item.id}" data-placeholder-source="library"><span class="candidate-photo placeholder-icon" aria-hidden="true">${item.symbol}</span><span class="candidate-name">${item.name}</span><button class="candidate-add" type="button" data-week-placeholder-add="${item.id}" aria-label="${item.name} zur Wochenablage hinzufügen" title="Zur Wochenablage hinzufügen" disabled>+</button></div>`).join('')}</div></div></details>`;
 }
 function updateWeekPlaceholderButtons() {
   document.querySelectorAll('[data-week-placeholder-add]').forEach(button => {
@@ -601,7 +627,7 @@ async function renderRoute() {
       setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 300);
       scheduleWeekBadges(week);
     } catch (error) {
-      if (request === state.request) { $('#week-heading-toolbar').innerHTML = weekToolbar(error.message, true); $('#week-content').innerHTML = weekDays(emptyCurrentWeek(), true); }
+      if (request === state.request) { $('#week-heading-toolbar').innerHTML = weekToolbar(error.message, true); $('#week-content').innerHTML = weekDays(emptyCurrentWeek(), true); restoreWeekPosition(); }
     }
     return;
   }
@@ -1122,6 +1148,146 @@ document.addEventListener('drop', event => {
   }
 });
 document.addEventListener('dragend', clearWeekMouseDrag);
+// A long press starts touch dragging without blocking ordinary scrolling or taps.
+let weekTouchDrag = null, weekTouchSuppressClick = false, weekSwipeSelection = null;
+function clearWeekSwipeSelection() {
+  weekSwipeSelection?.source.classList.remove('week-touch-ready');
+  weekSwipeSelection = null;
+  document.documentElement.classList.remove('week-swipe-selected');
+}
+function selectWeekSwipe(touch) {
+  clearWeekSwipeSelection();
+  weekSwipeSelection = {source:touch.source, drag:touch.drag, week:touch.week};
+  touch.source.classList.add('week-touch-ready');
+  document.documentElement.classList.add('week-swipe-selected');
+}
+window.addEventListener('hashchange', clearWeekSwipeSelection);
+document.addEventListener('contextmenu', event => {
+  if (matchMedia('(pointer:coarse)').matches && event.target.closest('[data-recipe], [data-week-recipe], [data-placeholder-drag], [data-recipe-image]')) event.preventDefault();
+});
+function updateWeekTouchTarget() {
+  const touch = weekTouchDrag;
+  if (!touch?.active) return;
+  const target = document.elementFromPoint(touch.x, touch.y)?.closest('[data-week-day]');
+  touch.target = target && target.dataset.weekDay !== touch.drag.source ? target : null;
+  document.querySelectorAll('.week-drop-target').forEach(node => { if (node !== touch.target) node.classList.remove('week-drop-target'); });
+  touch.target?.classList.add('week-drop-target');
+}
+function finishWeekTouchDrag(commit = false) {
+  const touch = weekTouchDrag;
+  if (!touch) return;
+  clearTimeout(touch.timer); clearInterval(touch.scrollTimer);
+  $('.week-scroll')?.classList.remove('week-touch-scrolling');
+  document.querySelectorAll('.week-dragging,.week-drop-target').forEach(node => node.classList.remove('week-dragging', 'week-drop-target'));
+  touch.source.style.removeProperty('transform');
+  if (touch.nativeDragElement) touch.nativeDragElement.draggable = touch.nativeDragWasEnabled;
+  touch.source.querySelector('.week-swipe-feedback')?.remove();
+  if (!weekSwipeSelection) touch.source.classList.remove('week-touch-ready');
+  weekTouchDrag = null;
+  if (!touch.active && !touch.swiping && !touch.ready) return;
+  weekTouchSuppressClick = true;
+  setTimeout(() => { weekTouchSuppressClick = false; }, 700);
+  if (touch.swiping) {
+    const distance = touch.y - touch.startY;
+    if (commit && Math.abs(distance) >= 90 && touch.week === displayedWeek && touch.source.isConnected) {
+      const target = touch.drag.source === 'shelf' ? (distance < 0 ? displayedWeek.days[weekVisibleDay]?.date : 'trash') : (distance < 0 ? 'trash' : 'shelf');
+      if (target) {
+        clearWeekSwipeSelection();
+        if (touch.drag.placeholder) setWeekPlaceholder(touch.drag.id, target !== 'trash', target === 'trash' ? 'shelf' : target, touch.drag.instance);
+        else queueWeekMove(touch.drag.source, target, touch.drag.id, touch.drag.custom);
+      }
+    }
+    return;
+  }
+  if (commit && touch.target) {
+    clearWeekSwipeSelection();
+    if (touch.drag.placeholder) setWeekPlaceholder(touch.drag.id, true, touch.target.dataset.weekDay, touch.drag.instance);
+    else queueWeekMove(touch.drag.source, touch.target.dataset.weekDay, touch.drag.id, touch.drag.custom);
+  } else if (touch.active || (commit && touch.fromSelection)) clearWeekSwipeSelection();
+}
+document.addEventListener('touchstart', event => {
+  if (weekTouchDrag || event.touches.length !== 1) return;
+  if (weekSwipeSelection && (!weekSwipeSelection.source.isConnected || weekSwipeSelection.week !== displayedWeek)) clearWeekSwipeSelection();
+  if (weekSwipeSelection) {
+    const point = event.touches[0], selected = weekSwipeSelection;
+    weekTouchDrag = {...selected, id:point.identifier, x:point.clientX, y:point.clientY, startX:point.clientX, startY:point.clientY, active:false, swiping:false, ready:true, fromSelection:true};
+    return;
+  }
+  if (event.target.closest('[data-week-placeholder-action], [data-week-placeholder-add], [data-week-preview-action]')) return;
+  const placeholder = event.target.closest('[data-placeholder-drag]');
+  const item = event.target.closest('.week-recipe[draggable]')?.closest('[data-week-recipe]');
+  let drag, source;
+  if (placeholder && displayedWeek && !weekPlaceholderBusy) {
+    source = placeholder;
+    drag = {placeholder:true, source:placeholder.dataset.placeholderSource, id:placeholder.dataset.placeholderDrag, instance:placeholder.dataset.placeholderInstance || null};
+  } else if (item && displayedWeek && !weekSaving && !weekQueueWriting && !weekQueueError && !weekShoppingBusy && !previewShelfBusy) {
+    source = item;
+    drag = {source:item.dataset.weekSource, id:item.dataset.weekRecipe, custom:item.dataset.weekCustom === '1'};
+  } else return;
+  const point = event.touches[0];
+  const nativeDragElement = placeholder || item?.querySelector('.week-recipe');
+  const nativeDragWasEnabled = !!nativeDragElement?.draggable;
+  if (nativeDragElement) nativeDragElement.draggable = false;
+  const touch = weekTouchDrag = {drag, source, nativeDragElement, nativeDragWasEnabled, week:displayedWeek, id:point.identifier, x:point.clientX, y:point.clientY, startX:point.clientX, startY:point.clientY, active:false, swiping:false, ready:false};
+  touch.timer = setTimeout(() => {
+    if (weekTouchDrag !== touch || !source.isConnected) return;
+    touch.ready = true;
+    if (!drag.placeholder || drag.instance) selectWeekSwipe(touch);
+    else source.classList.add('week-touch-ready');
+  }, 500);
+}, {passive:true});
+function startWeekTouchDrag(touch) {
+    touch.active = true; touch.source.classList.remove('week-touch-ready'); touch.source.classList.add('week-dragging');
+    $('.week-scroll')?.classList.add('week-touch-scrolling');
+    updateWeekTouchTarget();
+    touch.scrollTimer = setInterval(() => {
+      const edge = 65, speed = 16;
+      if (touch.y < edge) window.scrollBy(0, -speed);
+      else if (touch.y > innerHeight - edge) window.scrollBy(0, speed);
+      const scroll = document.querySelector('.week-scroll');
+      if (scroll) {
+        const rect = scroll.getBoundingClientRect();
+        if (touch.y >= rect.top && touch.y <= rect.bottom) {
+          if (touch.x < rect.left + edge) scroll.scrollLeft -= speed;
+          else if (touch.x > rect.right - edge) scroll.scrollLeft += speed;
+        }
+      }
+      updateWeekTouchTarget();
+    }, 40);
+}
+document.addEventListener('touchmove', event => {
+  const touch = weekTouchDrag;
+  const point = touch && Array.from(event.changedTouches).find(item => item.identifier === touch.id);
+  if (!point) return;
+  touch.x = point.clientX; touch.y = point.clientY;
+  if (!touch.active) {
+    const dx = touch.x - touch.startX, dy = touch.y - touch.startY;
+    if (!touch.swiping && Math.hypot(dx, dy) > 10) {
+      if (!touch.ready || !event.cancelable) { finishWeekTouchDrag(); return; }
+      event.preventDefault();
+      if ((!touch.drag.placeholder || touch.drag.instance) && Math.abs(dy) > Math.abs(dx) * 1.3) {
+        touch.swiping = true; clearTimeout(touch.timer);
+        const feedback = document.createElement('span'); feedback.className = 'week-swipe-feedback'; feedback.setAttribute('aria-hidden', 'true'); touch.source.append(feedback);
+      } else { startWeekTouchDrag(touch); updateWeekTouchTarget(); return; }
+    }
+    if (touch.ready && event.cancelable) event.preventDefault();
+    if (touch.swiping) {
+      event.preventDefault();
+      touch.source.style.transform = `translateY(${Math.max(-45, Math.min(45, dy * .35))}px)`;
+      const feedback = touch.source.querySelector('.week-swipe-feedback');
+      if (feedback) feedback.textContent = touch.drag.source === 'shelf' ? (dy < 0 ? 'Zum angezeigten Tag' : 'Entfernen') : (dy < 0 ? 'Entfernen' : 'In die Ablage');
+    }
+    return;
+  }
+  event.preventDefault(); updateWeekTouchTarget();
+}, {passive:false});
+document.addEventListener('touchend', event => {
+  if (weekTouchDrag && Array.from(event.changedTouches).some(item => item.identifier === weekTouchDrag.id)) finishWeekTouchDrag(true);
+});
+document.addEventListener('touchcancel', () => finishWeekTouchDrag());
+document.addEventListener('click', event => {
+  if (weekTouchSuppressClick) { event.preventDefault(); event.stopImmediatePropagation(); weekTouchSuppressClick = false; }
+}, true);
 document.addEventListener('toggle', event => {
   if (!event.target.matches?.('[data-week-list]') || !event.target.isConnected) return;
   if (event.target.open) { weekOpenLists.add(event.target.dataset.weekList); loadWeekList(event.target).catch(error => toast(error.message)); }

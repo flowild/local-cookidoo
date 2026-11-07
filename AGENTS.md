@@ -92,8 +92,24 @@ Tag. Änderungen an Cookidoo-Kalendereinträgen werden über die bestehende Wart
 Minuten übertragen und bestätigt. Die Ablage selbst existiert nur in Rezeptgarten;
 ihre Rezepte gehören beim Wocheneinkauf zur ausgewählten Woche.
 Wochenkacheln lassen sich mit der Maus zwischen Tagen und Ablage ziehen; auf
-Touchgeräten bleiben sie zum Öffnen und Scrollen frei. Eine Griffleiste oder
-Zielauswahl gibt es nicht. Mobile Tagesspalten bieten freie Fläche zum Scrollen.
+Touchgeräten aktiviert langes Berühren die Auswahl zum Verschieben. Kurzes Tippen
+und Scrollen bleiben möglich. Eine Griffleiste oder Zielauswahl gibt es nicht.
+Mobile Tagesspalten bieten freie Fläche zum Scrollen.
+Beim horizontalen Scrollen auf dem Handy rasten die Tage mittig ein. Der zuletzt
+angezeigte Wochentag bleibt im Browser auch nach Neuladen und Wochenwechsel erhalten.
+Auf dem Handy markiert etwa 500 ms langes Halten ein Rezept oder einen Platzhalter;
+sofortiges Wischen über die Kacheln scrollt normal. Bei markierter Kachel steuern
+vertikale Wischbewegungen ab 90 Pixeln die Aktion statt zu scrollen. Die Markierung
+bleibt auch nach Loslassen erhalten und endet nach einer Aktion oder durch Tippen.
+Ein vertikaler Wisch über ein Tagesrezept verschiebt dieses nach unten
+in die Ablage oder entfernt es nach oben. Bei Ablagerezepten sortiert ein Wisch nach
+oben in den eingerasteten Tag ein, nach unten entfernt er das Rezept. Entfernungen
+nutzen die vorhandene Rückgängig-Funktion.
+Dieselben Wischrichtungen gelten für einzelne Platzhalter in Tagen und Ablage;
+deren Entfernen erfolgt wie beim Papierkorb unmittelbar ohne Rückgängig-Funktion.
+Langes Drücken auf Rezepten öffnet auf Touchgeräten kein Browser-Kontextmenü.
+Das native Browser-Ziehen der Wochenkacheln und Bilder ist bei Touchbedienung
+deaktiviert, damit es die Haltegeste nicht übernimmt; Mausziehen bleibt verfügbar.
 Rezeptvorschauen zeigen links oben vorhandene persönliche Notizen und bieten rechts
 oben einen Knopf für die lokale Ablage der aktuellen Berliner Kalenderwoche. In
 „Meine Woche“ verschiebt stattdessen ein X Tagesrezepte in die Ablage der angezeigten
