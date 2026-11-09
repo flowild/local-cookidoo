@@ -1,0 +1,19 @@
+[Unit]
+Description=Rezeptgarten Telegram Nachrichtentest
+After=network-online.target pve-container@103.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/rezeptgarten-telegram/telegram_bridge.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rezeptgarten-telegram /run/lxc/lock
+
+[Install]
+WantedBy=multi-user.target

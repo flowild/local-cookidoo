@@ -941,13 +941,68 @@ async function loadCandidates(append = false, request = state.request) {
   $('#candidate-more').hidden = state.candidateOffset >= result.total;
 }
 const telegramClientKey = 'rezeptgarten-telegram-client-token';
+const telegramPairKey = 'rezeptgarten-telegram-pair';
 function telegramSettings(serverStatus) {
   let clientSet = false;
   try { clientSet = !!localStorage.getItem(telegramClientKey); } catch (_) {}
   const serverText = serverStatus === null ? 'Server nicht erreichbar; Status unbekannt.' : serverStatus ? 'Ein Token ist gespeichert.' : 'Noch kein Token gespeichert.';
   const card = (role, label, status, set, disabled) => `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Telegram: ${label}</h2><p>${status}</p><form data-telegram-form="${role}" autocomplete="off"><label for="telegram-${role}">${set ? 'Token ersetzen' : 'Bot-Token'}</label><input id="telegram-${role}" type="password" required maxlength="221" autocomplete="off" spellcheck="false" ${disabled ? 'disabled' : ''}><button class="button button-primary" type="submit" ${disabled ? 'disabled' : ''}>Token speichern</button></form>${set && !disabled ? `<button class="text-link danger-link" type="button" data-telegram-delete="${role}">Token entfernen</button>` : ''}<p class="settings-small">${role === 'client' ? 'Das Token liegt unverschlüsselt in diesem Browser und gewährt Zugriff auf den Bot. Nur auf vertrauenswürdigen Geräten speichern.' : 'Das Token wird verschlüsselt auf dem Rezeptgarten-Server gespeichert.'} Ein gespeichertes Token bestätigt noch keine Verbindung zu Telegram.</p></section>`;
-  return card('server', 'Server-Bot', serverText, serverStatus === true, serverStatus === null) + card('client', 'Client-Bot', clientSet ? 'Ein Token ist in diesem Browser gespeichert.' : 'Noch kein Token in diesem Browser gespeichert.', clientSet, false);
+  let paired = false;
+  try { paired = !!localStorage.getItem(telegramPairKey); } catch (_) {}
+  return card('server', 'Server-Bot', serverText, serverStatus === true, serverStatus === null) + card('client', 'Client-Bot', clientSet ? 'Ein Token ist in diesem Browser gespeichert.' : 'Noch kein Token in diesem Browser gespeichert.', clientSet, false) + `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Bot-Verbindung</h2><p>Aktiviere bei beiden Bots in BotFather die Bot-zu-Bot-Kommunikation. Verwende zwei eigene Bots ausschließlich für Rezeptgarten; ihre eingehenden Updates werden beim Test verarbeitet.</p><button class="button" type="button" data-telegram-pair ${!clientSet || serverStatus !== true ? 'disabled' : ''}>Bots verbinden</button><button class="button button-primary" type="button" data-telegram-test ${!clientSet || !paired ? 'disabled' : ''}>Verbindung testen</button><p class="settings-small">Verbinden benötigt das Heimnetz. Ein späterer Test benötigt Internet, aber kein Heimnetz. Die Bestätigung gilt nur für den Nachrichtentest.</p><p id="telegram-test-status" role="status" aria-live="polite"></p></section>`;
 }
+async function telegramClientCall(token, method, values = {}) {
+  let response, data;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {method:'POST', body:new URLSearchParams(values), cache:'no-store', referrerPolicy:'no-referrer'});
+    data = await response.json();
+  } catch (_) { throw new Error('Telegram ist nicht erreichbar. Prüfe deine Internetverbindung.'); }
+  if (!response.ok || !data.ok) throw new Error('Telegram hat die Anfrage abgelehnt. Prüfe Token, Bot-zu-Bot-Freigabe und bestehende Webhooks.');
+  return data.result;
+}
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-telegram-pair], [data-telegram-test]');
+  if (!button) return;
+  button.disabled = true;
+  const status = $('#telegram-test-status');
+  try {
+    const token = localStorage.getItem(telegramClientKey);
+    if (!token) throw new Error('Bitte zuerst das Client-Bot-Token speichern.');
+    if (button.hasAttribute('data-telegram-pair')) {
+      status.textContent = 'Bots werden geprüft …';
+      const client = await telegramClientCall(token, 'getMe');
+      if (!client.is_bot || !Number.isSafeInteger(client.id)) throw new Error('Das Client-Token gehört nicht zu einem gültigen Bot.');
+      const pair = await post('/api/telegram-pair', {client_id:client.id});
+      localStorage.setItem(telegramPairKey, JSON.stringify({...pair, client_id:client.id}));
+      state.status ? renderSettings() : renderOfflineSettings();
+      $('#telegram-test-status').textContent = 'Bots verbunden. Starte den Verbindungstest.';
+    } else {
+      const pair = JSON.parse(localStorage.getItem(telegramPairKey) || 'null');
+      if (!pair || !Number.isSafeInteger(pair.id) || !/^[A-Za-z0-9_]{5,32}$/.test(pair.username)) throw new Error('Bitte die Bots zuerst im Heimnetz verbinden.');
+      const client = await telegramClientCall(token, 'getMe');
+      if (client.id !== pair.client_id || !client.is_bot) throw new Error('Das Client-Token hat sich geändert. Bitte die Bots erneut verbinden.');
+      status.textContent = 'Testnachricht wird gesendet …';
+      const pending = await telegramClientCall(token, 'getUpdates', {limit:'100', timeout:'0', allowed_updates:'["message"]'});
+      let offset = pending.reduce((n, update) => Math.max(n, Number.isSafeInteger(update.update_id) ? update.update_id + 1 : 0), 0);
+      const nonce = crypto.randomUUID().replaceAll('-', '');
+      await telegramClientCall(token, 'sendMessage', {chat_id:'@' + pair.username, text:'rezeptgarten-ping ' + nonce});
+      status.textContent = 'Testnachricht gesendet; warte auf Bestätigung …';
+      const until = Date.now() + 35000;
+      while (Date.now() < until) {
+        const updates = await telegramClientCall(token, 'getUpdates', {offset:String(offset), timeout:'8', allowed_updates:'["message"]'});
+        let confirmed = false;
+        for (const update of updates) {
+          if (Number.isSafeInteger(update.update_id)) offset = Math.max(offset, update.update_id + 1);
+          const message = update.message;
+          if (message?.from?.id === pair.id && message.from.is_bot && message.chat?.type === 'private' && message.text === 'rezeptgarten-pong ' + nonce) confirmed = true;
+        }
+        if (confirmed) { status.textContent = 'Bestätigt: Beide Bots haben miteinander kommuniziert.'; return; }
+      }
+      throw new Error('Keine Bestätigung erhalten. Prüfe den Host-Dienst und die Bot-zu-Bot-Freigabe.');
+    }
+  } catch (error) { status.textContent = error.message || 'Der Verbindungstest ist fehlgeschlagen.'; }
+  finally { button.disabled = false; }
+});
 function renderOfflineSettings() {
   $('#content').innerHTML = `<div class="page-title"><h1>Einstellungen</h1><p>Der Rezeptgarten-Server ist nicht erreichbar.</p></div><div class="settings-grid">${telegramSettings(null)}</div>`;
 }
@@ -1581,7 +1636,7 @@ document.addEventListener('click', async event => {
   remove.disabled = true;
   try {
     if (remove.dataset.telegramDelete === 'server') { await api('/api/telegram-server-bot', {method:'DELETE'}); state.status.telegram_server_bot_set = false; }
-    else localStorage.removeItem(telegramClientKey);
+    else { localStorage.removeItem(telegramClientKey); localStorage.removeItem(telegramPairKey); }
     state.status ? renderSettings() : renderOfflineSettings(); toast('Bot-Token entfernt.');
   } catch (error) { toast(error.message || 'Token konnte nicht entfernt werden.'); }
   finally { remove.disabled = false; }
@@ -1595,7 +1650,7 @@ document.addEventListener('submit', async event => {
     button.disabled = true;
     try {
       if (role === 'server') { await post('/api/telegram-server-bot', {token}); state.status.telegram_server_bot_set = true; }
-      else localStorage.setItem(telegramClientKey, token);
+      else { localStorage.setItem(telegramClientKey, token); localStorage.removeItem(telegramPairKey); }
       state.status ? renderSettings() : renderOfflineSettings(); toast('Bot-Token gespeichert.');
     } catch (error) { toast(error.message || 'Token konnte nicht gespeichert werden.'); }
     finally { button.disabled = false; }

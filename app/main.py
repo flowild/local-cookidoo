@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import httpx
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
@@ -150,7 +151,7 @@ def create_app(directory=None, secure_cookies=None):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.telegram.org; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if request.url.path.startswith('/api/'):
             is_image = bool(re.fullmatch(r'/api/images/[a-f0-9]{40}\.webp', request.url.path))
             if not (is_image and request.method == 'GET' and response.status_code == 200):
@@ -188,6 +189,32 @@ def create_app(directory=None, secure_cookies=None):
     def delete_telegram_server_bot():
         telegram_vault.clear()
         return {'ok': True}
+
+    @app.post('/api/telegram-pair')
+    async def pair_telegram(request: Request):
+        try:
+            payload = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            raise HTTPException(400, 'Ungültige Bot-Kennung.') from None
+        client_id = payload.get('client_id') if isinstance(payload, dict) else None
+        if type(client_id) is not int or not 0 < client_id < 2**53:
+            raise HTTPException(400, 'Ungültige Bot-Kennung.')
+        saved = telegram_vault.read()
+        if not saved or not saved.get('token'):
+            raise HTTPException(409, 'Bitte zuerst das Server-Bot-Token speichern.')
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                response = await client.post('https://api.telegram.org/bot' + saved['token'] + '/getMe')
+                data = response.json()
+            bot = data.get('result') if response.status_code == 200 and isinstance(data, dict) and data.get('ok') else None
+            if not isinstance(bot, dict) or not bot.get('is_bot') or not isinstance(bot.get('id'), int) or not re.fullmatch(r'[A-Za-z0-9_]{5,32}', bot.get('username') or ''):
+                raise ValueError('Ungültiger Bot')
+        except (httpx.HTTPError, ValueError, TypeError):
+            raise HTTPException(502, 'Server-Bot konnte bei Telegram nicht geprüft werden.') from None
+        if bot['id'] == client_id:
+            raise HTTPException(400, 'Bitte zwei unterschiedliche Bots verwenden.')
+        telegram_vault.write({'token': saved['token'], 'client_id': client_id})
+        return {'username': bot['username'], 'id': bot['id']}
 
     @app.post('/api/google-api-key')
     async def set_google_api_key(request: Request):

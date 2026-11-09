@@ -73,6 +73,18 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.delete('/api/telegram-server-bot', headers=ORIGIN).status_code, 200)
         self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])
 
+    def test_pair_telegram_verifies_server_and_saves_only_peer_id(self):
+        token = '123456789:' + 'a' * 35
+        self.client.post('/api/telegram-server-bot', json={'token': token}, headers=ORIGIN)
+        result = httpx.Response(200, json={'ok': True, 'result': {'id': 222, 'is_bot': True, 'username': 'ServerBot'}})
+        with patch('app.main.httpx.AsyncClient') as factory:
+            factory.return_value.__aenter__.return_value.post = AsyncMock(return_value=result)
+            response = self.client.post('/api/telegram-pair', json={'client_id': 111}, headers=ORIGIN)
+        self.assertEqual(response.json(), {'id': 222, 'username': 'ServerBot'})
+        self.assertEqual(Vault(self.tmp.name, 'telegram-server-bot.enc').read(), {'token': token, 'client_id': 111})
+        self.assertNotIn(token, response.text)
+        self.assertEqual(self.client.post('/api/telegram-pair', json={'client_id': 111}, headers={'Origin':'https://evil.example'}).status_code, 403)
+
     def test_app_version_is_shared_by_health_and_cached_shell(self):
         from app.version import APP_VERSION
         health = self.client.get('/api/health')

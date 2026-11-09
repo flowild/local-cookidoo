@@ -9,6 +9,15 @@ Die bereitgestellte App-Version steht in `app/version.py` und kann über
 `/api/health` geprüft werden. Versionsänderungen nach Prüfung und Deployment
 mit den zugehörigen Änderungen committen und nach `origin/main` pushen.
 
+Der Telegram-Nachrichtentest verwendet den systemd-Dienst `rezeptgarten-telegram`
+auf dem Proxmox-Host. Er liest die verschlüsselte Bot-Konfiguration über `pct exec`
+aus LXC 103, verarbeitet ausschließlich frische private Testnachrichten des
+zugeordneten Client-Bots und speichert seinen Telegram-Offset unter
+`/var/lib/rezeptgarten-telegram`. Die Bots brauchen Bot-zu-Bot-Freigabe und einen
+eigenen Update-Kanal ohne parallele Webhooks oder weitere Verbraucher. Der Dienst
+arbeitet auf dem Host als root, weil `pct exec` den Containerzugriff voraussetzt;
+er nimmt keine Befehle entgegen. Keine Tokens oder Nachrichten protokollieren.
+
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,
 Python: `/opt/cookidoo-manager/.venv`, systemd-Dienst `rezeptgarten`, Nutzer

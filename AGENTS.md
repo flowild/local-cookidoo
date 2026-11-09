@@ -21,10 +21,16 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 
 Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
 und ein Client-Bot-Token unverschlüsselt im jeweiligen Browser. Sie zeigen nur an,
-ob ein Token vorhanden ist; eine Telegram-Verbindung oder Bot-zu-Bot-Kommunikation
-ist damit noch nicht eingerichtet. Bei nicht erreichbarem Server bleibt der Status
-des Server-Tokens unbekannt; die Client-Einstellungen sind aus der zwischengespeicherten
-App-Hülle erreichbar. Browserdaten können vom Browser gelöscht werden.
+ob ein Token vorhanden ist. Mit „Bots verbinden“ wird der Client-Bot für den
+Server-Bot zugelassen; ein ausdrücklich gestarteter Nachrichtentest erwartet eine
+Bestätigung mit zufälliger Kennung. Beide Bots benötigen Bot-zu-Bot-Freigabe und
+einen eigenen Update-Kanal ohne parallelen Webhook oder andere Verbraucher. Der
+Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet nur frische private
+Testnachrichten des zugeordneten Bots. Beim Test werden Telegram-Updates abgerufen
+und bestätigt. Nach vorheriger Verbindung im Heimnetz ist der Test auch ohne Heimnetz
+mit Internetzugang möglich. Bei nicht erreichbarem Server bleibt der Status des
+Server-Tokens unbekannt; Browserdaten können vom Browser gelöscht werden. Keine
+Tokens oder Nachrichten protokollieren.
 
 ## Vertrauliche Daten
 
