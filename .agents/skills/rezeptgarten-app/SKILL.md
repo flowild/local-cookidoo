@@ -21,6 +21,11 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   lesend laden. AES-256-GCM verschlüsselt die kontogebundene Momentaufnahme zwischen
   Container und Browser. Ein Kontowechsel erfordert erneute Kopplung. Telegram-Metadaten
   bleiben sichtbar; persönliche API-Antworten nicht im Service Worker speichern.
+- App-Start und Einkaufswagenabruf warten maximal 2,5 Sekunden auf den Heimnetz-Server.
+  Telegram-Anfragen werden direkt gesendet; ältere Antworten werden anhand ihrer
+  Anfragekennung verworfen. Für schreibende API-Anfragen gilt dieses Zeitlimit nicht.
+  Unterstützte Browser fordern die komprimierte Momentaufnahme an; ältere Browser
+  verwenden das bisherige Format. Komprimierung erfolgt vor der Verschlüsselung.
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`

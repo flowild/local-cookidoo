@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import base64
 import os
+import zlib
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
@@ -68,6 +69,9 @@ class CartTests(unittest.TestCase):
         self.assertEqual([i['name'] for i in result['items']], ['Testrezept', 'Milch'])
         self.assertEqual([i['text'] for i in result['items'][0]['ingredients']], ['2 Zwiebeln', '100 g Mehl'])
         self.assertEqual(len(self.cart()), 3)
+        compressed = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, compress=True))
+        decoded = AESGCM(key).decrypt(compressed[:12], compressed[12:], nonce.encode())
+        self.assertEqual(json.loads(zlib.decompress(decoded)), result)
         self.db.set('account', {'email':'other@example.invalid', 'region':'de'})
         with self.assertRaises(ValueError):
             encrypted_snapshot(self.tmp.name, nonce)

@@ -55,13 +55,20 @@ function duration(seconds) {
 let serverReachable = false;
 async function api(path, options = {}) {
   let response;
+  const {timeoutMs, ...fetchOptions} = options;
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    response = await fetch(path, {credentials:'same-origin', ...options, headers:{'Content-Type':'application/json', ...options.headers}});
+    response = await fetch(path, {credentials:'same-origin', ...fetchOptions, ...(controller ? {signal:controller.signal} : {}), headers:{'Content-Type':'application/json', ...fetchOptions.headers}});
   } catch (_) {
     serverReachable = false;
     $('#offline-banner').textContent = 'Keine Verbindung zu deinem Rezeptgarten-Server. Prüfe die Verbindung zum Heimnetz.';
     $('#offline-banner').hidden = false;
-    throw new Error('Dein Server ist gerade nicht erreichbar. Prüfe deine Verbindung zum Heimnetz.');
+    const error = new Error('Dein Server ist gerade nicht erreichbar. Prüfe deine Verbindung zum Heimnetz.');
+    error.serverUnreachable = true;
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   serverReachable = true;
   if (navigator.onLine) $('#offline-banner').hidden = true;
@@ -167,7 +174,7 @@ async function refreshCartCount() {
 }
 
 async function loadLibrary() {
-  const [status, collections] = await Promise.all([api('/api/status'), api('/api/collections')]);
+  const [status, collections] = await Promise.all([api('/api/status', {timeoutMs:2500}), api('/api/collections', {timeoutMs:2500})]);
   state.status = status; state.collections = collections.items;
   adoptWeekQueue(status.calendar_queue);
   $('#nav-list-count').textContent = status.stats.collections;
@@ -675,8 +682,8 @@ async function renderRoute() {
 }
 async function renderCart(request = state.request) {
   let cart;
-  try { cart = await api('/api/cart'); }
-  catch (error) { if (!serverReachable && request === state.request) return renderOfflineCart(request); throw error; }
+  try { cart = await api('/api/cart', {timeoutMs:2500}); }
+  catch (error) { if (error.serverUnreachable && request === state.request) return renderOfflineCart(request); throw error; }
   if (request !== state.request || state.view !== 'einkaufswagen') return;
   const recipes = cart.items.filter(item => item.kind === 'recipe');
   setCartCount(recipes.length);
@@ -974,12 +981,11 @@ async function renderOfflineCart(request) {
   try {
     const token = localStorage.getItem(telegramClientKey), pair = JSON.parse(localStorage.getItem(telegramPairKey) || 'null');
     if (!token || !pair?.cart_key || !Number.isSafeInteger(pair.id) || !/^[A-Za-z0-9_]{5,32}$/.test(pair.username)) throw new Error('Bitte die Bots einmal im Heimnetz unter Einstellungen erneut verbinden.');
-    const client = await telegramClientCall(token, 'getMe');
-    if (!client.is_bot || client.id !== pair.client_id) throw new Error('Bitte die Bots im Heimnetz erneut verbinden.');
-    const pending = await telegramClientCall(token, 'getUpdates', {limit:'100', timeout:'0', allowed_updates:'["message"]'});
-    let offset = pending.reduce((n, update) => Math.max(n, Number.isSafeInteger(update.update_id) ? update.update_id + 1 : 0), 0);
+    if (!Number.isSafeInteger(pair.client_id) || token.split(':')[0] !== String(pair.client_id)) throw new Error('Bitte die Bots im Heimnetz erneut verbinden.');
+    let offset = 0;
     const nonce = crypto.randomUUID().replaceAll('-', '');
-    await telegramClientCall(token, 'sendMessage', {chat_id:'@' + pair.username, text:'rezeptgarten-cart ' + nonce});
+    const compressed = typeof DecompressionStream === 'function';
+    await telegramClientCall(token, 'sendMessage', {chat_id:'@' + pair.username, text:`rezeptgarten-${compressed ? 'cartz' : 'cart'} ${nonce}`});
     const parts = new Map(), until = Date.now() + 60000;
     let total = null;
     while (Date.now() < until && (total === null || parts.size < total)) {
@@ -1000,7 +1006,8 @@ async function renderOfflineCart(request) {
     const encoded = Array.from({length:total}, (_, i) => parts.get(i + 1)).join('');
     const bytes = base64ToBytes(encoded), keyBytes = base64ToBytes(pair.cart_key);
     const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
-    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:bytes.slice(0, 12), additionalData:new TextEncoder().encode(nonce)}, key, bytes.slice(12));
+    let plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:bytes.slice(0, 12), additionalData:new TextEncoder().encode(nonce)}, key, bytes.slice(12));
+    if (compressed) plain = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
     const cart = JSON.parse(new TextDecoder().decode(plain));
     if (!Array.isArray(cart.items)) throw new Error('Ungültige Einkaufsdaten.');
     if (request !== state.request || state.view !== 'einkaufswagen') return;

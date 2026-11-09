@@ -11,7 +11,7 @@ from pathlib import Path
 
 STATE = Path('/var/lib/rezeptgarten-telegram/offset.json')
 CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; import json; v=Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read() or {}; print(json.dumps({k:v.get(k) for k in ('token','client_id')}))"
-CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1]))"
+CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1], sys.argv[2] == 'compressed'))"
 
 
 def config():
@@ -38,18 +38,18 @@ def reply_for(update, client_id, now):
     sender = message.get('from') or {}
     chat = message.get('chat') or {}
     text = message.get('text') or ''
-    match = re.fullmatch(r'rezeptgarten-(ping|cart) ([a-f0-9]{32})', text)
+    match = re.fullmatch(r'rezeptgarten-(ping|cart|cartz) ([a-f0-9]{32})', text)
     if (not match or sender.get('id') != client_id or not sender.get('is_bot')
             or chat.get('type') != 'private' or chat.get('id') != client_id
             or not isinstance(message.get('date'), int) or abs(now - message['date']) > 120):
         return None
     if match.group(1) == 'ping':
         return 'rezeptgarten-pong ' + match.group(2)
-    return 'rezeptgarten-cart ' + match.group(2)
+    return 'rezeptgarten-' + match.group(1) + ' ' + match.group(2)
 
 
-def cart_messages(nonce):
-    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CART_READER, nonce],
+def cart_messages(nonce, compress=False):
+    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CART_READER, nonce, 'compressed' if compress else 'plain'],
                             capture_output=True, timeout=20, check=True)
     encoded = result.stdout.decode('ascii').strip()
     if not re.fullmatch(r'[A-Za-z0-9+/=]{1,54000}', encoded):
@@ -86,10 +86,10 @@ def main():
                 if reply and time.monotonic() - last_reply >= 1:
                     # Recheck pairing after the long poll before sending anything.
                     if config() == value:
-                        if reply.startswith('rezeptgarten-cart '):
+                        if reply.startswith(('rezeptgarten-cart ', 'rezeptgarten-cartz ')):
                             nonce = reply.split(' ')[1]
                             try:
-                                messages = cart_messages(nonce)
+                                messages = cart_messages(nonce, compress=reply.startswith('rezeptgarten-cartz '))
                             except (OSError, ValueError, subprocess.SubprocessError):
                                 messages = ['rezeptgarten-cart-error ' + nonce]
                         else:

@@ -40,6 +40,12 @@ verschlüsselt; Telegram sieht Metadaten. Der Wagen ist an das bei der Kopplung 
 Konto gebunden, bei Kontowechsel ist eine erneute Kopplung nötig. Die Ansicht ist eine
 Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufällige
 Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
+Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
+maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
+Der Telegram-Abruf sendet die Anfrage unmittelbar und verarbeitet ältere Updates
+nur zur Fortschaltung; angezeigt wird ausschließlich die zur Anfrage passende Antwort.
+Geeignete Browser fordern die komprimierte Momentaufnahme an; diese wird vor der
+Verschlüsselung komprimiert, um die Zahl der Telegram-Nachrichten zu verringern.
 
 ## Vertrauliche Daten
 

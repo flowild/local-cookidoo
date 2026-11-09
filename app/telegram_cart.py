@@ -6,6 +6,7 @@ import os
 import re
 import sqlite3
 import sys
+import zlib
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -56,7 +57,7 @@ def snapshot(database, paired_owner):
     return result
 
 
-def encrypted_snapshot(directory, request_id):
+def encrypted_snapshot(directory, request_id, compress=False):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('invalid request')
     root = Path(directory)
@@ -75,6 +76,8 @@ def encrypted_snapshot(directory, request_id):
         connection.close()
     if len(data) > 40000:
         raise ValueError('cart too large')
+    if compress:
+        data = zlib.compress(data)
     iv = os.urandom(12)
     ciphertext = AESGCM(key).encrypt(iv, data, request_id.encode())
     return base64.b64encode(iv + ciphertext).decode('ascii')
