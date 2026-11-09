@@ -289,6 +289,9 @@ function navActive(view) {
     if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current');
   });
 }
+function setTelegramMode(active) {
+  $('#telegram-mode').hidden = !active;
+}
 function emptyCurrentWeek() {
   const today = berlinDay();
   const date = new Date(today + 'T12:00:00Z');
@@ -624,6 +627,7 @@ async function renderRoute() {
   }
   if (state.query && state.view !== 'collection') state.view = 'rezepte';
   navActive(state.view);
+  if (serverReachable && state.view !== 'meine-woche' && state.view !== 'einkaufswagen') setTelegramMode(false);
   const content = $('#content');
   if (state.view === 'einstellungen') { renderSettings(); return; }
   if (state.view === 'einkaufswagen') { await renderCart(request); return; }
@@ -640,6 +644,7 @@ async function renderRoute() {
       await api('/api/health', {timeoutMs:2500});
       const week = await api(`/api/calendar/week?day=${emptyCurrentWeek().days[0].date}`);
       if (request !== state.request) return;
+      setTelegramMode(false);
       applyWeekMoves(week); displayedWeek = week; showWeek();
       setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 300);
       scheduleWeekBadges(week);
@@ -688,6 +693,7 @@ async function renderCart(request = state.request) {
   try { cart = await api('/api/cart', {timeoutMs:2500}); }
   catch (error) { if (error.serverUnreachable && request === state.request) return renderOfflineCart(request); throw error; }
   if (request !== state.request || state.view !== 'einkaufswagen') return;
+  setTelegramMode(false);
   const recipes = cart.items.filter(item => item.kind === 'recipe');
   setCartCount(recipes.length);
   const extras = cart.items.filter(item => item.kind === 'additional');
@@ -1013,6 +1019,7 @@ async function requestTelegramSnapshot(kind, day = '') {
   } finally { telegramSnapshotBusy = false; }
 }
 async function renderOfflineCart(request) {
+  setTelegramMode(true);
   const content = $('#content');
   content.innerHTML = `<div class="page-title"><h1>Mein Einkaufswagen</h1><p>Der Server ist nicht im Heimnetz erreichbar. Der Einkaufswagen wird verschlüsselt über Telegram geladen.</p></div><p id="telegram-cart-status" role="status">Einkaufswagen wird angefordert …</p><div id="telegram-cart-content"></div><button type="button" class="button" data-telegram-cart-refresh>Erneut laden</button>`;
   try {
@@ -1035,6 +1042,7 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-telegram-cart-refresh]') && !telegramSnapshotBusy) renderOfflineCart(++state.request);
 });
 async function renderOfflineWeek(request) {
+  setTelegramMode(true);
   const monday = emptyCurrentWeek().days[0].date;
   $('#content').innerHTML = `<div class="page-title"><h1>Meine Woche</h1><p>Verschlüsselt über Telegram · nur ansehen</p></div><div class="week-controls"><button class="button" type="button" data-telegram-week="previous" disabled aria-label="Vorherige Woche">←</button><button class="button" type="button" data-telegram-week="next" disabled aria-label="Nächste Woche">→</button><button class="button" type="button" data-telegram-week="current" disabled>Diese Woche</button><button class="button" type="button" data-telegram-week="refresh" disabled>Erneut laden</button></div><p id="telegram-week-status" role="status">Woche wird geladen …</p><div id="telegram-week-content"></div>`;
   try {

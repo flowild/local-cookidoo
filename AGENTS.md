@@ -45,6 +45,9 @@ in kompakten Zeilen; die Checkboxen zeigen den gespeicherten Stand an und sind l
 Zutaten und Zusatzartikel zeigen dieselben lokal in der App-Hülle enthaltenen Icons
 wie die übrigen Ansichten. Über Telegram kommen lediglich die Angaben für die
 Symbolauswahl, keine Icon-Bilddateien.
+Beim Anzeigen der Telegram-Wochenansicht oder des Telegram-Einkaufswagens kennzeichnet
+ein blaues Papierflieger-Symbol in der Kopfzeile den Telegram-Modus; nach erfolgreichem
+Laden derselben Ansicht aus dem Heimnetz verschwindet es wieder.
 Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
 maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
 Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart
