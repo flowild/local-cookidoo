@@ -48,6 +48,8 @@ Symbolauswahl, keine Icon-Bilddateien.
 Beim Anzeigen der Telegram-Wochenansicht oder des Telegram-Einkaufswagens kennzeichnet
 ein blaues Papierflieger-Symbol in der Kopfzeile den Telegram-Modus; nach erfolgreichem
 Laden derselben Ansicht aus dem Heimnetz verschwindet es wieder.
+In diesem Modus sind „Listen“, „Rezepte“ und „Vorrat“ in Desktop- und Mobilnavigation
+ausgegraut und nicht auswählbar; beim Wechsel zurück ins Heimnetz sind sie wieder aktiv.
 Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
 maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
 Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart

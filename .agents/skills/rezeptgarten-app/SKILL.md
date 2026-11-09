@@ -27,6 +27,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   dargestellt; Telegram überträgt Zutatenbezeichner und Kategorie, keine Icon-Bilder.
 - Eine gut sichtbare Papierflieger-Kennzeichnung in der Kopfzeile zeigt die aktive
   Telegram-Wochen- oder Einkaufswagenansicht; beim lokalen Neuladen verschwindet sie.
+  Die Navigationseinträge für Listen, Rezepte und Vorrat sind dann ausgegraut und
+  nicht auswählbar; nach Rückkehr ins Heimnetz werden sie wieder aktiviert.
 - Die Telegram-Wochenansicht zeigt verschlüsselt und rein lesend die ausgewählte
   Woche mit Tagesrezepten, Platzhaltern, lokaler Ablage und vorgemerkten Änderungen.
   Bilder und Notizinhalte werden nicht übertragen. Konto- und Fehlerprüfungen gelten

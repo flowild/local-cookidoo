@@ -291,7 +291,23 @@ function navActive(view) {
 }
 function setTelegramMode(active) {
   $('#telegram-mode').hidden = !active;
+  document.querySelectorAll('.desktop-nav [data-nav="listen"], .desktop-nav [data-nav="rezepte"], .desktop-nav [data-nav="vorrat"], .mobile-nav [data-nav="listen"], .mobile-nav [data-nav="rezepte"], .mobile-nav [data-nav="vorrat"]').forEach(link => {
+    if (active) {
+      link.setAttribute('aria-disabled', 'true');
+      link.setAttribute('title', 'Im Telegram-Modus nicht verfügbar');
+    } else {
+      link.removeAttribute('aria-disabled');
+      link.removeAttribute('title');
+    }
+  });
 }
+function preventDisabledNavigation(event) {
+  if (!event.target.closest?.('.desktop-nav [aria-disabled="true"], .mobile-nav [aria-disabled="true"]')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+document.addEventListener('click', preventDisabledNavigation, true);
+document.addEventListener('auxclick', preventDisabledNavigation, true);
 function emptyCurrentWeek() {
   const today = berlinDay();
   const date = new Date(today + 'T12:00:00Z');
