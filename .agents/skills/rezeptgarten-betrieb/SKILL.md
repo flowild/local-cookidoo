@@ -16,10 +16,12 @@ zugeordneten Client-Bots und speichert seinen Telegram-Offset unter
 `/var/lib/rezeptgarten-telegram`. Die Bots brauchen Bot-zu-Bot-Freigabe und einen
 eigenen Update-Kanal ohne parallele Webhooks oder weitere Verbraucher. Der Dienst
 arbeitet auf dem Host als root, weil `pct exec` den Containerzugriff voraussetzt;
-er verarbeitet ausschließlich Testanfragen und lesende Einkaufswagenanfragen. Der
+er verarbeitet ausschließlich Testanfragen sowie lesende Einkaufswagen- und Wochenanfragen. Der
 Container liest den zum Zeitpunkt der Kopplung zugeordneten Wagen in einer SQLite-
 Lesetransaktion und verschlüsselt ihn vor der Weitergabe an den Host mit AES-256-GCM.
 Keine Tokens, Schlüssel oder Nachrichten protokollieren.
+Wochenanfragen verwenden die nur über Loopback erreichbare verschlüsselte App-API;
+die App nutzt den bestehenden Cookidoo-Client und prüft das gekoppelte Konto.
 
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,

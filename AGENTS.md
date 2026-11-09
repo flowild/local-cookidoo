@@ -26,7 +26,7 @@ Server-Bot zugelassen; ein ausdrücklich gestarteter Nachrichtentest erwartet ei
 Bestätigung mit zufälliger Kennung. Beide Bots benötigen Bot-zu-Bot-Freigabe und
 einen eigenen Update-Kanal ohne parallelen Webhook oder andere Verbraucher. Der
 Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet nur frische private
-Test- und Einkaufswagenanfragen des zugeordneten Bots. Dabei werden Telegram-Updates abgerufen
+Test-, Wochen- und Einkaufswagenanfragen des zugeordneten Bots. Dabei werden Telegram-Updates abgerufen
 und bestätigt. Nach vorheriger Verbindung im Heimnetz ist der Test auch ohne Heimnetz
 mit Internetzugang möglich. Bei nicht erreichbarem Server bleibt der Status des
 Server-Tokens unbekannt; Browserdaten können vom Browser gelöscht werden. Keine
@@ -50,6 +50,12 @@ Der Telegram-Abruf sendet die Anfrage unmittelbar und verarbeitet ältere Update
 nur zur Fortschaltung; angezeigt wird ausschließlich die zur Anfrage passende Antwort.
 Geeignete Browser fordern die komprimierte Momentaufnahme an; diese wird vor der
 Verschlüsselung komprimiert, um die Zahl der Telegram-Nachrichten zu verringern.
+Ohne Heimnetz zeigt „Meine Woche“ über denselben verschlüsselten Kanal eine rein
+lesende Wochenübersicht mit Tagesrezepten, lokalen Platzhaltern und Ablage. Pfeile
+und „Diese Woche“ wechseln die Woche. Der Server liest Cookidoo über den gemeinsamen
+Client und berücksichtigt vorgemerkte Verschiebungen; Fehler und unklare Warteschlangen
+bleiben sichtbar. Es werden keine Bilder oder Notizinhalte übertragen. Zugriff ist an
+das bei der Bot-Kopplung gewählte Konto gebunden.
 
 ## Vertrauliche Daten
 

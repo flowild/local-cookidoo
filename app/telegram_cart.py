@@ -64,16 +64,25 @@ def encrypted_snapshot(directory, request_id, compress=False):
     if not (root / 'vault.key').is_file() or not (root / 'telegram-server-bot.enc').is_file():
         raise ValueError('not paired')
     config = Vault(directory, 'telegram-server-bot.enc').read() or {}
-    key = base64.b64decode(config.get('cart_key', ''), validate=True)
-    if len(key) != 32 or not config.get('cart_owner'):
+    if not config.get('cart_owner'):
         raise ValueError('not paired')
     connection = sqlite3.connect((root / 'library.sqlite3').resolve().as_uri() + '?mode=ro', uri=True)
     try:
         connection.row_factory = sqlite3.Row
         connection.execute('BEGIN')
-        data = json.dumps({'items': snapshot(ReadOnlyCartDatabase(connection), config['cart_owner'])}, ensure_ascii=False, separators=(',', ':')).encode()
+        data = {'items': snapshot(ReadOnlyCartDatabase(connection), config['cart_owner'])}
     finally:
         connection.close()
+    return encrypt_payload(config, request_id, data, compress)
+
+
+def encrypt_payload(config, request_id, payload, compress=False):
+    if not re.fullmatch(r'[a-f0-9]{32}', request_id):
+        raise ValueError('invalid request')
+    key = base64.b64decode(config.get('cart_key', ''), validate=True)
+    if len(key) != 32:
+        raise ValueError('not paired')
+    data = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
     if len(data) > 40000:
         raise ValueError('cart too large')
     if compress:

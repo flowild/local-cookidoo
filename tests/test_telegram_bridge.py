@@ -12,6 +12,9 @@ class TelegramBridgeTests(unittest.TestCase):
         self.assertEqual(reply_for({'message': cart}, 123, 1000), 'rezeptgarten-cart ' + nonce)
         compressed = {**message, 'text': 'rezeptgarten-cartz ' + nonce}
         self.assertEqual(reply_for({'message': compressed}, 123, 1000), 'rezeptgarten-cartz ' + nonce)
+        week = {**message, 'text': 'rezeptgarten-weekz ' + nonce + ' 2026-01-05'}
+        self.assertEqual(reply_for({'message': week}, 123, 1000), 'rezeptgarten-weekz ' + nonce + ' 2026-01-05')
+        self.assertIsNone(reply_for({'message': {**week, 'text': 'rezeptgarten-weekz ' + nonce + ' 2026-01-06'}}, 123, 1000))
         self.assertIsNone(reply_for({'message': message}, 456, 1000))
         self.assertIsNone(reply_for({'message': message}, 123, 1121))
         for key, value in [('text', 'rezeptgarten-pong ' + nonce), ('chat', {'id': 123, 'type': 'group'}),

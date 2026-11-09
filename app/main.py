@@ -23,6 +23,8 @@ from .sync import REGIONS, SyncService, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
 from .ingredients import ingredient_group_key, ingredient_name, shopping_category
 from .version import APP_VERSION
+from .telegram_cart import encrypt_payload
+from .telegram_week import snapshot as telegram_week_snapshot
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -257,6 +259,27 @@ def create_app(directory=None, secure_cookies=None):
         except Exception as error:
             logging.getLogger(__name__).warning('Cookidoo calendar read failed: %s', type(error).__name__)
             raise HTTPException(502, 'Deine Woche konnte nicht von Cookidoo geladen werden. Bitte versuche es erneut.') from None
+
+    @app.get('/api/telegram-week')
+    async def telegram_week(request: Request, day: date, nonce: str, compressed: bool = False):
+        if not request.client or request.client.host != '127.0.0.1':
+            raise HTTPException(403, 'Nur lokal verfügbar.')
+        config = telegram_vault.read() or {}
+        owner = config.get('cart_owner')
+        if not owner or owner != service.cart_owner() or owner != service.week_collection_owner():
+            raise HTTPException(409, 'Die Bot-Kopplung gehört zu einem anderen Konto.')
+        if not re.fullmatch(r'[a-f0-9]{32}', nonce):
+            raise HTTPException(400, 'Ungültige Anfrage.')
+        try:
+            week = await service.calendar_week(day)
+            if owner != service.cart_owner() or owner != service.week_collection_owner():
+                raise ValueError('account changed')
+            queue = service.calendar_queue()
+            placements = database.week_placeholder_shelf(owner, week['days'][0]['date'])
+            payload = telegram_week_snapshot(week, queue, placements)
+            return {'data': encrypt_payload(config, nonce, payload, compressed)}
+        except Exception:
+            raise HTTPException(502, 'Die Woche konnte nicht geladen werden.') from None
 
     @app.put('/api/calendar/placeholders')
     def update_week_placeholder(payload: WeekPlaceholderPlacement):

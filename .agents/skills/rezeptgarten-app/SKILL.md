@@ -21,6 +21,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   lesend laden. AES-256-GCM verschlüsselt die kontogebundene Momentaufnahme zwischen
   Container und Browser. Ein Kontowechsel erfordert erneute Kopplung. Telegram-Metadaten
   bleiben sichtbar; persönliche API-Antworten nicht im Service Worker speichern.
+- Die Telegram-Wochenansicht zeigt verschlüsselt und rein lesend die ausgewählte
+  Woche mit Tagesrezepten, Platzhaltern, lokaler Ablage und vorgemerkten Änderungen.
+  Bilder und Notizinhalte werden nicht übertragen. Konto- und Fehlerprüfungen gelten
+  wie beim Einkaufswagen; Pfeile und „Diese Woche“ wechseln die Woche.
 - App-Start und Einkaufswagenabruf warten maximal 2,5 Sekunden auf den Heimnetz-Server.
   Telegram-Anfragen werden direkt gesendet; ältere Antworten werden anhand ihrer
   Anfragekennung verworfen. Für schreibende API-Anfragen gilt dieses Zeitlimit nicht.
