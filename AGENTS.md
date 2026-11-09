@@ -26,11 +26,20 @@ Server-Bot zugelassen; ein ausdrücklich gestarteter Nachrichtentest erwartet ei
 Bestätigung mit zufälliger Kennung. Beide Bots benötigen Bot-zu-Bot-Freigabe und
 einen eigenen Update-Kanal ohne parallelen Webhook oder andere Verbraucher. Der
 Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet nur frische private
-Testnachrichten des zugeordneten Bots. Beim Test werden Telegram-Updates abgerufen
+Test- und Einkaufswagenanfragen des zugeordneten Bots. Dabei werden Telegram-Updates abgerufen
 und bestätigt. Nach vorheriger Verbindung im Heimnetz ist der Test auch ohne Heimnetz
 mit Internetzugang möglich. Bei nicht erreichbarem Server bleibt der Status des
 Server-Tokens unbekannt; Browserdaten können vom Browser gelöscht werden. Keine
 Tokens oder Nachrichten protokollieren.
+
+Der Einkaufswagen kann ohne Heimnetz bei vorhandener Internetverbindung über Telegram
+lesend geladen werden. Dafür Bots nach Einführung dieser Funktion im Heimnetz erneut
+verbinden: Der Browser erstellt einen AES-256-GCM-Schlüssel, der serverseitig im Vault
+liegt und im jeweiligen Browser gespeichert wird. Einkaufsdaten werden vor der Übertragung
+verschlüsselt; Telegram sieht Metadaten. Der Wagen ist an das bei der Kopplung aktuelle
+Konto gebunden, bei Kontowechsel ist eine erneute Kopplung nötig. Die Ansicht ist eine
+Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufällige
+Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
 
 ## Vertrauliche Daten
 

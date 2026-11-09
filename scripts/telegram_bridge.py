@@ -10,7 +10,8 @@ import urllib.request
 from pathlib import Path
 
 STATE = Path('/var/lib/rezeptgarten-telegram/offset.json')
-CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; import json; print(json.dumps(Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read()))"
+CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; import json; v=Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read() or {}; print(json.dumps({k:v.get(k) for k in ('token','client_id')}))"
+CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1]))"
 
 
 def config():
@@ -37,12 +38,24 @@ def reply_for(update, client_id, now):
     sender = message.get('from') or {}
     chat = message.get('chat') or {}
     text = message.get('text') or ''
-    match = re.fullmatch(r'rezeptgarten-ping ([a-f0-9]{32})', text)
+    match = re.fullmatch(r'rezeptgarten-(ping|cart) ([a-f0-9]{32})', text)
     if (not match or sender.get('id') != client_id or not sender.get('is_bot')
             or chat.get('type') != 'private' or chat.get('id') != client_id
             or not isinstance(message.get('date'), int) or abs(now - message['date']) > 120):
         return None
-    return 'rezeptgarten-pong ' + match.group(1)
+    if match.group(1) == 'ping':
+        return 'rezeptgarten-pong ' + match.group(2)
+    return 'rezeptgarten-cart ' + match.group(2)
+
+
+def cart_messages(nonce):
+    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CART_READER, nonce],
+                            capture_output=True, timeout=20, check=True)
+    encoded = result.stdout.decode('ascii').strip()
+    if not re.fullmatch(r'[A-Za-z0-9+/=]{1,54000}', encoded):
+        raise ValueError('invalid encrypted response')
+    pieces = [encoded[i:i + 3000] for i in range(0, len(encoded), 3000)]
+    return [f'rezeptgarten-cart-part {nonce} {i + 1}/{len(pieces)} {piece}' for i, piece in enumerate(pieces)]
 
 
 def main():
@@ -73,7 +86,20 @@ def main():
                 if reply and time.monotonic() - last_reply >= 1:
                     # Recheck pairing after the long poll before sending anything.
                     if config() == value:
-                        call(token, 'sendMessage', {'chat_id': client_id, 'text': reply})
+                        if reply.startswith('rezeptgarten-cart '):
+                            nonce = reply.split(' ')[1]
+                            try:
+                                messages = cart_messages(nonce)
+                            except (OSError, ValueError, subprocess.SubprocessError):
+                                messages = ['rezeptgarten-cart-error ' + nonce]
+                        else:
+                            messages = [reply]
+                        for index, message in enumerate(messages):
+                            if index:
+                                time.sleep(1.1)
+                            if config() != value:
+                                break
+                            call(token, 'sendMessage', {'chat_id': client_id, 'text': message})
                         last_reply = time.monotonic()
                 offset = max(offset, update_id + 1)
                 temporary = STATE.with_suffix('.tmp')

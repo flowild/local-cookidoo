@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import base64
 import httpx
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -197,8 +198,15 @@ def create_app(directory=None, secure_cookies=None):
         except (ValueError, UnicodeDecodeError):
             raise HTTPException(400, 'Ungültige Bot-Kennung.') from None
         client_id = payload.get('client_id') if isinstance(payload, dict) else None
+        cart_key = payload.get('cart_key') if isinstance(payload, dict) else None
         if type(client_id) is not int or not 0 < client_id < 2**53:
             raise HTTPException(400, 'Ungültige Bot-Kennung.')
+        if cart_key is not None:
+            try:
+                if not isinstance(cart_key, str) or len(base64.b64decode(cart_key, validate=True)) != 32:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(400, 'Ungültiger Verschlüsselungsschlüssel.') from None
         saved = telegram_vault.read()
         if not saved or not saved.get('token'):
             raise HTTPException(409, 'Bitte zuerst das Server-Bot-Token speichern.')
@@ -213,7 +221,10 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(502, 'Server-Bot konnte bei Telegram nicht geprüft werden.') from None
         if bot['id'] == client_id:
             raise HTTPException(400, 'Bitte zwei unterschiedliche Bots verwenden.')
-        telegram_vault.write({'token': saved['token'], 'client_id': client_id})
+        pair = {'token': saved['token'], 'client_id': client_id}
+        if cart_key is not None:
+            pair.update({'cart_key': cart_key, 'cart_owner': service.cart_owner()})
+        telegram_vault.write(pair)
         return {'username': bot['username'], 'id': bot['id']}
 
     @app.post('/api/google-api-key')

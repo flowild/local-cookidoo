@@ -85,6 +85,21 @@ class AppTests(unittest.TestCase):
         self.assertNotIn(token, response.text)
         self.assertEqual(self.client.post('/api/telegram-pair', json={'client_id': 111}, headers={'Origin':'https://evil.example'}).status_code, 403)
 
+    def test_telegram_pair_binds_encryption_key_to_current_account(self):
+        token = '123456789:' + 'a' * 35
+        key = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='
+        self.client.post('/api/telegram-server-bot', json={'token': token}, headers=ORIGIN)
+        result = httpx.Response(200, json={'ok': True, 'result': {'id': 222, 'is_bot': True, 'username': 'ServerBot'}})
+        with patch('app.main.httpx.AsyncClient') as factory:
+            factory.return_value.__aenter__.return_value.post = AsyncMock(return_value=result)
+            response = self.client.post('/api/telegram-pair', json={'client_id': 111, 'cart_key':key}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 200)
+        stored = Vault(self.tmp.name, 'telegram-server-bot.enc').read()
+        self.assertEqual(stored['cart_key'], key)
+        self.assertEqual(stored['cart_owner'], self.app.state.sync.cart_owner())
+        self.assertNotIn(key, response.text)
+        self.assertEqual(self.client.post('/api/telegram-pair', json={'client_id':111, 'cart_key':'bad'}, headers=ORIGIN).status_code, 400)
+
     def test_app_version_is_shared_by_health_and_cached_shell(self):
         from app.version import APP_VERSION
         health = self.client.get('/api/health')

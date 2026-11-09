@@ -8,6 +8,8 @@ class TelegramBridgeTests(unittest.TestCase):
         message = {'from': {'id': 123, 'is_bot': True}, 'chat': {'id': 123, 'type': 'private'},
                    'date': 1000, 'text': 'rezeptgarten-ping ' + nonce}
         self.assertEqual(reply_for({'message': message}, 123, 1000), 'rezeptgarten-pong ' + nonce)
+        cart = {**message, 'text': 'rezeptgarten-cart ' + nonce}
+        self.assertEqual(reply_for({'message': cart}, 123, 1000), 'rezeptgarten-cart ' + nonce)
         self.assertIsNone(reply_for({'message': message}, 456, 1000))
         self.assertIsNone(reply_for({'message': message}, 123, 1121))
         for key, value in [('text', 'rezeptgarten-pong ' + nonce), ('chat', {'id': 123, 'type': 'group'}),

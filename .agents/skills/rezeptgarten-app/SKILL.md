@@ -17,6 +17,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   bestätigte Bot-Kommunikation. Der Test funktioniert nach Kopplung auch ohne Heimnetz
   mit Internet. Beide Bots benötigen Bot-zu-Bot-Freigabe und dürfen keine weiteren
   Update-Verbraucher oder Webhooks haben. Tokens und Nachrichten nicht protokollieren.
+- Ohne Heimnetz lässt sich der Einkaufswagen nach erneuter Bot-Kopplung über Telegram
+  lesend laden. AES-256-GCM verschlüsselt die kontogebundene Momentaufnahme zwischen
+  Container und Browser. Ein Kontowechsel erfordert erneute Kopplung. Telegram-Metadaten
+  bleiben sichtbar; persönliche API-Antworten nicht im Service Worker speichern.
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`

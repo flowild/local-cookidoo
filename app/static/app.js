@@ -602,7 +602,8 @@ async function loadWeekBadges(week) {
 }
 async function renderRoute() {
   if (!state.status) {
-    if (location.hash === '#einstellungen') { state.view = 'einstellungen'; navActive(state.view); renderOfflineSettings(); }
+    if (location.hash === '#einkaufswagen') { state.view = 'einkaufswagen'; navActive(state.view); await renderOfflineCart(++state.request); }
+    else if (location.hash === '#einstellungen') { state.view = 'einstellungen'; navActive(state.view); renderOfflineSettings(); }
     else $('#content').innerHTML = emptyContent('Dein Rezeptgarten ist gerade nicht erreichbar.', 'Verbinde dich mit deinem Heimnetz. Die Telegram-Einstellungen für diesen Browser bleiben erreichbar.');
     return;
   }
@@ -673,7 +674,9 @@ async function renderRoute() {
   await Promise.all([loadRecipes(false, request), collection?.kind === 'local' ? loadCandidates(false, request) : Promise.resolve()]);
 }
 async function renderCart(request = state.request) {
-  const cart = await api('/api/cart');
+  let cart;
+  try { cart = await api('/api/cart'); }
+  catch (error) { if (!serverReachable && request === state.request) return renderOfflineCart(request); throw error; }
   if (request !== state.request || state.view !== 'einkaufswagen') return;
   const recipes = cart.items.filter(item => item.kind === 'recipe');
   setCartCount(recipes.length);
@@ -942,6 +945,7 @@ async function loadCandidates(append = false, request = state.request) {
 }
 const telegramClientKey = 'rezeptgarten-telegram-client-token';
 const telegramPairKey = 'rezeptgarten-telegram-pair';
+let telegramCartBusy = false;
 function telegramSettings(serverStatus) {
   let clientSet = false;
   try { clientSet = !!localStorage.getItem(telegramClientKey); } catch (_) {}
@@ -960,6 +964,61 @@ async function telegramClientCall(token, method, values = {}) {
   if (!response.ok || !data.ok) throw new Error('Telegram hat die Anfrage abgelehnt. Prüfe Token, Bot-zu-Bot-Freigabe und bestehende Webhooks.');
   return data.result;
 }
+function bytesToBase64(bytes) { return btoa(String.fromCharCode(...bytes)); }
+function base64ToBytes(value) { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); }
+async function renderOfflineCart(request) {
+  const content = $('#content');
+  content.innerHTML = `<div class="page-title"><h1>Mein Einkaufswagen</h1><p>Der Server ist nicht im Heimnetz erreichbar. Der Einkaufswagen wird verschlüsselt über Telegram geladen.</p></div><p id="telegram-cart-status" role="status">Einkaufswagen wird angefordert …</p><div id="telegram-cart-content"></div><button type="button" class="button" data-telegram-cart-refresh>Erneut laden</button>`;
+  if (telegramCartBusy) { $('#telegram-cart-status').textContent = 'Ein Abruf läuft bereits. Bitte versuche es gleich erneut.'; return; }
+  telegramCartBusy = true;
+  try {
+    const token = localStorage.getItem(telegramClientKey), pair = JSON.parse(localStorage.getItem(telegramPairKey) || 'null');
+    if (!token || !pair?.cart_key || !Number.isSafeInteger(pair.id) || !/^[A-Za-z0-9_]{5,32}$/.test(pair.username)) throw new Error('Bitte die Bots einmal im Heimnetz unter Einstellungen erneut verbinden.');
+    const client = await telegramClientCall(token, 'getMe');
+    if (!client.is_bot || client.id !== pair.client_id) throw new Error('Bitte die Bots im Heimnetz erneut verbinden.');
+    const pending = await telegramClientCall(token, 'getUpdates', {limit:'100', timeout:'0', allowed_updates:'["message"]'});
+    let offset = pending.reduce((n, update) => Math.max(n, Number.isSafeInteger(update.update_id) ? update.update_id + 1 : 0), 0);
+    const nonce = crypto.randomUUID().replaceAll('-', '');
+    await telegramClientCall(token, 'sendMessage', {chat_id:'@' + pair.username, text:'rezeptgarten-cart ' + nonce});
+    const parts = new Map(), until = Date.now() + 60000;
+    let total = null;
+    while (Date.now() < until && (total === null || parts.size < total)) {
+      const updates = await telegramClientCall(token, 'getUpdates', {offset:String(offset), timeout:'8', allowed_updates:'["message"]'});
+      for (const update of updates) {
+        if (Number.isSafeInteger(update.update_id)) offset = Math.max(offset, update.update_id + 1);
+        const message = update.message;
+        if (message?.from?.id !== pair.id || !message.from.is_bot || message.chat?.type !== 'private') continue;
+        if (message.text === 'rezeptgarten-cart-error ' + nonce) throw new Error('Der Server konnte den Einkaufswagen nicht laden. Bitte prüfe die Bot-Verbindung im Heimnetz.');
+        const match = (message.text || '').match(/^rezeptgarten-cart-part ([a-f0-9]{32}) (\d+)\/(\d+) ([A-Za-z0-9+/=]+)$/);
+        if (!match || match[1] !== nonce) continue;
+        const index = Number(match[2]), count = Number(match[3]);
+        if (count < 1 || count > 18 || index < 1 || index > count || (total !== null && count !== total)) throw new Error('Die Antwort ist unvollständig oder ungültig.');
+        total = count; parts.set(index, match[4]);
+      }
+    }
+    if (total === null || parts.size !== total) throw new Error('Keine vollständige Antwort erhalten. Bitte erneut versuchen.');
+    const encoded = Array.from({length:total}, (_, i) => parts.get(i + 1)).join('');
+    const bytes = base64ToBytes(encoded), keyBytes = base64ToBytes(pair.cart_key);
+    const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:bytes.slice(0, 12), additionalData:new TextEncoder().encode(nonce)}, key, bytes.slice(12));
+    const cart = JSON.parse(new TextDecoder().decode(plain));
+    if (!Array.isArray(cart.items)) throw new Error('Ungültige Einkaufsdaten.');
+    if (request !== state.request || state.view !== 'einkaufswagen') return;
+    const recipes = cart.items.filter(i => i.kind === 'recipe'), extras = cart.items.filter(i => i.kind === 'additional');
+    const rows = [];
+    for (const recipe of recipes) for (const ingredient of recipe.ingredients || []) rows.push({...ingredient, recipe:recipe.name});
+    rows.sort((a,b) => Number(a.owned) - Number(b.owned) || String(a.category).localeCompare(String(b.category), 'de'));
+    const ingredients = rows.map(i => `<label class="cart-ingredient-row"><input type="checkbox" disabled ${i.owned ? 'checked' : ''}><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(i.text)}</span><small>${escapeHTML(i.recipe)} · ${escapeHTML(i.category)}</small></span></label>`).join('');
+    const extraRows = extras.map(i => `<label class="cart-ingredient-row"><input type="checkbox" disabled ${i.owned ? 'checked' : ''}><span>${escapeHTML(i.name)}</span></label>`).join('');
+    $('#telegram-cart-content').innerHTML = `<section class="cart-section"><h2>Rezepte</h2>${recipes.length ? `<ul>${recipes.map(i => `<li>${escapeHTML(i.name)}</li>`).join('')}</ul>` : '<p>Keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${ingredients || '<p>Keine Zutaten vorhanden.</p>'}</section><section class="cart-section"><h2>Weitere Artikel</h2>${extraRows || '<p>Keine weiteren Artikel.</p>'}</section>`;
+    $('#telegram-cart-status').textContent = 'Aktueller Stand über Telegram geladen. Unterwegs ist diese Ansicht zunächst nur lesbar.';
+  } catch (error) {
+    if (request === state.request && state.view === 'einkaufswagen' && $('#telegram-cart-status')) $('#telegram-cart-status').textContent = error.message || 'Der Einkaufswagen konnte nicht geladen werden.';
+  } finally { telegramCartBusy = false; }
+}
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-telegram-cart-refresh]') && !telegramCartBusy) renderOfflineCart(++state.request);
+});
 document.addEventListener('click', async event => {
   const button = event.target.closest('[data-telegram-pair], [data-telegram-test]');
   if (!button) return;
@@ -972,8 +1031,9 @@ document.addEventListener('click', async event => {
       status.textContent = 'Bots werden geprüft …';
       const client = await telegramClientCall(token, 'getMe');
       if (!client.is_bot || !Number.isSafeInteger(client.id)) throw new Error('Das Client-Token gehört nicht zu einem gültigen Bot.');
-      const pair = await post('/api/telegram-pair', {client_id:client.id});
-      localStorage.setItem(telegramPairKey, JSON.stringify({...pair, client_id:client.id}));
+      const cart_key = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
+      const pair = await post('/api/telegram-pair', {client_id:client.id, cart_key});
+      localStorage.setItem(telegramPairKey, JSON.stringify({...pair, client_id:client.id, cart_key}));
       state.status ? renderSettings() : renderOfflineSettings();
       $('#telegram-test-status').textContent = 'Bots verbunden. Starte den Verbindungstest.';
     } else {

@@ -1,6 +1,9 @@
 import json
 import tempfile
 import unittest
+import base64
+import os
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
@@ -8,6 +11,8 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.storage import now
+from app.security import Vault
+from app.telegram_cart import encrypted_snapshot
 
 ORIGIN = {'Origin': 'https://testserver'}
 
@@ -47,6 +52,25 @@ class CartTests(unittest.TestCase):
 
     def cart(self):
         return self.client.get('/api/cart').json()['items']
+
+    def test_telegram_cart_is_encrypted_read_only_and_bound_to_account(self):
+        self.add_recipe()
+        self.client.post('/api/cart/items', json={'name': 'Milch'}, headers=ORIGIN)
+        self.client.post('/api/cart/items', json={'name': 'Wasser'}, headers=ORIGIN)
+        key = os.urandom(32)
+        owner = self.app.state.sync.cart_owner()
+        Vault(self.tmp.name, 'telegram-server-bot.enc').write({'cart_key':base64.b64encode(key).decode(), 'cart_owner':owner})
+        nonce = 'a' * 32
+        encoded = encrypted_snapshot(self.tmp.name, nonce)
+        self.assertNotIn('Milch', encoded)
+        packed = base64.b64decode(encoded)
+        result = json.loads(AESGCM(key).decrypt(packed[:12], packed[12:], nonce.encode()))
+        self.assertEqual([i['name'] for i in result['items']], ['Testrezept', 'Milch'])
+        self.assertEqual([i['text'] for i in result['items'][0]['ingredients']], ['2 Zwiebeln', '100 g Mehl'])
+        self.assertEqual(len(self.cart()), 3)
+        self.db.set('account', {'email':'other@example.invalid', 'region':'de'})
+        with self.assertRaises(ValueError):
+            encrypted_snapshot(self.tmp.name, nonce)
 
     def test_local_add_deduplicates_survives_library_sync_and_scopes_account(self):
         self.assertEqual(self.client.post('/api/recipes/r1/shopping').status_code, 403)
