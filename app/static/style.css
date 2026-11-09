@@ -126,6 +126,10 @@
 
 .cart-category{margin:12px 0 14px}.cart-category h3{margin-bottom:5px}.cart-category .cart-ingredient{padding:1px 0}.cart-category .cart-ingredient-heading{padding:6px 0 2px}.cart-category .cart-ingredient-row{min-height:42px;padding:5px 0;gap:8px}.cart-category .cart-ingredient-copy small{margin-top:1px}.cart-owned-heading{margin-top:20px}
 
+#telegram-cart-content .cart-ingredient-row{display:flex;align-items:flex-start;gap:10px;min-height:42px;margin:0;padding:5px 0;color:var(--ink);font-size:13px;font-weight:400}
+#telegram-cart-content .cart-ingredient-row>input[type="checkbox"]{appearance:auto;display:block;flex:0 0 20px;width:20px;height:20px;min-width:20px;min-height:0;margin:1px 0 0;padding:0;accent-color:var(--green)}
+#telegram-cart-content .cart-ingredient-row>.cart-ingredient-copy,#telegram-cart-content .cart-ingredient-row>span:not(.cart-ingredient-copy){min-width:0;line-height:1.35;overflow-wrap:anywhere}
+
 .mobile-settings{display:none}@media(max-width:700px){.mobile-settings{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;flex:0 0 38px;border-radius:10px;color:var(--ink)}.mobile-settings.active{background:var(--soft);color:var(--green)}.mobile-settings svg{width:20px;height:20px}.mobile-nav{grid-template-columns:repeat(6,minmax(0,1fr));overflow-x:visible}.mobile-nav a{min-width:0}}@media(max-width:480px){#sync-button span{display:none}}
 
 .recipe-tips-list li{white-space:pre-wrap}.recipe-tips-status{color:var(--muted);font-size:11px;margin:12px 0}.recipe-tips-status button{font-size:inherit}

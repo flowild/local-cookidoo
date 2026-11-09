@@ -40,6 +40,8 @@ verschlüsselt; Telegram sieht Metadaten. Der Wagen ist an das bei der Kopplung 
 Konto gebunden, bei Kontowechsel ist eine erneute Kopplung nötig. Die Ansicht ist eine
 Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufällige
 Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
+Im Telegram-Einkaufswagen stehen Checkboxen und Texte auch auf dem Handy linksbündig
+in kompakten Zeilen; die Checkboxen zeigen den gespeicherten Stand an und sind lesend.
 Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
 maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
 Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart
