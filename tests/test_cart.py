@@ -68,6 +68,7 @@ class CartTests(unittest.TestCase):
         result = json.loads(AESGCM(key).decrypt(packed[:12], packed[12:], nonce.encode()))
         self.assertEqual([i['name'] for i in result['items']], ['Testrezept', 'Milch'])
         self.assertEqual([i['text'] for i in result['items'][0]['ingredients']], ['2 Zwiebeln', '100 g Mehl'])
+        self.assertEqual([i['icon_name'] for i in result['items'][0]['ingredients']], ['Zwiebel', 'Mehl'])
         self.assertEqual(len(self.cart()), 3)
         compressed = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, compress=True))
         decoded = AESGCM(key).decrypt(compressed[:12], compressed[12:], nonce.encode())

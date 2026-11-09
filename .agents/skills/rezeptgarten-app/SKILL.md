@@ -23,6 +23,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   bleiben sichtbar; persönliche API-Antworten nicht im Service Worker speichern.
   Zutaten und Zusatzartikel stehen auch auf kleinen Displays mit links angeordneten
   Checkboxen und ausgerichtetem Text in kompakten, nur lesbaren Zeilen.
+  Ihre Icons werden aus dem mit der App-Hülle gespeicherten SVG- und Emoji-Code
+  dargestellt; Telegram überträgt Zutatenbezeichner und Kategorie, keine Icon-Bilder.
 - Die Telegram-Wochenansicht zeigt verschlüsselt und rein lesend die ausgewählte
   Woche mit Tagesrezepten, Platzhaltern, lokaler Ablage und vorgemerkten Änderungen.
   Bilder und Notizinhalte werden nicht übertragen. Konto- und Fehlerprüfungen gelten

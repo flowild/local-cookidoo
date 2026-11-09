@@ -42,6 +42,9 @@ Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufäl
 Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
 Im Telegram-Einkaufswagen stehen Checkboxen und Texte auch auf dem Handy linksbündig
 in kompakten Zeilen; die Checkboxen zeigen den gespeicherten Stand an und sind lesend.
+Zutaten und Zusatzartikel zeigen dieselben lokal in der App-Hülle enthaltenen Icons
+wie die übrigen Ansichten. Über Telegram kommen lediglich die Angaben für die
+Symbolauswahl, keine Icon-Bilddateien.
 Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
 maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
 Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart

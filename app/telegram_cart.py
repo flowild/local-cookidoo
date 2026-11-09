@@ -50,7 +50,7 @@ def snapshot(database, paired_owner):
                 name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
                 if ingredient_group_key(name) == 'wasser':
                     continue
-                ingredients.append({'text': ingredient.get('text', ''), 'owned': bool(ingredient.get('owned')), 'category': shopping_category(name, pantry_categories)})
+                ingredients.append({'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'category': shopping_category(name, pantry_categories)})
             result.append({'kind': 'recipe', 'name': data.get('name', ''), 'ingredients': ingredients})
         elif item['kind'] == 'additional' and ingredient_group_key(data.get('name', '')) != 'wasser':
             result.append({'kind': 'additional', 'name': data.get('name', ''), 'owned': bool(data.get('owned'))})
