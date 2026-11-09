@@ -52,15 +52,18 @@ function duration(seconds) {
   const minutes = Math.ceil(seconds / 60);
   return minutes >= 60 ? `${Math.floor(minutes / 60)} Std.${minutes % 60 ? ` ${minutes % 60} Min.` : ''}` : `${minutes} Min.`;
 }
+let serverReachable = false;
 async function api(path, options = {}) {
   let response;
   try {
     response = await fetch(path, {credentials:'same-origin', ...options, headers:{'Content-Type':'application/json', ...options.headers}});
   } catch (_) {
+    serverReachable = false;
     $('#offline-banner').textContent = 'Keine Verbindung zu deinem Rezeptgarten-Server. Prüfe die Verbindung zum Heimnetz.';
     $('#offline-banner').hidden = false;
     throw new Error('Dein Server ist gerade nicht erreichbar. Prüfe deine Verbindung zum Heimnetz.');
   }
+  serverReachable = true;
   if (navigator.onLine) $('#offline-banner').hidden = true;
   let payload;
   try { payload = await response.json(); } catch (_) { throw new Error('Die Serverantwort konnte nicht gelesen werden. Bitte versuche es erneut.'); }
@@ -598,7 +601,11 @@ async function loadWeekBadges(week) {
   }
 }
 async function renderRoute() {
-  if (!state.status) return;
+  if (!state.status) {
+    if (location.hash === '#einstellungen') { state.view = 'einstellungen'; navActive(state.view); renderOfflineSettings(); }
+    else $('#content').innerHTML = emptyContent('Dein Rezeptgarten ist gerade nicht erreichbar.', 'Verbinde dich mit deinem Heimnetz. Die Telegram-Einstellungen für diesen Browser bleiben erreichbar.');
+    return;
+  }
   const request = ++state.request;
   const fragment = location.hash.slice(1);
   state.collection = null;
@@ -933,10 +940,22 @@ async function loadCandidates(append = false, request = state.request) {
   $('#candidate-empty').textContent = state.candidateQuery ? 'Keine passenden Rezepte gefunden.' : 'Alle Rezepte sind bereits in dieser Liste.';
   $('#candidate-more').hidden = state.candidateOffset >= result.total;
 }
+const telegramClientKey = 'rezeptgarten-telegram-client-token';
+function telegramSettings(serverStatus) {
+  let clientSet = false;
+  try { clientSet = !!localStorage.getItem(telegramClientKey); } catch (_) {}
+  const serverText = serverStatus === null ? 'Server nicht erreichbar; Status unbekannt.' : serverStatus ? 'Ein Token ist gespeichert.' : 'Noch kein Token gespeichert.';
+  const card = (role, label, status, set, disabled) => `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Telegram: ${label}</h2><p>${status}</p><form data-telegram-form="${role}" autocomplete="off"><label for="telegram-${role}">${set ? 'Token ersetzen' : 'Bot-Token'}</label><input id="telegram-${role}" type="password" required maxlength="221" autocomplete="off" spellcheck="false" ${disabled ? 'disabled' : ''}><button class="button button-primary" type="submit" ${disabled ? 'disabled' : ''}>Token speichern</button></form>${set && !disabled ? `<button class="text-link danger-link" type="button" data-telegram-delete="${role}">Token entfernen</button>` : ''}<p class="settings-small">${role === 'client' ? 'Das Token liegt unverschlüsselt in diesem Browser und gewährt Zugriff auf den Bot. Nur auf vertrauenswürdigen Geräten speichern.' : 'Das Token wird verschlüsselt auf dem Rezeptgarten-Server gespeichert.'} Ein gespeichertes Token bestätigt noch keine Verbindung zu Telegram.</p></section>`;
+  return card('server', 'Server-Bot', serverText, serverStatus === true, serverStatus === null) + card('client', 'Client-Bot', clientSet ? 'Ein Token ist in diesem Browser gespeichert.' : 'Noch kein Token in diesem Browser gespeichert.', clientSet, false);
+}
+function renderOfflineSettings() {
+  $('#content').innerHTML = `<div class="page-title"><h1>Einstellungen</h1><p>Der Rezeptgarten-Server ist nicht erreichbar.</p></div><div class="settings-grid">${telegramSettings(null)}</div>`;
+}
 function renderSettings() {
   const status = state.status, account = status.account;
   $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">ALLES NACH DEINEM GESCHMACK</span><h1>Dein Rezeptgarten</h1><p>Verbindung, Synchronisierung und deine App auf dem Startbildschirm.</p></div><div class="settings-grid"><section class="settings-card"><span class="dialog-symbol">${icon('leaf')}</span><h2>Darstellung</h2><p>Wähle eine angenehme Darstellung für dieses Gerät.</p><label class="theme-toggle" for="dark-mode"><span>Dunkelmodus</span><input id="dark-mode" type="checkbox" role="switch" ${document.documentElement.dataset.theme === 'dark' ? 'checked' : ''}></label><div class="accent-control"><label for="accent-color">Akzentfarbe</label><div class="accent-picker-row"><input id="accent-color" type="color" value="${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}" aria-describedby="accent-description"><span id="accent-value">${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}</span><button class="button" type="button" data-action="accent-reset">Standardfarbe</button></div><p id="accent-description" class="settings-small">Die Farbe gilt für diesen Browser.</p></div><p class="settings-small">Die Auswahl wird in diesem Browser gespeichert.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Dein Cookidoo-Konto</h2>${status.connected ? `<p class="account-email">${escapeHTML(account?.email)}</p><p>Verbunden mit Cookidoo ${escapeHTML(({de:'Deutschland',at:'Österreich',ch:'Schweiz'})[account?.region] || '')}.</p><button class="button" data-action="connect">Konto neu verbinden</button><button class="text-link danger-link" data-action="disconnect">Verbindung trennen</button><p class="settings-small">Deine lokale Sammlung bleibt beim Trennen erhalten.</p>` : `<p>Verbinde dein Konto, um persönliche Rezeptlisten und gespeicherte Cookidoo-Kollektionen zu laden.</p><button class="button button-primary" data-action="connect">${icon('link')}Cookidoo verbinden</button>`}</section><section class="settings-card"><span class="dialog-symbol">${icon('sync')}</span><h2>Automatisch aktuell</h2><p>Rezeptgarten prüft deine Listen im Hintergrund, auch wenn die App geschlossen ist.</p><label for="sync-hours">Synchronisierung<select id="sync-hours"><option value="0" ${status.sync_hours === 0 ? 'selected' : ''}>Nur manuell</option><option value="1" ${status.sync_hours === 1 ? 'selected' : ''}>Jede Stunde</option><option value="6" ${status.sync_hours === 6 ? 'selected' : ''}>Alle 6 Stunden</option><option value="24" ${status.sync_hours === 24 ? 'selected' : ''}>Einmal täglich</option></select></label><p class="settings-small">Letzter erfolgreicher Abgleich: ${escapeHTML(formatDate(status.stats.last_sync))}</p>${status.last_result?.phase === 'error' ? `<p class="form-error">${escapeHTML(status.last_result.message)}</p>` : ''}</section><section class="settings-card"><span class="dialog-symbol">${icon('download')}</span><h2>Auch auf deinem Handy</h2><p>Installiere Rezeptgarten über Chrome und öffne deine Sammlung direkt vom Startbildschirm.</p><button class="button" data-action="install">${icon('download')}App installieren</button><button class="text-link" data-action="install-help">Installationshilfe</button><p class="settings-small">Die Verbindung zum eigenen Server im Heimnetz bleibt erforderlich.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('book')}</span><h2>Deine Daten bleiben bei dir</h2><p>${status.stats.recipes} Rezepte und ${status.stats.images} lokal gespeicherte Bilder. Vor jedem erfolgreichen Abgleich wird die Datenbank gesichert.</p><a class="button" href="/api/export" download>${icon('download')}Sammlung als JSON exportieren</a><p class="settings-small">Rezeptgarten übernimmt aktuell Listen und Rezeptdetails aus Cookidoo. Zutaten werden in einer späteren Ansicht ergänzt.</p></section></div>`;
   $('.settings-grid').insertAdjacentHTML('beforeend', `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Google API</h2><p>${status.google_api_key_set ? 'Ein API-Schlüssel ist gespeichert.' : 'Noch kein API-Schlüssel gespeichert.'}</p><form id="google-key-form" autocomplete="off"><label for="google-api-key">${status.google_api_key_set ? 'API-Schlüssel ersetzen' : 'API-Schlüssel'}</label><input id="google-api-key" type="password" required maxlength="512" autocomplete="off" spellcheck="false"><button class="button button-primary" type="submit">Schlüssel speichern</button></form>${status.google_api_key_set ? '<button class="text-link danger-link" type="button" data-action="google-key-delete">Schlüssel entfernen</button>' : ''}<p class="settings-small">Nach dem Speichern wird der Schlüssel nicht mehr angezeigt.</p></section>`);
+  $('.settings-grid').insertAdjacentHTML('beforeend', telegramSettings(serverReachable ? !!status.telegram_server_bot_set : null));
 }
 function recipeDetails(recipe) {
   const parse = value => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } };
@@ -1556,7 +1575,32 @@ document.addEventListener('keydown', event => {
   } else if (event.key === 'Enter' && recipeIngredientIndex >= 0) { event.preventDefault(); chooseRecipeIngredient(recipeIngredientIndex); }
   else if (event.key === 'Escape') { event.preventDefault(); $('#recipe-ingredient-options').hidden = true; event.target.setAttribute('aria-expanded', 'false'); }
 });
+document.addEventListener('click', async event => {
+  const remove = event.target.closest('[data-telegram-delete]');
+  if (!remove) return;
+  remove.disabled = true;
+  try {
+    if (remove.dataset.telegramDelete === 'server') { await api('/api/telegram-server-bot', {method:'DELETE'}); state.status.telegram_server_bot_set = false; }
+    else localStorage.removeItem(telegramClientKey);
+    state.status ? renderSettings() : renderOfflineSettings(); toast('Bot-Token entfernt.');
+  } catch (error) { toast(error.message || 'Token konnte nicht entfernt werden.'); }
+  finally { remove.disabled = false; }
+});
 document.addEventListener('submit', async event => {
+  if (event.target.matches('[data-telegram-form]')) {
+    event.preventDefault();
+    const role = event.target.dataset.telegramForm, input = event.target.querySelector('input'), button = event.target.querySelector('button');
+    const token = input.value.trim(); input.value = '';
+    if (!/^[0-9]{1,20}:[A-Za-z0-9_-]{20,200}$/.test(token)) { toast('Bitte gib ein gültiges Bot-Token ein.'); return; }
+    button.disabled = true;
+    try {
+      if (role === 'server') { await post('/api/telegram-server-bot', {token}); state.status.telegram_server_bot_set = true; }
+      else localStorage.setItem(telegramClientKey, token);
+      state.status ? renderSettings() : renderOfflineSettings(); toast('Bot-Token gespeichert.');
+    } catch (error) { toast(error.message || 'Token konnte nicht gespeichert werden.'); }
+    finally { button.disabled = false; }
+    return;
+  }
   if (event.target.id === 'cart-item-form') {
     event.preventDefault();
     const form = event.target, input = $('#cart-item-name'), button = form.querySelector('button');
@@ -1638,6 +1682,7 @@ window.addEventListener('beforeinstallprompt', event => { event.preventDefault()
 window.addEventListener('appinstalled', () => { deferredInstall = null; toast('Rezeptgarten wurde installiert. Viel Freude mit deiner Sammlung!'); });
 function offlineStatus() { $('#offline-banner').hidden = navigator.onLine; }
 window.addEventListener('online', offlineStatus); window.addEventListener('offline', offlineStatus); offlineStatus();
+window.addEventListener('online', () => { if (!state.status) loadLibrary().catch(() => {}); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && navigator.onLine && state.view === 'uebersicht' && featuredLocalDay !== berlinDay()) loadFeatured().catch(error => toast(error.message));
 });
@@ -1663,7 +1708,7 @@ setInterval(async () => {
 async function initialize() {
   try {
     await loadLibrary();
-  } catch (error) { $('#content').innerHTML = emptyContent('Dein Rezeptgarten ist gerade nicht erreichbar.', error.message); }
+  } catch (error) { await renderRoute(); }
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 initialize();

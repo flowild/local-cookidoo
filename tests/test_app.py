@@ -61,6 +61,26 @@ class AppTests(unittest.TestCase):
         self.client.__exit__(None, None, None)
         self.tmp.cleanup()
 
+    def test_telegram_server_token_is_encrypted_and_origin_protected(self):
+        token = '123456789:' + 'a' * 35
+        self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])
+        self.assertEqual(self.client.post('/api/telegram-server-bot', json={'token': token}, headers={'Origin': 'https://evil.example'}).status_code, 403)
+        self.assertEqual(self.client.post('/api/telegram-server-bot', json={'token': 'invalid'}, headers=ORIGIN).status_code, 400)
+        self.assertEqual(self.client.post('/api/telegram-server-bot', json={'token': token}, headers=ORIGIN).status_code, 200)
+        self.assertNotIn(token.encode(), (Path(self.tmp.name) / 'telegram-server-bot.enc').read_bytes())
+        self.assertTrue(self.client.get('/api/status').json()['telegram_server_bot_set'])
+        self.assertNotIn(token, self.client.get('/api/status').text)
+        self.assertEqual(self.client.delete('/api/telegram-server-bot', headers=ORIGIN).status_code, 200)
+        self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])
+
+    def test_app_version_is_shared_by_health_and_cached_shell(self):
+        from app.version import APP_VERSION
+        health = self.client.get('/api/health')
+        shell = self.client.get('/')
+        self.assertEqual(health.json()['version'], APP_VERSION)
+        self.assertIn('Rezeptgarten · Version ' + APP_VERSION, shell.text)
+        self.assertNotIn('<!-- APP_VERSION -->', shell.text)
+
     def test_access_without_password_and_origin_protection(self):
         self.assertEqual(self.client.get('/api/collections').status_code, 200)
         self.assertEqual(self.client.get('/api/status').status_code, 200)

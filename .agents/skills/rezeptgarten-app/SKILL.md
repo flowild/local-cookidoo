@@ -5,6 +5,18 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 # Rezeptgarten entwickeln
 
+- Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
+  nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen
+  denselben Stand. Nach Prüfung und Deployment Versionsänderungen mit den zugehörigen
+  Änderungen committen und nach `origin/main` pushen; keine fremden Änderungen
+  überschreiben und keinen Force-Push verwenden. Die PWA-Cacheversion bleibt separat.
+
+- Telegram-Einstellungen verwalten ein verschlüsseltes Server-Token und ein nur im
+  jeweiligen Browser unverschlüsselt gespeichertes Client-Token. Der Status bedeutet
+  lediglich, dass ein Token gespeichert ist; Telegram und der Bot-Nachrichtenaustausch
+  sind noch nicht angebunden. Offline ist der Serverstatus unbekannt und nur das
+  Client-Token bearbeitbar. Tokens niemals ausgeben oder protokollieren.
+
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`
 hat keinen Node-Build. Detailansichten, JSON-Export und automatische sowie manuelle

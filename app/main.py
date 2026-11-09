@@ -20,6 +20,7 @@ from .storage import Database
 from .sync import REGIONS, SyncService, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
 from .ingredients import ingredient_group_key, ingredient_name, shopping_category
+from .version import APP_VERSION
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -119,6 +120,7 @@ def create_app(directory=None, secure_cookies=None):
     database = Database(directory or os.environ.get('REZEPTGARTEN_DATA', './data'))
     vault = Vault(database.directory)
     google_key_vault = Vault(database.directory, 'google-api-key.enc')
+    telegram_vault = Vault(database.directory, 'telegram-server-bot.enc')
     service = SyncService(database, vault)
     @asynccontextmanager
     async def lifespan(app):
@@ -126,7 +128,7 @@ def create_app(directory=None, secure_cookies=None):
         yield
         await service.close()
 
-    app = FastAPI(title='Rezeptgarten', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app = FastAPI(title='Rezeptgarten', version=APP_VERSION, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.database = database
     app.state.sync = service
 
@@ -159,7 +161,7 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/health')
     def health():
-        return {'ok': True, 'version': '0.1.0'}
+        return {'ok': True, 'version': APP_VERSION}
 
     @app.get('/api/auth/status')
     def auth_status():
@@ -168,7 +170,24 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/status')
     def status():
-        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'calendar_queue': service.calendar_queue(), 'cart_recipe_count': database.cart_recipe_count(service.cart_owner())}
+        return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'telegram_server_bot_set': telegram_vault.path.is_file(), 'calendar_queue': service.calendar_queue(), 'cart_recipe_count': database.cart_recipe_count(service.cart_owner())}
+
+    @app.post('/api/telegram-server-bot')
+    async def set_telegram_server_bot(request: Request):
+        try:
+            payload = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            raise HTTPException(400, 'Bitte gib ein gültiges Bot-Token ein.') from None
+        token = payload.get('token') if isinstance(payload, dict) else None
+        if not isinstance(token, str) or not re.fullmatch(r'[0-9]{1,20}:[A-Za-z0-9_-]{20,200}', token.strip()):
+            raise HTTPException(400, 'Bitte gib ein gültiges Bot-Token ein.')
+        telegram_vault.write({'token': token.strip()})
+        return {'ok': True}
+
+    @app.delete('/api/telegram-server-bot')
+    def delete_telegram_server_bot():
+        telegram_vault.clear()
+        return {'ok': True}
 
     @app.post('/api/google-api-key')
     async def set_google_api_key(request: Request):
@@ -668,6 +687,7 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/')
     def index():
-        return FileResponse(STATIC / 'index.html', headers={'Cache-Control': 'no-cache'})
+        html = (STATIC / 'index.html').read_text(encoding='utf-8').replace('<!-- APP_VERSION -->', APP_VERSION)
+        return Response(html, media_type='text/html', headers={'Cache-Control': 'no-cache'})
 
     return app

@@ -5,6 +5,10 @@ description: Teste, deploye, betreibe oder diagnostiziere die vorhandene Rezeptg
 
 # Rezeptgarten-Betrieb
 
+Die bereitgestellte App-Version steht in `app/version.py` und kann über
+`/api/health` geprüft werden. Versionsänderungen nach Prüfung und Deployment
+mit den zugehörigen Änderungen committen und nach `origin/main` pushen.
+
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,
 Python: `/opt/cookidoo-manager/.venv`, systemd-Dienst `rezeptgarten`, Nutzer

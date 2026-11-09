@@ -17,6 +17,15 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 - [rezeptgarten-betrieb](.agents/skills/rezeptgarten-betrieb/SKILL.md): bestehende
   Serverinstanz, SSH, Deployment, Testumgebungen und lokales HTTPS.
 
+## Telegram
+
+Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
+und ein Client-Bot-Token unverschlüsselt im jeweiligen Browser. Sie zeigen nur an,
+ob ein Token vorhanden ist; eine Telegram-Verbindung oder Bot-zu-Bot-Kommunikation
+ist damit noch nicht eingerichtet. Bei nicht erreichbarem Server bleibt der Status
+des Server-Tokens unbekannt; die Client-Einstellungen sind aus der zwischengespeicherten
+App-Hülle erreichbar. Browserdaten können vom Browser gelöscht werden.
+
 ## Vertrauliche Daten
 
 `.local/`, `.qa-venv/`, Datenbanken, Token-Dateien, Zertifikatsartefakte und
@@ -32,6 +41,18 @@ Zugangsdaten nur an die eingerichtete und autorisierte Cookidoo-Zieladresse send
 Änderungen an der App nach der Prüfung auf die bestehende Serverinstanz übertragen
 und dort ihre Bereitstellung prüfen. Den Projektskill rezeptgarten-betrieb beachten;
 Produktivdaten und Konten erhalten.
+
+## Versionierung und Git
+
+Die App-Version steht ausschließlich als `APP_VERSION` in `app/version.py` und
+erscheint in der App sowie unter `/api/health`. Bei jeder relevanten App-Änderung
+die Version nach SemVer erhöhen: Patch für Korrekturen, Minor für abwärtskompatible
+Funktionen, Major für inkompatible Änderungen. Die Cacheversion des Service Workers
+und die URLs statischer Dateien bleiben davon unabhängig und müssen bei Änderungen
+der App-Hülle nach den PWA-Regeln aktualisiert werden. Nach Prüfung und Deployment
+jede Versionsänderung samt zugehörigen Änderungen committen und nach `origin/main`
+pushen. Vorhandene fremde Änderungen beachten, Remote-Änderungen erhalten und niemals
+Force-Push verwenden. Zugangsdaten und persönliche Daten bleiben aus Git ausgeschlossen.
 
 ## Aktuell halten
 
