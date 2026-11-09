@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 
 STATE = Path('/var/lib/rezeptgarten-telegram/offset.json')
-CONFIG_READER = "from app.security import Vault; import json; print(json.dumps(Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read()))"
+CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; import json; print(json.dumps(Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read()))"
 
 
 def config():
