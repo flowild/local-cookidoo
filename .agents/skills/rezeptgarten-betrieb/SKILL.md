@@ -74,6 +74,9 @@ liegt im Workspace unter `certificates/Rezeptgarten-CA.crt`; Download:
 `http://192.168.184.30/zertifikat`. Vertrauen muss je Gerät manuell eingerichtet
 werden; keine globale CA-Installation auf anderen Rechnern ohne Auftrag. Service
 Worker nur für öffentliche App-Hülle, niemals persönliche API-Antworten cachen.
+Die App-Hülle wird beim Start aus dem Service-Worker-Cache geladen; nach Updates
+muss das Gerät die neue Version im Heimnetz mindestens einmal geladen haben, bevor
+sie offline verfügbar ist. Der Browser kann seinen Cache selbst entfernen.
 
 Relevante Änderungen an Betrieb, Tests und Deployment in diesem Skill und den
 Projekthinweisen aktuell halten.

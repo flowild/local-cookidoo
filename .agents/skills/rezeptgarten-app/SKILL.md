@@ -26,6 +26,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Anfragekennung verworfen. Für schreibende API-Anfragen gilt dieses Zeitlimit nicht.
   Unterstützte Browser fordern die komprimierte Momentaufnahme an; ältere Browser
   verwenden das bisherige Format. Komprimierung erfolgt vor der Verschlüsselung.
+- Der Service Worker lädt Navigation und versionierte öffentliche App-Hülle beim
+  Neustart zuerst aus seinem Cache, damit ein hängendes Heimnetz den Start nicht
+  blockiert. Ohne gespeicherte Hülle ist ein vorheriger Online-Aufruf nötig; persönliche
+  API-Antworten bleiben vom Service-Worker-Cache ausgeschlossen.
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`

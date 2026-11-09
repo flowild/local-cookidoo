@@ -611,7 +611,7 @@ async function renderRoute() {
   if (!state.status) {
     if (location.hash === '#einkaufswagen') { state.view = 'einkaufswagen'; navActive(state.view); await renderOfflineCart(++state.request); }
     else if (location.hash === '#einstellungen') { state.view = 'einstellungen'; navActive(state.view); renderOfflineSettings(); }
-    else $('#content').innerHTML = emptyContent('Dein Rezeptgarten ist gerade nicht erreichbar.', 'Verbinde dich mit deinem Heimnetz. Die Telegram-Einstellungen für diesen Browser bleiben erreichbar.');
+    else $('#content').innerHTML = `<div class="empty-state"><h2>Dein Rezeptgarten ist gerade nicht erreichbar.</h2><p>Den Einkaufswagen kannst du ohne Heimnetz mit einer Internetverbindung über Telegram öffnen.</p><a class="button button-primary" href="#einkaufswagen">Einkaufswagen öffnen</a></div>`;
     return;
   }
   const request = ++state.request;

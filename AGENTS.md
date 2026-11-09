@@ -42,6 +42,10 @@ Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufäl
 Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
 Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
 maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
+Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart
+direkt aus seinem Cache, damit ein nicht erreichbares Heimnetz den Start nicht blockiert.
+Die App muss auf dem Gerät zuvor online geöffnet worden sein; der Browser kann seine
+Speicherdaten löschen. Persönliche API-Antworten bleiben vom Cache ausgeschlossen.
 Der Telegram-Abruf sendet die Anfrage unmittelbar und verarbeitet ältere Updates
 nur zur Fortschaltung; angezeigt wird ausschließlich die zur Anfrage passende Antwort.
 Geeignete Browser fordern die komprimierte Momentaufnahme an; diese wird vor der

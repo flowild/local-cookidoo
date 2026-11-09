@@ -1,5 +1,5 @@
-const CACHE = 'rezeptgarten-shell-v121';
-const SHELL = ['/', '/static/style.css?v=121', '/static/theme.js?v=31', '/static/app.js?v=121', '/static/week-placeholder-four.png', '/static/week-placeholder-steak-v2.png', '/static/week-placeholder-resteessen.png', '/static/brand.svg', '/static/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable-512.png'];
+const CACHE = 'rezeptgarten-shell-v122';
+const SHELL = ['/', '/static/style.css?v=122', '/static/theme.js?v=31', '/static/app.js?v=122', '/static/week-placeholder-four.png', '/static/week-placeholder-steak-v2.png', '/static/week-placeholder-resteessen.png', '/static/brand.svg', '/static/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable-512.png'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', event => {
@@ -8,11 +8,8 @@ self.addEventListener('fetch', event => {
   // Personal recipes, account data and authenticated images never enter the shared shell cache.
   if (path.startsWith('/api/')) return;
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')));
+    event.respondWith(caches.open(CACHE).then(cache => cache.match('/')).then(cached => cached || fetch(event.request)));
   } else if (SHELL.some(url => new URL(url, self.location.origin).pathname === path)) {
-    event.respondWith(fetch(event.request).then(response => {
-      if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
-      return response;
-    }).catch(() => caches.match(event.request)));
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(event.request)).then(cached => cached || fetch(event.request)));
   }
 });
