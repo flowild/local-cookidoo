@@ -63,8 +63,9 @@ nur zur Fortschaltung; angezeigt wird ausschließlich die zur Anfrage passende A
 Geeignete Browser fordern die komprimierte Momentaufnahme an; diese wird vor der
 Verschlüsselung komprimiert, um die Zahl der Telegram-Nachrichten zu verringern.
 Ohne Heimnetz zeigt „Meine Woche“ über denselben verschlüsselten Kanal eine rein
-lesende Wochenübersicht mit Tagesrezepten, lokalen Platzhaltern und Ablage. Pfeile
-und „Diese Woche“ wechseln die Woche. Der Server liest Cookidoo über den gemeinsamen
+lesende Wochenübersicht mit Tagesrezepten, lokalen Platzhaltern und Ablage. Die Tage
+und die Ablage stehen dabei als kompakte Liste untereinander, auch auf dem Handy.
+Pfeile und „Diese Woche“ wechseln die Woche. Der Server liest Cookidoo über den gemeinsamen
 Client und berücksichtigt vorgemerkte Verschiebungen; Fehler und unklare Warteschlangen
 bleiben sichtbar. Es werden keine Bilder oder Notizinhalte übertragen. Zugriff ist an
 das bei der Bot-Kopplung gewählte Konto gebunden.

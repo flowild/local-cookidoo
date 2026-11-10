@@ -32,7 +32,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Die Navigationseinträge für Listen, Rezepte und Vorrat sind dann ausgegraut und
   nicht auswählbar; nach Rückkehr ins Heimnetz werden sie wieder aktiviert.
 - Die Telegram-Wochenansicht zeigt verschlüsselt und rein lesend die ausgewählte
-  Woche mit Tagesrezepten, Platzhaltern, lokaler Ablage und vorgemerkten Änderungen.
+  Woche als kompakte Liste untereinander mit Tagesrezepten, Platzhaltern, lokaler
+  Ablage und vorgemerkten Änderungen, auch auf dem Handy ohne horizontales Scrollen.
   Bilder und Notizinhalte werden nicht übertragen. Konto- und Fehlerprüfungen gelten
   wie beim Einkaufswagen; Pfeile und „Diese Woche“ wechseln die Woche.
 - App-Start und Einkaufswagenabruf warten maximal 2,5 Sekunden auf den Heimnetz-Server.
