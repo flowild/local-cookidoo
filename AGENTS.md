@@ -38,10 +38,12 @@ verbinden: Der Browser erstellt einen AES-256-GCM-Schlüssel, der serverseitig i
 liegt und im jeweiligen Browser gespeichert wird. Einkaufsdaten werden vor der Übertragung
 verschlüsselt; Telegram sieht Metadaten. Der Wagen ist an das bei der Kopplung aktuelle
 Konto gebunden, bei Kontowechsel ist eine erneute Kopplung nötig. Die Ansicht ist eine
-Momentaufnahme und unterwegs nicht bearbeitbar. Telegram-Antworten tragen zufällige
+Momentaufnahme; Häkchen lassen sich nur im jeweiligen Browser ändern und zurücksetzen,
+ohne den Server oder Vorrat zu ändern. Sie sind an die jeweilige Kopplung gebunden.
+Telegram-Antworten tragen zufällige
 Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
 Im Telegram-Einkaufswagen stehen Checkboxen und Texte auch auf dem Handy linksbündig
-in kompakten Zeilen; die Checkboxen zeigen den gespeicherten Stand an und sind lesend.
+in kompakten Zeilen; zunächst zeigen die Checkboxen den gespeicherten Serverstand an.
 Zutaten und Zusatzartikel zeigen dieselben lokal in der App-Hülle enthaltenen Icons
 wie die übrigen Ansichten. Über Telegram kommen lediglich die Angaben für die
 Symbolauswahl, keine Icon-Bilddateien.

@@ -22,7 +22,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Container und Browser. Ein Kontowechsel erfordert erneute Kopplung. Telegram-Metadaten
   bleiben sichtbar; persönliche API-Antworten nicht im Service Worker speichern.
   Zutaten und Zusatzartikel stehen auch auf kleinen Displays mit links angeordneten
-  Checkboxen und ausgerichtetem Text in kompakten, nur lesbaren Zeilen.
+  Checkboxen und ausgerichtetem Text in kompakten Zeilen. Häkchen können lokal im
+  Browser geändert und zurückgesetzt werden; sie ändern weder Server noch Vorrat und
+  sind an die jeweilige Bot-Kopplung gebunden.
   Ihre Icons werden aus dem mit der App-Hülle gespeicherten SVG- und Emoji-Code
   dargestellt; Telegram überträgt Zutatenbezeichner und Kategorie, keine Icon-Bilder.
 - Eine gut sichtbare Papierflieger-Kennzeichnung in der Kopfzeile zeigt die aktive

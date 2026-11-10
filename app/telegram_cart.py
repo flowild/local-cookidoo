@@ -28,8 +28,8 @@ class ReadOnlyCartDatabase:
                 'items': [dict(row) for row in self.connection.execute('SELECT category_id,name FROM pantry_items')]}
 
     def cart(self, owner):
-        return [{'kind': row['kind'], 'data': json.loads(row['data'])} for row in
-                self.connection.execute('SELECT kind,data FROM cart_entries WHERE owner=? ORDER BY created_at,id', (owner,))]
+        return [{'id': row['id'], 'kind': row['kind'], 'data': json.loads(row['data'])} for row in
+                self.connection.execute('SELECT id,kind,data FROM cart_entries WHERE owner=? ORDER BY created_at,id', (owner,))]
 
 
 def snapshot(database, paired_owner):
@@ -46,14 +46,15 @@ def snapshot(database, paired_owner):
         data = item['data']
         if item['kind'] == 'recipe':
             ingredients = []
-            for ingredient in data.get('ingredients', []):
+            for position, ingredient in enumerate(data.get('ingredients', [])):
                 name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
                 if ingredient_group_key(name) == 'wasser':
                     continue
-                ingredients.append({'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'category': shopping_category(name, pantry_categories)})
+                ingredients.append({'check_id': f"r:{item['id']}:{position}", 'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'category': shopping_category(name, pantry_categories)})
             result.append({'kind': 'recipe', 'name': data.get('name', ''), 'ingredients': ingredients})
         elif item['kind'] == 'additional' and ingredient_group_key(data.get('name', '')) != 'wasser':
-            result.append({'kind': 'additional', 'name': data.get('name', ''), 'owned': bool(data.get('owned'))})
+            name = data.get('name', '')
+            result.append({'kind': 'additional', 'check_id': f"a:{item['id']}", 'name': name, 'category': shopping_category(name, pantry_categories), 'owned': bool(data.get('owned'))})
     return result
 
 

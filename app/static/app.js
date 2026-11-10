@@ -1034,28 +1034,76 @@ async function requestTelegramSnapshot(kind, day = '') {
     return JSON.parse(new TextDecoder().decode(plain));
   } finally { telegramSnapshotBusy = false; }
 }
+let telegramCartSnapshot = null;
+let telegramCartChecks = {};
+function telegramCartStorageKey() {
+  const pair = JSON.parse(localStorage.getItem(telegramPairKey) || 'null');
+  if (!Number.isSafeInteger(pair?.id) || !Number.isSafeInteger(pair?.client_id)) throw new Error('Bitte die Bots erneut verbinden.');
+  if (!pair.cart_key) throw new Error('Bitte die Bots erneut verbinden.');
+  return pair.cart_key;
+}
+function showTelegramCart(cart) {
+  const recipes = cart.items.filter(i => i.kind === 'recipe'), extras = cart.items.filter(i => i.kind === 'additional');
+  const rows = [];
+  for (const recipe of recipes) for (const ingredient of recipe.ingredients || []) rows.push({...ingredient, recipe:recipe.name});
+  for (const extra of extras) rows.push({...extra, text:extra.name, icon_name:extra.name, recipe:'Zusatzartikel'});
+  const groups = new Map();
+  for (const row of rows) {
+    const category = ['Obst', 'Gemüse'].includes(row.category) ? 'Obst & Gemüse' : (row.category || 'Sonstiges');
+    const checked = Object.hasOwn(telegramCartChecks, row.check_id) ? telegramCartChecks[row.check_id] : !!row.owned;
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push({...row, checked});
+  }
+  const order = ['Obst & Gemüse','Brot und Backwaren','Fleisch','Fisch','Milchprodukte','Eier','Öle und Fette','Vorräte und Konserven','Soßen','Backzutaten','Gewürze','Kräuter (tiefgekühlt)','Getränke'];
+  const rank = category => category === 'Sonstiges' ? order.length + 1 : (order.includes(category) ? order.indexOf(category) : order.length);
+  const categories = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'de'));
+  const sections = categories.map(category => {
+    const items = groups.get(category).sort((a, b) => Number(a.checked) - Number(b.checked) || String(a.text).localeCompare(String(b.text), 'de'));
+    const entries = items.map(i => `<label class="cart-ingredient-row"><input type="checkbox" data-telegram-cart-check="${escapeHTML(i.check_id)}" ${i.checked ? 'checked' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(i.icon_name || i.text || '', i.category || '')}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(i.text)}</span><small>${escapeHTML(i.recipe)}</small></span></label>`).join('');
+    return `<section class="cart-category"><h3>${escapeHTML(category)}</h3>${entries}</section>`;
+  }).join('');
+  $('#telegram-cart-content').innerHTML = `<section class="cart-section telegram-shopping"><h2>Dein Einkauf</h2>${sections || '<p>Der Einkaufswagen ist leer.</p>'}</section><details class="cart-section"><summary>Rezepte (${recipes.length})</summary>${recipes.length ? `<ul>${recipes.map(i => `<li>${escapeHTML(i.name)}</li>`).join('')}</ul>` : '<p>Keine Rezepte im Einkaufswagen.</p>'}</details>`;
+}
 async function renderOfflineCart(request) {
   setTelegramMode(true);
   const content = $('#content');
-  content.innerHTML = `<div class="page-title"><h1>Mein Einkaufswagen</h1><p>Der Server ist nicht im Heimnetz erreichbar. Der Einkaufswagen wird verschlüsselt über Telegram geladen.</p></div><p id="telegram-cart-status" role="status">Einkaufswagen wird angefordert …</p><div id="telegram-cart-content"></div><button type="button" class="button" data-telegram-cart-refresh>Erneut laden</button>`;
+  content.innerHTML = `<div class="page-title"><h1>Mein Einkaufswagen</h1><p>Verschlüsselt über Telegram. Häkchen bleiben auf diesem Gerät und ändern den Server oder Vorrat nicht.</p></div><p id="telegram-cart-status" role="status">Einkaufswagen wird angefordert …</p><div id="telegram-cart-content"></div><button type="button" class="button" data-telegram-cart-refresh>Erneut laden</button> <button type="button" class="button" data-telegram-cart-reset hidden>Häkchen zurücksetzen</button>`;
   try {
     const cart = await requestTelegramSnapshot('cart');
     if (!Array.isArray(cart.items)) throw new Error('Ungültige Einkaufsdaten.');
     if (request !== state.request || state.view !== 'einkaufswagen') return;
-    const recipes = cart.items.filter(i => i.kind === 'recipe'), extras = cart.items.filter(i => i.kind === 'additional');
-    const rows = [];
-    for (const recipe of recipes) for (const ingredient of recipe.ingredients || []) rows.push({...ingredient, recipe:recipe.name});
-    rows.sort((a,b) => Number(a.owned) - Number(b.owned) || String(a.category).localeCompare(String(b.category), 'de'));
-    const ingredients = rows.map(i => `<label class="cart-ingredient-row"><input type="checkbox" disabled ${i.owned ? 'checked' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(i.icon_name || i.text || '', i.category || '')}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(i.text)}</span><small>${escapeHTML(i.recipe)} · ${escapeHTML(i.category)}</small></span></label>`).join('');
-    const extraRows = extras.map(i => `<label class="cart-ingredient-row"><input type="checkbox" disabled ${i.owned ? 'checked' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(i.name || '', '')}</span><span>${escapeHTML(i.name)}</span></label>`).join('');
-    $('#telegram-cart-content').innerHTML = `<section class="cart-section"><h2>Rezepte</h2>${recipes.length ? `<ul>${recipes.map(i => `<li>${escapeHTML(i.name)}</li>`).join('')}</ul>` : '<p>Keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${ingredients || '<p>Keine Zutaten vorhanden.</p>'}</section><section class="cart-section"><h2>Weitere Artikel</h2>${extraRows || '<p>Keine weiteren Artikel.</p>'}</section>`;
-    $('#telegram-cart-status').textContent = 'Aktueller Stand über Telegram geladen. Unterwegs ist diese Ansicht zunächst nur lesbar.';
+    const validIds = new Set(cart.items.flatMap(item => item.kind === 'recipe' ? (item.ingredients || []).map(i => i.check_id) : [item.check_id]).filter(id => typeof id === 'string'));
+    const pairing = telegramCartStorageKey();
+    const stored = JSON.parse(localStorage.getItem('rezeptgarten-telegram-cart-checks') || '{}');
+    telegramCartChecks = Object.fromEntries(Object.entries(stored.pairing === pairing && stored.checks && typeof stored.checks === 'object' ? stored.checks : {}).filter(([id, value]) => validIds.has(id) && typeof value === 'boolean'));
+    localStorage.setItem('rezeptgarten-telegram-cart-checks', JSON.stringify({pairing, checks:telegramCartChecks}));
+    telegramCartSnapshot = cart;
+    showTelegramCart(cart);
+    $('[data-telegram-cart-reset]').hidden = !Object.keys(telegramCartChecks).length;
+    $('#telegram-cart-status').textContent = 'Einkaufswagen geladen. Häkchen werden auf diesem Gerät gespeichert.';
   } catch (error) {
     if (request === state.request && state.view === 'einkaufswagen' && $('#telegram-cart-status')) $('#telegram-cart-status').textContent = error.message || 'Der Einkaufswagen konnte nicht geladen werden.';
   }
 }
 document.addEventListener('click', event => {
   if (event.target.closest('[data-telegram-cart-refresh]') && !telegramSnapshotBusy) renderOfflineCart(++state.request);
+  if (event.target.closest('[data-telegram-cart-reset]') && telegramCartSnapshot) {
+    try { localStorage.removeItem('rezeptgarten-telegram-cart-checks'); telegramCartChecks = {}; showTelegramCart(telegramCartSnapshot); event.target.closest('button').hidden = true; }
+    catch (_) { toast('Die Häkchen konnten nicht zurückgesetzt werden.'); }
+  }
+});
+document.addEventListener('change', event => {
+  const input = event.target.closest?.('[data-telegram-cart-check]');
+  if (!input || !telegramCartSnapshot) return;
+  const id = input.dataset.telegramCartCheck;
+  const next = {...telegramCartChecks, [id]:input.checked};
+  try {
+    localStorage.setItem('rezeptgarten-telegram-cart-checks', JSON.stringify({pairing:telegramCartStorageKey(), checks:next}));
+    telegramCartChecks = next;
+    showTelegramCart(telegramCartSnapshot);
+    $('[data-telegram-cart-reset]').hidden = false;
+    document.querySelectorAll('[data-telegram-cart-check]').forEach(node => { if (node.dataset.telegramCartCheck === id) node.focus(); });
+  } catch (_) { input.checked = !input.checked; toast('Das Häkchen konnte auf diesem Gerät nicht gespeichert werden.'); }
 });
 async function renderOfflineWeek(request) {
   setTelegramMode(true);
