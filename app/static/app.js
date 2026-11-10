@@ -715,7 +715,7 @@ async function renderCart(request = state.request) {
   const extras = cart.items.filter(item => item.kind === 'additional');
   const groups = new Map();
   recipes.forEach(entry => entry.data.ingredients.forEach((ingredient, position) => {
-    if (ingredient.is_water) return;
+    if (ingredient.is_water || ingredient.in_pantry) return;
     const key = `${ingredient.owned ? '1' : '0'}:${ingredient.key || `${entry.id}:${position}`}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({entry, ingredient, position});
@@ -740,8 +740,8 @@ async function renderCart(request = state.request) {
     }).join('')}</div></section>`).join('');
   };
   const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
-  const extraRows = extras.filter(entry => !entry.data.is_water).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${ownedIngredients ? `<h3 class="cart-owned-heading">Bereits vorhanden</h3>${ownedIngredients}` : ''}${!neededIngredients && !ownedIngredients ? '<p>Füge ein Rezept hinzu, um seine Zutaten zu sehen.</p>' : ''}</section><section class="cart-section"><h2>Weitere Artikel</h2>${extraRows}<form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
+  const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
+  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3>Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
 }
 
 function pantryIcon(name, category) {
@@ -1045,22 +1045,24 @@ function telegramCartStorageKey() {
 function showTelegramCart(cart) {
   const recipes = cart.items.filter(i => i.kind === 'recipe'), extras = cart.items.filter(i => i.kind === 'additional');
   const rows = [];
-  for (const recipe of recipes) for (const ingredient of recipe.ingredients || []) rows.push({...ingredient, recipe:recipe.name});
+  for (const recipe of recipes) for (const ingredient of recipe.ingredients || []) if (!ingredient.in_pantry) rows.push({...ingredient, recipe:recipe.name});
   for (const extra of extras) rows.push({...extra, text:extra.name, icon_name:extra.name, recipe:'Zusatzartikel'});
   const groups = new Map();
   for (const row of rows) {
     const category = ['Obst', 'Gemüse'].includes(row.category) ? 'Obst & Gemüse' : (row.category || 'Sonstiges');
     const checked = Object.hasOwn(telegramCartChecks, row.check_id) ? telegramCartChecks[row.check_id] : !!row.owned;
-    if (!groups.has(category)) groups.set(category, []);
-    groups.get(category).push({...row, checked});
+    const key = `${checked ? '1' : '0'}:${category}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({...row, checked, category});
   }
   const order = ['Obst & Gemüse','Brot und Backwaren','Fleisch','Fisch','Milchprodukte','Eier','Öle und Fette','Vorräte und Konserven','Soßen','Backzutaten','Gewürze','Kräuter (tiefgekühlt)','Getränke'];
   const rank = category => category === 'Sonstiges' ? order.length + 1 : (order.includes(category) ? order.indexOf(category) : order.length);
-  const categories = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'de'));
-  const sections = categories.map(category => {
-    const items = groups.get(category).sort((a, b) => Number(a.checked) - Number(b.checked) || String(a.text).localeCompare(String(b.text), 'de'));
+  const categories = [...groups.keys()].sort((a, b) => Number(a[0]) - Number(b[0]) || rank(a.slice(2)) - rank(b.slice(2)) || a.slice(2).localeCompare(b.slice(2), 'de'));
+  const sections = categories.map(key => {
+    const category = key.slice(2);
+    const items = groups.get(key).sort((a, b) => String(a.text).localeCompare(String(b.text), 'de'));
     const entries = items.map(i => `<label class="cart-ingredient-row"><input type="checkbox" data-telegram-cart-check="${escapeHTML(i.check_id)}" ${i.checked ? 'checked' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(i.icon_name || i.text || '', i.category || '')}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(i.text)}</span><small>${escapeHTML(i.recipe)}</small></span></label>`).join('');
-    return `<section class="cart-category"><h3>${escapeHTML(category)}</h3>${entries}</section>`;
+    return `${key[0] === '1' && categories.find(k => k[0] === '1') === key ? '<h3 class="cart-owned-heading">Abgehakt</h3>' : ''}<section class="cart-category"><h3>${escapeHTML(category)}</h3>${entries}</section>`;
   }).join('');
   $('#telegram-cart-content').innerHTML = `<section class="cart-section telegram-shopping"><h2>Dein Einkauf</h2>${sections || '<p>Der Einkaufswagen ist leer.</p>'}</section><details class="cart-section"><summary>Rezepte (${recipes.length})</summary>${recipes.length ? `<ul>${recipes.map(i => `<li>${escapeHTML(i.name)}</li>`).join('')}</ul>` : '<p>Keine Rezepte im Einkaufswagen.</p>'}</details>`;
 }

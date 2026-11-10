@@ -21,7 +21,7 @@ from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
-from .ingredients import ingredient_group_key, ingredient_name, shopping_category
+from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, shopping_category
 from .version import APP_VERSION
 from .telegram_cart import encrypt_payload
 from .telegram_week import snapshot as telegram_week_snapshot
@@ -387,6 +387,7 @@ def create_app(directory=None, secure_cookies=None):
     def get_cart():
         items = database.cart(cart_owner())
         pantry = database.pantry()
+        pantry_names = [item['name'] for item in pantry['items']]
         category_names = {category['id']: category['name'] for category in pantry['categories']}
         pantry_categories = {ingredient_group_key(item['name']): category_names[item['category_id']] for item in pantry['items'] if item['category_id'] in category_names}
         for item in items:
@@ -395,6 +396,7 @@ def create_app(directory=None, secure_cookies=None):
                     name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
                     ingredient['key'] = ingredient_group_key(name) or ingredient.get('key', '')
                     ingredient['category'] = shopping_category(name, pantry_categories)
+                    ingredient['in_pantry'] = ingredient_available(name, pantry_names)
                     ingredient['is_water'] = ingredient_group_key(name) == 'wasser'
             elif item['kind'] == 'additional':
                 item['data']['is_water'] = ingredient_group_key(item['data'].get('name', '')) == 'wasser'

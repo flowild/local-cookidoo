@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .ingredients import ingredient_group_key, ingredient_name, shopping_category
+from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, shopping_category
 from .security import Vault
 
 
@@ -39,6 +39,7 @@ def snapshot(database, paired_owner):
     if owner != paired_owner:
         raise ValueError('account changed')
     pantry = database.pantry()
+    pantry_names = [item['name'] for item in pantry['items']]
     categories = {c['id']: c['name'] for c in pantry['categories']}
     pantry_categories = {ingredient_group_key(i['name']): categories[i['category_id']] for i in pantry['items'] if i['category_id'] in categories}
     result = []
@@ -50,7 +51,7 @@ def snapshot(database, paired_owner):
                 name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
                 if ingredient_group_key(name) == 'wasser':
                     continue
-                ingredients.append({'check_id': f"r:{item['id']}:{position}", 'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'category': shopping_category(name, pantry_categories)})
+                ingredients.append({'check_id': f"r:{item['id']}:{position}", 'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'in_pantry': ingredient_available(name, pantry_names), 'category': shopping_category(name, pantry_categories)})
             result.append({'kind': 'recipe', 'name': data.get('name', ''), 'ingredients': ingredients})
         elif item['kind'] == 'additional' and ingredient_group_key(data.get('name', '')) != 'wasser':
             name = data.get('name', '')

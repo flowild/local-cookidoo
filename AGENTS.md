@@ -216,9 +216,11 @@ Rezepte; Zusatzartikel zählen nicht mit. Die Anzeige wird bei Änderungen aktua
 Alle Hinzufügen-Knöpfe schreiben lokal; ausschließlich „An Cookidoo übertragen“
 schreibt nach Cookidoo. Rezeptversionen und Zutaten werden als Schnappschuss gespeichert,
 Zusatzartikel und Vorhanden-Markierungen sind lokal bearbeitbar. Der Vorrat belegt
-die Markierungen vor. Zutaten stehen kompakt mit Checkbox, Mengenangabe und
-Rezeptname; gleiche Zutaten bleiben gruppiert. Abgehakte Zutaten stehen unter den
-noch benötigten. Bereits in Cookidoo enthaltene Rezepte bleiben unverändert.
+die Markierungen vor. Aktuell im Vorrat enthaltene Rezeptzutaten werden ausgeblendet;
+ihre gespeicherten Einkaufsdaten bleiben erhalten. Zutaten stehen kompakt mit Checkbox,
+Mengenangabe und Rezeptname; gleiche Zutaten bleiben gruppiert. Abgehakte Zutaten
+und Zusatzartikel stehen unter allen noch benötigten. Bereits in Cookidoo enthaltene
+Rezepte bleiben unverändert.
 Der Transfer verwendet den gemeinsamen Cookidoo-Client und Lock, bestätigt Erfolge,
 speichert ungeklärte Ergebnisse dauerhaft und wiederholt sie nicht automatisch.
 Nach Prüfung in Cookidoo kann der Nutzer ungeklärte Einträge ausdrücklich auf vorhanden

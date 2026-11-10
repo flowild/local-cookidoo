@@ -25,6 +25,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Checkboxen und ausgerichtetem Text in kompakten Zeilen. Häkchen können lokal im
   Browser geändert und zurückgesetzt werden; sie ändern weder Server noch Vorrat und
   sind an die jeweilige Bot-Kopplung gebunden.
+  Aktuell im Vorrat enthaltene Rezeptzutaten werden ausgeblendet; abgehakte Zutaten
+  und Zusatzartikel stehen unter allen offenen Einträgen. Das gilt auch im Heimnetz.
   Ihre Icons werden aus dem mit der App-Hülle gespeicherten SVG- und Emoji-Code
   dargestellt; Telegram überträgt Zutatenbezeichner und Kategorie, keine Icon-Bilder.
 - Eine gut sichtbare Papierflieger-Kennzeichnung in der Kopfzeile zeigt die aktive
@@ -110,7 +112,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Das Einkaufswagensymbol in der Kopfzeile öffnet den lokalen Wagen. Die kleine Zahl zeigt die kontobezogene Anzahl der enthaltenen Rezepte, auch nach Änderungen und einem Kontowechsel; Zusatzartikel werden nicht mitgezählt.
 
-- Die Zutaten im Einkaufswagen sind kompakte Zeilen mit Checkbox, Mengenangabe und dezentem Rezeptnamen. Abgehakte Zutaten stehen unmittelbar nach dem Ändern unter den noch benötigten; gleiche Zutaten werden innerhalb ihres jeweiligen Zustands gruppiert. Auf Desktop können mehrere Spalten erscheinen, auf dem Handy eine. Checkboxen dürfen nicht die allgemeine volle Eingabebreite erben.
+- Die Zutaten im Einkaufswagen sind kompakte Zeilen mit Checkbox, Mengenangabe und dezentem Rezeptnamen. Aktuelle Vorratszutaten werden ausgeblendet, ohne Einkaufsdaten zu löschen. Abgehakte Zutaten und Zusatzartikel stehen unmittelbar nach dem Ändern unter allen noch benötigten; gleiche Zutaten werden innerhalb ihres jeweiligen Zustands gruppiert. Auf Desktop können mehrere Spalten erscheinen, auf dem Handy eine. Checkboxen dürfen nicht die allgemeine volle Eingabebreite erben.
 
 - Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Das X verschiebt ein Tagesrezept dorthin; der Papierkorb entfernt ein Ablagerezept mit Rückgängig. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
 
