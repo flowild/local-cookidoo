@@ -18,6 +18,10 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   serverseitig geführte Ablage. Platzhalter bleiben lokale Einträge. Bei
   fehlgeschlagenem Wochenwechsel sind weitere Änderungen gesperrt, bis die
   gewählte Woche erfolgreich geladen wurde.
+  Android verbindet und trennt Cookidoo über die bestehenden Kontoendpunkte.
+  Das eingegebene Cookidoo-Passwort bleibt für Dialog und Anfrage im
+  Arbeitsspeicher. Manueller und automatischer Abgleich verwenden
+  dieselben Servereinstellungen und dieselbe Warteschlange wie die Web-App.
 
 - Die Telegram-Wochenansicht nutzt den bestehenden Kalenderclient und Lock im
   laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält

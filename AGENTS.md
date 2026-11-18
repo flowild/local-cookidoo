@@ -37,6 +37,9 @@ werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 „Meine Woche“ auf Android verwendet die serverseitige Warteschlange und die
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
+Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo,
+Synchronisierung und den Google-API-Schlüssel. Dunkelmodus und Akzentfarbe
+werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 

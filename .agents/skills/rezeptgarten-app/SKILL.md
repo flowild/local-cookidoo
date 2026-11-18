@@ -23,6 +23,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Die Android-Wochenansicht rastet auf schmalen Displays tageweise ein und merkt
   den sichtbaren Wochentag lokal. Gehaltene Tages- und Ablagekacheln verwenden
   die Wischrichtungen der mobilen Web-App.
+  Android speichert Dunkelmodus und Akzentfarbe pro Installation. Die
+  Einstellungen öffnen für den JSON-Export den nativen Dateidialog und zeigen
+  die installierte APK-Version mit einem Link zum zugehörigen Downloadkanal.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen

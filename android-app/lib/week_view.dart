@@ -55,12 +55,14 @@ class WeekView extends StatefulWidget {
     required this.api,
     required this.openRecipe,
     required this.cartCountChanged,
+    this.statusChanged,
     this.refreshCount = 0,
   });
 
   final RezeptgartenApi api;
   final Future<void> Function(Json recipe, bool calendar) openRecipe;
   final ValueChanged<int> cartCountChanged;
+  final ValueChanged<Json>? statusChanged;
   final int refreshCount;
 
   @override
@@ -160,6 +162,7 @@ class _WeekViewState extends State<WeekView> {
   ) as Json;
 
   void _cartCount(Json status) {
+    widget.statusChanged?.call(status);
     final count = status['cart_recipe_count'];
     if (count is int) widget.cartCountChanged(count);
   }
@@ -183,6 +186,8 @@ class _WeekViewState extends State<WeekView> {
       await _enrichment;
       if (!mounted || request != _request) return;
       final status = await _status();
+      if (!mounted || request != _request) return;
+      _cartCount(status);
       final week = await widget.api.get(path) as Json;
       if (!mounted || request != _request) return;
       final queue = status['calendar_queue'];
@@ -192,7 +197,6 @@ class _WeekViewState extends State<WeekView> {
         _recipes = _project(week, _queue);
         _loading = false;
       });
-      _cartCount(status);
       _restorePage();
       if (status['connected'] == true && !_busy) {
         final work = _enrich(week, request);

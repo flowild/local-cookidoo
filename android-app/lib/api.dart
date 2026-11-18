@@ -152,14 +152,33 @@ class RezeptgartenApi {
         await response.drain<void>();
         return null;
       }
-      final bytes = BytesBuilder(copy: false);
-      await for (final chunk in response) {
-        bytes.add(chunk);
-      }
-      return bytes.takeBytes();
+      return await _bytes(response);
     } on Exception {
       return null;
     }
+  }
+
+  Future<Uint8List> exportCollection() async {
+    try {
+      final response = await _request('GET', '/api/export');
+      if (response.statusCode != 200) {
+        await response.drain<void>();
+        throw const ApiException(
+          'Die Sammlung konnte nicht exportiert werden.',
+        );
+      }
+      return await _bytes(response);
+    } on Exception {
+      throw const ApiException('Die Sammlung konnte nicht exportiert werden.');
+    }
+  }
+
+  Future<Uint8List> _bytes(HttpClientResponse response) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   Future<void> close() async => (await _client).close(force: true);

@@ -1,19 +1,28 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'appearance.dart';
 import 'ingredient_icon.dart';
 import 'pantry_view.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
+import 'settings_view.dart';
 import 'week_view.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
 class RezeptgartenHome extends StatefulWidget {
-  const RezeptgartenHome({super.key, required this.api});
+  const RezeptgartenHome({
+    super.key,
+    required this.api,
+    required this.appearance,
+  });
 
   final RezeptgartenApi api;
+  final AppearanceController appearance;
 
   @override
   State<RezeptgartenHome> createState() => _RezeptgartenHomeState();
@@ -41,6 +50,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   int area = 3;
   int? serverCartCount;
   bool busy = false;
+  bool syncPending = false;
+  bool? connected;
+  bool syncRunning = false;
+  Timer? syncPoll;
   int viewRefresh = 0;
   final pantryCollapsed = <int>{};
   final recipeSearch = FocusNode();
@@ -48,10 +61,89 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   late Future<dynamic> data = _load();
 
   Future<dynamic> _load() async => switch (area) {
-    0 => api.get('/api/featured-recipe'),
+    0 => _loadOverview(),
     4 => api.get('/api/cart', timeout: shortRead),
     _ => null,
   };
+
+  Future<Json> _loadOverview() async {
+    final responses = await Future.wait<dynamic>([
+      api.get('/api/featured-recipe', timeout: shortRead),
+      api.get('/api/status', timeout: shortRead),
+      api.get('/api/recipes?limit=8', timeout: shortRead),
+    ]);
+    final featured = responses[0] as Json;
+    final status = responses[1] as Json;
+    if (mounted && area == 0) _adoptStatus(status);
+    return {
+      ...featured,
+      'stats': status['stats'],
+      'previews': (responses[2] as Json)['items'],
+    };
+  }
+
+  void _adoptStatus(Json status) {
+    final online = status['connected'] as bool?;
+    final running = status['sync'] is Json && status['sync']['running'] == true;
+    if (connected != online || syncRunning != running) {
+      setState(() {
+        connected = online;
+        syncRunning = running;
+      });
+    }
+    if (running && syncPoll?.isActive != true) _monitorSync();
+  }
+
+  Future<void> _settings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsView(api: api, appearance: widget.appearance),
+      ),
+    );
+    if (mounted && !busy) await _refresh();
+  }
+
+  Future<void> _beginSync() async {
+    if (syncPending || syncRunning || busy) return;
+    setState(() => syncPending = true);
+    String notice;
+    try {
+      final result = await api.write('POST', '/api/sync') as Json;
+      notice = result['started'] == true
+          ? 'Synchronisierung gestartet.'
+          : 'Die Synchronisierung läuft bereits.';
+      if (mounted) {
+        setState(() => syncRunning = true);
+        _monitorSync();
+      }
+    } on Exception catch (error) {
+      notice = error.toString();
+    }
+    if (!mounted) return;
+    setState(() => syncPending = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  void _monitorSync() {
+    syncPoll?.cancel();
+    syncPoll = Timer(const Duration(seconds: 3), () async {
+      try {
+        final result = await api.get('/api/status', timeout: shortRead) as Json;
+        if (!mounted) return;
+        _adoptStatus(result);
+        if (!syncRunning && ModalRoute.of(context)?.isCurrent == true) {
+          await _refresh();
+        }
+      } on Exception {
+        if (mounted) {
+          setState(() {
+            syncRunning = false;
+            connected = null;
+          });
+        }
+      }
+    });
+  }
 
   void _open(int index) {
     if (busy || (area == index && index != 3)) return;
@@ -126,6 +218,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   @override
   void dispose() {
+    syncPoll?.cancel();
     recipeSearch.dispose();
     cartItem.dispose();
     super.dispose();
@@ -488,6 +581,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   Widget _overview(Object? result) {
     final map = result is Json ? result : <String, dynamic>{};
+    final stats = map['stats'] is Json
+        ? map['stats'] as Json
+        : <String, dynamic>{};
+    final previews = objects(map['previews']);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -503,6 +600,56 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
           ),
         ] else
           const Text('Kein Zufallsrezept vorhanden.'),
+        if (stats.isNotEmpty)
+          _section('Deine Sammlung', [
+            Text(
+              '${stats['collections'] ?? 0} Rezeptlisten · ${stats['recipes'] ?? 0} gespeicherte Rezepte',
+            ),
+            if (stats['last_sync'] case final String lastSync)
+              Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => _open(1),
+                child: const Text('Alle Listen ansehen'),
+              ),
+            ),
+          ]),
+        if (previews.isNotEmpty) ...[
+          Text(
+            'Ein Blick in deine Sammlung',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => _open(2),
+              child: const Text('Alle Rezepte'),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, bounds) {
+              const gap = 12.0;
+              final columns = (bounds.maxWidth / 180).floor().clamp(1, 4);
+              final width = (bounds.maxWidth - (columns - 1) * gap) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final recipe in previews)
+                    SizedBox(
+                      width: width,
+                      child: RecipeCard(
+                        api: api,
+                        recipe: recipe,
+                        onTap: () => _recipe(recipe),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
       ],
     );
   }
@@ -542,7 +689,23 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
               padding: const EdgeInsets.all(10),
               child: Image.asset('assets/icon.png'),
             ),
-            title: const Text('Rezeptgarten'),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Rezeptgarten',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (connected != null)
+                  Text(
+                    connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+              ],
+            ),
             actions: [
               IconButton(
                 tooltip: 'Rezepte suchen',
@@ -566,9 +729,23 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 ),
               ),
               IconButton(
-                tooltip: 'Neu laden',
-                onPressed: busy ? null : _refresh,
-                icon: const Icon(Icons.refresh),
+                tooltip: syncRunning
+                    ? 'Synchronisierung läuft'
+                    : 'Synchronisieren',
+                onPressed: busy || syncPending || syncRunning
+                    ? null
+                    : _beginSync,
+                icon: syncPending || syncRunning
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync),
+              ),
+              IconButton(
+                tooltip: 'Einstellungen öffnen',
+                onPressed: busy ? null : _settings,
+                icon: const Icon(Icons.settings_outlined),
               ),
             ],
           ),
@@ -591,6 +768,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 refreshCount: viewRefresh,
                 openRecipe: (recipe, calendar) =>
                     _recipe(recipe, calendar: calendar),
+                statusChanged: _adoptStatus,
                 cartCountChanged: (count) {
                   if (mounted && area == 3 && serverCartCount != count) {
                     setState(() => serverCartCount = count);

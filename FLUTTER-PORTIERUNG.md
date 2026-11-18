@@ -82,8 +82,12 @@ Einträgen löschen. „Meine Woche“ zeigt vorgemerkte Änderungen, unterstüt
 das Verschieben per Maus sowie durch Halten und Wischen, die Wochenablage,
 Platzhalter, die Übernahme aus lokalen Listen und fünf Sekunden Rückgängig
 bei Rezeptentfernungen. Auf schmalen Displays rasten die Tage ein. Die
-Übersicht hat weiterhin Teilumfang. Die Tabelle oben beschreibt die
-Anforderungen für die vollständige Portierung.
+Übersicht zeigt Sammlungsstatistik und Rezeptvorschauen. Android bietet
+Einstellungen für Cookidoo, Synchronisierung, Google-API-Schlüssel, Dunkelmodus
+und Akzentfarbe. Der JSON-Export verwendet die Android-Dateiauswahl. In den
+Einstellungen steht die installierte Version mit einem Link zum passenden
+Downloadkanal. Die Tabelle oben beschreibt die Anforderungen für die vollständige
+Portierung einschließlich Telegram.
 
 Testbuilds verwenden `de.rezeptgarten.rezeptgarten.test` und die separate
 Downloadseite `https://192.168.184.30/android/test/`. Das folgende Beispiel
@@ -110,12 +114,14 @@ Die Flutter-Referenz liegt im Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md`. Die lokale
 WSL-Toolchain wurde mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 8 von Rezeptgarten 0.12.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
+Build 9 von Rezeptgarten 0.13.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
 Paketdaten, ARM64-Architektur und SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
 Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
 Klärung, Rezeptdetails mit Notizkonflikten, Suche mit Mehrfachfiltern und die
 Verwaltung lokaler Listen und des Vorrats ab. Der Wochentest prüft Wischen,
 Rückgängig, Platzhalter und die Sperre beim fehlgeschlagenen Wochenwechsel.
+Der Einstellungstest prüft die Übergabe der Konto- und Synchronisierungsdaten,
+der lokalen Darstellung und der JSON-Bytes an ihre jeweiligen Schnittstellen.
 Installation und Bedienung auf
 einem physischen Android-Gerät stehen noch zur Prüfung aus.
