@@ -2,7 +2,6 @@ package de.rezeptgarten.rezeptgarten
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -12,9 +11,11 @@ class MainActivity : FlutterActivity() {
     private data class Export(val bytes: ByteArray, val result: MethodChannel.Result)
     private var pendingExport: Export? = null
     private val exportRequestCode = 2173
+    private val apkUpdater = ApkUpdater(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        apkUpdater.register(flutterEngine.dartExecutor.binaryMessenger)
         val telegram = TelegramStorage(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/telegram")
             .setMethodCallHandler { call, result ->
@@ -65,12 +66,6 @@ class MainActivity : FlutterActivity() {
             }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/links")
             .setMethodCallHandler { call, result ->
-                if (call.method == "openDownload") {
-                    val test = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-                    val path = if (test) "/android/test/" else "/android/"
-                    openLink(Uri.parse("https://192.168.184.30" + path), result)
-                    return@setMethodCallHandler
-                }
                 if (call.method != "openCookidoo") {
                     result.notImplemented()
                     return@setMethodCallHandler
@@ -129,6 +124,7 @@ class MainActivity : FlutterActivity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (apkUpdater.handleActivityResult(requestCode)) return
         if (requestCode != exportRequestCode) return
         val export = pendingExport ?: return
         pendingExport = null
@@ -151,5 +147,15 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }.start()
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        apkUpdater.resume()
+    }
+
+    override fun onPause() {
+        apkUpdater.pause()
+        super.onPause()
     }
 }

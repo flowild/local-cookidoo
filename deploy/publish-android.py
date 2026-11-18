@@ -12,6 +12,15 @@ from pathlib import Path
 ROOT = Path('/var/lib/rezeptgarten-downloads')
 
 
+def replace_text(temporary, target, content):
+    try:
+        temporary.write_text(content, encoding='utf-8')
+        temporary.chmod(0o644)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def publish(channel, staging_name, version, build_number, size, sha256):
     if channel not in ('test', 'release'):
         raise ValueError('Invalid channel')
@@ -35,14 +44,14 @@ def publish(channel, staging_name, version, build_number, size, sha256):
                     raise ValueError('APK checksum or file size did not match')
             current = directory / 'index.html'
             manifest = {'version': version, 'versionCode': build_number, 'file': filename, 'size': size, 'sha256': sha256}
+            retry = False
             if current.exists():
                 match = re.search(r'<!-- ([^\n]+) -->', current.read_text(encoding='utf-8'))
                 if not match:
                     raise ValueError('Current download page has no version record')
                 previous = json.loads(match.group(1))
-                if previous == manifest:
-                    return filename
-                if build_number <= previous['versionCode']:
+                retry = previous == manifest
+                if not retry and build_number <= previous['versionCode']:
                     raise ValueError('APK versionCode must increase')
             staged.chmod(0o644)
             os.replace(staged, target)
@@ -57,13 +66,13 @@ def publish(channel, staging_name, version, build_number, size, sha256):
 </main></body></html>
 <!-- {json.dumps(manifest)} -->
 '''
-            next_page = ROOT / '.incoming' / f'{staging_name}.html'
-            try:
-                next_page.write_text(page, encoding='utf-8')
-                next_page.chmod(0o644)
-                os.replace(next_page, current)
-            finally:
-                next_page.unlink(missing_ok=True)
+            if not retry:
+                replace_text(ROOT / '.incoming' / f'{staging_name}.html', current, page)
+            replace_text(
+                ROOT / '.incoming' / f'{staging_name}.json',
+                directory / 'latest.json',
+                json.dumps(manifest) + '\n',
+            )
             return filename
         finally:
             staged.unlink(missing_ok=True)

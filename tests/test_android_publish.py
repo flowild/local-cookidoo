@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -30,6 +31,7 @@ class AndroidPublishTests(unittest.TestCase):
         filename = self.publish(2, b'current')
         directory = self.root / 'test'
         original_page = (directory / 'index.html').read_bytes()
+        original_manifest = (directory / 'latest.json').read_bytes()
 
         with self.assertRaisesRegex(ValueError, 'checksum'):
             self.publish(3, b'corrupt', checksum='0' * 64)
@@ -37,17 +39,26 @@ class AndroidPublishTests(unittest.TestCase):
             self.publish(1, b'old')
 
         self.assertEqual((directory / 'index.html').read_bytes(), original_page)
+        self.assertEqual((directory / 'latest.json').read_bytes(), original_manifest)
         self.assertEqual((directory / filename).read_bytes(), b'current')
         self.assertEqual(list((self.root / '.incoming').iterdir()), [])
 
     def test_channels_publish_independently_and_keep_versioned_files(self):
         first = self.publish(1, b'first')
         second = self.publish(2, b'second')
+        test_manifest = self.root / 'test' / 'latest.json'
+        test_manifest.unlink()
         self.assertEqual(self.publish(2, b'second'), second)
         release = self.publish(1, b'release', channel='release')
         self.assertEqual((self.root / 'test' / first).read_bytes(), b'first')
         self.assertIn(second, (self.root / 'test' / 'index.html').read_text(encoding='utf-8'))
         self.assertIn(release, (self.root / 'release' / 'index.html').read_text(encoding='utf-8'))
+        self.assertEqual(json.loads(test_manifest.read_text(encoding='utf-8')), {
+            'version': '0.6.2', 'versionCode': 2, 'file': second,
+            'size': 6, 'sha256': hashlib.sha256(b'second').hexdigest(),
+        })
+        release_manifest = self.root / 'release' / 'latest.json'
+        self.assertEqual(json.loads(release_manifest.read_text(encoding='utf-8'))['file'], release)
 
 
 if __name__ == '__main__':

@@ -1,12 +1,63 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
+import 'package:rezeptgarten/appearance.dart';
 import 'package:rezeptgarten/main.dart';
+import 'package:rezeptgarten/settings_view.dart';
 
 void main() {
+  testWidgets('hands an APK update to Android without opening a browser', (
+    tester,
+  ) async {
+    const channel = MethodChannel('de.rezeptgarten/update');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final pending = Completer<String>();
+    var requests = 0;
+    messenger.setMockMethodCallHandler(channel, (call) {
+      expect(call.method, 'downloadAndInstall');
+      requests++;
+      return pending.future;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsView(
+          api: _SettingsApi(),
+          appearance: AppearanceController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final button = find.text('APK herunterladen und installieren');
+    await tester.scrollUntilVisible(button, 240);
+    await tester.tap(button);
+    await tester.pump();
+    expect(find.text('APK wird heruntergeladen und geprüft …'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.ancestor(
+              of: button,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is OutlinedButton,
+              ),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(requests, 1);
+    pending.complete('installerOpened');
+    await tester.pumpAndSettle();
+    expect(find.text('APK wird heruntergeladen und geprüft …'), findsNothing);
+    expect(button, findsOneWidget);
+  });
+
   testWidgets(
     'saves appearance, account settings and a JSON document in Android',
     (tester) async {

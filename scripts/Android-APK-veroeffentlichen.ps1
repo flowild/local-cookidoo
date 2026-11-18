@@ -108,12 +108,20 @@ try {
 
 $downloadPage = if ($Release) { "https://$server/android/" } else { "https://$server/android/test/" }
 $download = "$downloadPage$file"
+$manifestUrl = "${downloadPage}latest.json"
 $verification = Join-Path $apk.DirectoryName "download-$([Guid]::NewGuid()).apk"
 try {
     & curl.exe --fail --silent --show-error --ssl-revoke-best-effort --cacert $certificate --output $verification $download
     if ($LASTEXITCODE -ne 0) { throw 'HTTPS-Download konnte nicht geprüft werden.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $verification).Hash -ine $checksum) {
         throw 'Prüfsumme des HTTPS-Downloads stimmt nicht überein.'
+    }
+    $record = & curl.exe --fail --silent --show-error --ssl-revoke-best-effort --cacert $certificate $manifestUrl
+    if ($LASTEXITCODE -ne 0) { throw 'APK-Update-Manifest konnte nicht abgerufen werden.' }
+    $manifest = $record | ConvertFrom-Json
+    if ($manifest.version -cne $version -or $manifest.versionCode -ne $BuildNumber -or
+        $manifest.file -cne $file -or $manifest.size -ne $apk.Length -or $manifest.sha256 -cne $checksum) {
+        throw 'APK-Update-Manifest stimmt nicht mit dem veröffentlichten Build überein.'
     }
 } finally {
     if (Test-Path -LiteralPath $verification) { Remove-Item -LiteralPath $verification }

@@ -25,13 +25,15 @@ class SettingsView extends StatefulWidget {
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  static const _links = MethodChannel('de.rezeptgarten/links');
+  static const _update = MethodChannel('de.rezeptgarten/update');
   static const _documents = MethodChannel('de.rezeptgarten/documents');
   static const _preferences = MethodChannel('de.rezeptgarten/preferences');
 
   Json? _status;
   String? _error;
   String? _version;
+  String? _updateMessage;
+  bool _downloadingUpdate = false;
   bool _loading = false;
   bool _busy = false;
   int _request = 0;
@@ -68,6 +70,32 @@ class _SettingsViewState extends State<SettingsView> {
       // The settings screen is still available.
     } on MissingPluginException {
       // App metadata is only available in the Android activity.
+    }
+  }
+
+  Future<void> _installUpdate() async {
+    if (_downloadingUpdate) return;
+    setState(() {
+      _downloadingUpdate = true;
+      _updateMessage = null;
+    });
+    String? message;
+    try {
+      final result = await _update.invokeMethod<String>('downloadAndInstall');
+      if (result != 'installerOpened') {
+        message = 'Der Android-Installer konnte nicht geöffnet werden.';
+      }
+    } on PlatformException catch (error) {
+      message = error.message ?? 'Die APK konnte nicht geladen werden.';
+    } on MissingPluginException {
+      message = 'Der APK-Download ist nur in der Android-App verfügbar.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updateMessage = message;
+          _downloadingUpdate = false;
+        });
+      }
     }
   }
 
@@ -618,14 +646,15 @@ class _SettingsViewState extends State<SettingsView> {
           _card('Rezeptgarten für Android', [
             if (_version != null) Text('Installierte Version $_version'),
             OutlinedButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () => _perform(
-                      () => _links.invokeMethod<void>('openDownload'),
-                    ),
+              onPressed: _downloadingUpdate ? null : _installUpdate,
               icon: const Icon(Icons.download),
-              label: const Text('APK-Download öffnen'),
+              label: const Text('APK herunterladen und installieren'),
             ),
+            if (_downloadingUpdate) ...[
+              const LinearProgressIndicator(),
+              const Text('APK wird heruntergeladen und geprüft …'),
+            ],
+            if (_updateMessage != null) Text(_updateMessage!),
           ]),
         ],
       ),

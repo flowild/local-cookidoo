@@ -46,8 +46,10 @@ Android-Testbuilds werden lokal mit `scripts/Android-APK-veroeffentlichen.ps1`
 in WSL gebaut und bei `-Upload` auf dem bestehenden LXC 103 veröffentlicht.
 Caddy bedient die Testseite unter `/android/test/` und den regulären Download
 unter `/android/`. Der Upload wird in `/var/lib/rezeptgarten-downloads/.incoming`
-geprüft und erst danach freigegeben. APK-Downloads liegen getrennt von den
-produktiven Anwendungsdaten.
+geprüft und erst danach freigegeben. Danach aktualisiert der Publisher
+Downloadseite und `latest.json` je Kanal atomar. Das Build-Skript gleicht den
+erneut per HTTPS geladenen APK-Hash sowie das Manifest mit dem lokalen Build
+ab. APK-Downloads liegen getrennt von den produktiven Anwendungsdaten.
 
 App-Änderungen nach der Prüfung grundsätzlich auf die bestehende Instanz übertragen
 und die Bereitstellung prüfen, sofern der Nutzer nichts anderes vorgibt.
