@@ -70,8 +70,12 @@ Rezepte lassen sich auch über ihre Detailansicht hinzufügen. Dort zeigt die AP
 Rezeptversionen, Listenzuordnungen, Zutaten mit Vorratsstatus, Zubereitung und
 Tipps. Persönliche Notizen werden beim Abschluss der Eingabe oder beim
 Verlassen gespeichert. Bei einem Cookidoo-Konflikt bleibt der Entwurf im Feld.
-„Heute kochen“ meldet, ob Cookidoo die Planung verifizieren konnte. Übersicht,
-Rezeptsuche, Listen und Vorrat haben weiterhin Teilumfang. Die Tabelle oben
+„Heute kochen“ meldet, ob Cookidoo die Planung verifizieren konnte. Die
+Rezeptbibliothek unterstützt paginierte Titel- und Zutatensuche,
+Mehrfach-Zutatenfilter, Portionen, Gesamtzeit, Sortierung und ausgegraute
+Listeneinträge außerhalb der Filter. Lokale Listen lassen sich anlegen, löschen
+und um weitere Rezepte ergänzen. Das Zufallsrezept kann manuell neu gewählt
+werden. Übersicht und Vorrat haben weiterhin Teilumfang. Die Tabelle oben
 beschreibt die Anforderungen für die vollständige Portierung.
 
 Testbuilds verwenden `de.rezeptgarten.rezeptgarten.test` und die separate
@@ -99,10 +103,10 @@ Die Flutter-Referenz liegt im Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md`. Die lokale
 WSL-Toolchain wurde mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 5 von Rezeptgarten 0.9.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
+Build 6 von Rezeptgarten 0.10.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
 Paketdaten, ARM64-Architektur und SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
 Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
-Klärung sowie Rezeptdetails mit erfolgreicher und konfliktbehafteter
-Notizspeicherung ab. Installation und Bedienung auf
+Klärung, Rezeptdetails mit Notizkonflikten, Suche mit Mehrfachfiltern und die
+Verwaltung lokaler Listen ab. Installation und Bedienung auf
 einem physischen Android-Gerät stehen noch zur Prüfung aus.

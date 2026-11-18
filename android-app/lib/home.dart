@@ -4,6 +4,7 @@ import 'api.dart';
 import 'ingredient_icon.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
+import 'recipe_library.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
@@ -58,6 +59,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   int weekOffset = 0;
   String? weekReference;
   bool busy = false;
+  int libraryRefresh = 0;
+  final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
   late Future<dynamic> data = _load();
 
@@ -71,6 +74,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   }
 
   Future<dynamic> _load() async {
+    if (area == 1 || area == 2) return null;
     if (area == 3) {
       final day = _requestedDay();
       final status = await api.get('/api/status', timeout: shortRead) as Json;
@@ -98,6 +102,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   Future<void> _refresh() async {
     if (busy) return;
+    if (area == 1 || area == 2) {
+      setState(() => libraryRefresh++);
+      return;
+    }
     final updated = _load();
     setState(() {
       data = updated;
@@ -165,6 +173,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   @override
   void dispose() {
+    recipeSearch.dispose();
     cartItem.dispose();
     super.dispose();
   }
@@ -177,7 +186,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
             RecipeDetail(api: api, preview: recipe, calendar: calendar),
       ),
     );
-    if (mounted) await _refresh();
+    if (mounted && area != 1 && area != 2) await _refresh();
   }
 
   Widget _heading(String title, [String? description]) => Padding(
@@ -633,20 +642,19 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _heading('Dein Rezeptgarten'),
-          if ((map['recipe'] ?? map['featured']) case final Json recipe)
-            RecipeCard(api: api, recipe: recipe, onTap: () => _recipe(recipe))
-          else
+          if ((map['recipe'] ?? map['featured']) case final Json recipe) ...[
+            RecipeCard(api: api, recipe: recipe, onTap: () => _recipe(recipe)),
+            OutlinedButton.icon(
+              onPressed: busy || map['can_shuffle'] == false
+                  ? null
+                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+              icon: const Icon(Icons.shuffle),
+              label: const Text('Anderes Rezept'),
+            ),
+          ] else
             const Text('Kein Zufallsrezept vorhanden.'),
         ],
       ),
-      1 => _section('Rezeptlisten', [
-        for (final item in objects(map['items'] ?? result))
-          ListTile(title: Text(text(item['name']))),
-      ]),
-      2 => _section('Alle Rezepte', [
-        for (final item in objects(map['items'] ?? map['recipes'] ?? result))
-          ListTile(title: Text(text(item['name'])), onTap: () => _recipe(item)),
-      ]),
       _ => _section('Mein Vorrat', [
         for (final category in objects(map['categories']))
           ExpansionTile(
@@ -713,6 +721,18 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
             title: const Text('Rezeptgarten'),
             actions: [
               IconButton(
+                tooltip: 'Rezepte suchen',
+                onPressed: busy
+                    ? null
+                    : () {
+                        _open(2);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && area == 2) recipeSearch.requestFocus();
+                        });
+                      },
+                icon: const Icon(Icons.search),
+              ),
+              IconButton(
                 tooltip: 'Einkaufswagen öffnen',
                 onPressed: busy ? null : () => _open(4),
                 icon: Badge(
@@ -730,14 +750,27 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
           ),
           body: SafeArea(
             top: false,
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                children: [if (busy) const LinearProgressIndicator(), body],
+            child: switch (area) {
+              1 => RecipeCollections(
+                api: api,
+                openRecipe: _recipe,
+                refreshCount: libraryRefresh,
               ),
-            ),
+              2 => RecipeBrowser(
+                api: api,
+                openRecipe: _recipe,
+                searchFocus: recipeSearch,
+                refreshCount: libraryRefresh,
+              ),
+              _ => RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                  children: [if (busy) const LinearProgressIndicator(), body],
+                ),
+              ),
+            },
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: area,

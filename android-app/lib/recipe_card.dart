@@ -45,7 +45,10 @@ class _RecipeCardState extends State<RecipeCard> {
     final recipe = widget.recipe;
     final theme = Theme.of(context);
     final seconds = recipe['total_seconds'];
-    final servings = recipe['servings'];
+    final offeredServings = recipe['version_servings'];
+    final servings = offeredServings is List && offeredServings.isNotEmpty
+        ? offeredServings.join(' / ')
+        : recipe['servings'];
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,

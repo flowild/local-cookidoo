@@ -13,6 +13,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Die Android-Rezeptdetails zeigen Listenzuordnungen und Versionen sowie
   Vorratsstatus, gruppierte Zubereitung und Tipps. Die Anordnung der Abschnitte
   entspricht der Web-App.
+  Die Android-Rezeptbibliothek nutzt dieselbe serverseitige Suche, Filterung und
+  Familiengruppierung wie die PWA. In Listen bleiben Rezepte außerhalb des
+  Filters ausgegraut sichtbar. Lokale Listen werden über die gemeinsamen APIs
+  angelegt, gelöscht und um weitere Rezepte ergänzt.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen

@@ -28,6 +28,9 @@ Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
 über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
+Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
+Portionen, Gesamtzeit und Sortierung. Lokale Listen lassen sich anlegen, nach
+Bestätigung löschen und um noch nicht enthaltene Rezepte ergänzen.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
