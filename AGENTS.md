@@ -12,6 +12,8 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 
 - [rezeptgarten-app](.agents/skills/rezeptgarten-app/SKILL.md): Rezepte, lokale
   Listen, Vorrat, Suche, Frontend, Einstellungen und PWA.
+- [rezeptgarten-android](.agents/skills/rezeptgarten-android/SKILL.md): native
+  Flutter-App, Android-Oberfläche, Geräteprüfung, APK-Build und In-App-Updates.
 - [rezeptgarten-cookidoo](.agents/skills/rezeptgarten-cookidoo/SKILL.md): Cookidoo-
   Sync, Rezeptdetails, Konto, Kalender und Einkaufsliste.
 - [rezeptgarten-betrieb](.agents/skills/rezeptgarten-betrieb/SKILL.md): bestehende
@@ -44,18 +46,16 @@ werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 „Meine Woche“ auf Android verwendet die serverseitige Warteschlange und die
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
-Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo,
-Synchronisierung und den Google-API-Schlüssel. Dunkelmodus und Akzentfarbe
+Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo und
+Synchronisierung. Dunkelmodus und Akzentfarbe
 werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
+Die APK enthält keine Bot-zu-Bot-Kommunikation und keine Gemini- oder
+Google-API-Schlüsselverwaltung. Eine spätere Telegram-Funktion benötigt eine
+gesonderte Entscheidung über Funktionsumfang, Transport und Zugangsdaten.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
-## Telegram
-
-Browser und Android verwenden getrennte Client-Bots für denselben Server-Bot.
-Eine Android-Kopplung lässt die Browserkopplung bestehen. Android speichert
-Client-Token und Kopplungsschlüssel verschlüsselt mit dem Android Keystore.
-Einrichtung und Nachrichtentest sind in den Android-Einstellungen verfügbar.
+## Telegram in der Web-App
 
 Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
 und ein Client-Bot-Token unverschlüsselt im jeweiligen Browser. Sie zeigen nur an,

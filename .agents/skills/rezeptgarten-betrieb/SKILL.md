@@ -11,8 +11,8 @@ mit den zugehörigen Änderungen committen und nach `origin/main` pushen.
 
 Der Telegram-Nachrichtentest verwendet den systemd-Dienst `rezeptgarten-telegram`
 auf dem Proxmox-Host. Er liest die verschlüsselte Bot-Konfiguration über `pct exec`
-aus LXC 103, verarbeitet ausschließlich frische private Anfragen des
-zugeordneten Browser- und Android-Client-Bots und speichert seinen Telegram-Offset unter
+aus LXC 103, verarbeitet ausschließlich frische private Anfragen
+zugeordneter Bots und speichert seinen Telegram-Offset unter
 `/var/lib/rezeptgarten-telegram`. Die Bots brauchen Bot-zu-Bot-Freigabe und einen
 eigenen Update-Kanal ohne parallele Webhooks oder weitere Verbraucher. Der Dienst
 arbeitet auf dem Host als root, weil `pct exec` den Containerzugriff voraussetzt;
@@ -25,7 +25,8 @@ die App nutzt den bestehenden Cookidoo-Client und prüft das gekoppelte Konto.
 Die Bridge wählt die Kopplung nach Absender-ID und prüft vor der Antwort,
 ob die Kopplung noch gültig ist. Bridge-Änderungen auch auf dem Host unter
 `/opt/rezeptgarten-telegram/telegram_bridge.py` bereitstellen und den
-vorhandenen Dienst neu starten. Die Browserkopplung im Vault bleibt lesbar.
+vorhandenen Dienst neu starten. Der Browser nutzt diesen Dienst. Der zweite
+Kopplungsplatz dient der Kompatibilität mit älteren Android-Testbuilds.
 
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,

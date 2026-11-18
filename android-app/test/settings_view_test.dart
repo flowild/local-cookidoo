@@ -170,6 +170,8 @@ void main() {
       final version = find.text('Installierte Version 0.14.0-test');
       await tester.scrollUntilVisible(version, 280);
       expect(version, findsOneWidget);
+      expect(find.text('Telegram'), findsNothing);
+      expect(find.text('Google API'), findsNothing);
     },
   );
 }
@@ -186,6 +188,8 @@ class _SettingsApi extends RezeptgartenApi {
       'account': account,
       'connected': account != null,
       'sync_hours': hours,
+      'telegram_server_bot_set': true,
+      'google_api_key_set': true,
     },
     '/api/calendar/week' => {
       'today': '2026-11-18',

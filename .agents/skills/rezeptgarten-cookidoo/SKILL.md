@@ -23,7 +23,7 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   Arbeitsspeicher. Manueller und automatischer Abgleich verwenden
   dieselben Servereinstellungen und dieselbe Warteschlange wie die Web-App.
 
-- Die Telegram-Wochenansicht nutzt den bestehenden Kalenderclient und Lock im
+- Die Telegram-Wochenansicht der Web-App nutzt den bestehenden Kalenderclient und Lock im
   laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält
   Tage, vorgemerkte Verschiebungen, lokale Platzhalter und Ablage ohne Bild- oder
   Notizinhalte. Fehler und unklare Warteschlangenzustände bleiben sichtbar.

@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **0.16.0, Build 12** ist der zuletzt geprüfte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Rezeptgarten **0.17.0, Build 13** ist der zuletzt geprüfte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -21,8 +21,7 @@ Rezeptgarten **0.16.0, Build 12** ist der zuletzt geprüfte Testbuild auf LXC 10
 | Meine Woche | Berliner Kalenderwoche mit Pfeilen und „Diese Woche“, einrastende Tagesansicht und gemerkter Wochentag. Tagesrezepte, lokale Ablage, sechs feste Platzhalter und aufklappbare lokale Listen. Langes Drücken und Wischen, kurzes Tippen und normales Scrollen wie mobil im Web. Rückgängig bei Rezeptentfernungen für fünf Sekunden. Vorgemerkte Verschiebungen, bestätigter Kalenderabgleich und sichtbare Fehler. Einkauf ab heute einschließlich Ablage als Momentaufnahme übernehmen. |
 | Mein Einkaufswagen | Kontobezogene Rezeptkarten, Zusatzartikel und bearbeitbare Häkchen. Kompakte Zeilen mit Mengen, Rezeptnamen und Zutatensymbolen. Sortierung nach offenen und abgehakten Einträgen und Gruppierung nach Warenbereichen. Vorratsabgleich und ausgeblendetes Wasser wie im Web. Einträge entfernen oder Wagen leeren. Ausdrücklicher Cookidoo-Transfer mit bestätigten und ungeklärten Ergebnissen sowie manueller Klärung. |
 | Mein Vorrat | Alphabetische Zutaten, Rezeptvorschläge und einklappbare Kategorien. Kategorien anlegen, sortieren und nach Bestätigung löschen. Vorratseinträge hinzufügen, bearbeiten und entfernen. Dieselben Zutaten-Aliasse, Symbole und Regeln zum Ausblenden von Wasser. |
-| Einstellungen | Cookidoo-Konto verbinden und trennen, Synchronisierungsintervall und Status, manuelle Synchronisierung, JSON-Export, Google-API-Schlüssel, Dunkelmodus und Akzentfarbe. Telegram-Einrichtung und Verbindungstest. Der Installationsbereich zeigt die installierte Version, lädt Updates im eigenen Kanal und öffnet den Android-Installer direkt. |
-| Telegram unterwegs | Verschlüsselte Wochen- und Einkaufswagenansicht, Wochenwechsel, lokale Einkaufs-Häkchen und deren Rücksetzung. Blauer Papierflieger und ausgegraute Navigation wie im Web. Bei Rückkehr ins Heimnetz wieder direkt laden. |
+| Einstellungen | Cookidoo-Konto verbinden und trennen, Synchronisierungsintervall und Status, manuelle Synchronisierung, JSON-Export, Dunkelmodus und Akzentfarbe. Der Installationsbereich zeigt die installierte Version, prüft den eigenen Aktualisierungskanal, lädt die APK und öffnet den Android-Installer. |
 
 Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. Die Tabelle beschreibt das Ziel für alle Bereiche. Vor der Freigabe werden auch seit Projektstart hinzugekommene Webfunktionen anhand des dann aktuellen Webstands abgeglichen. Die fachlichen Details zu Kalender, Notizen, Einkaufswagen, Telegram und Datenhaltung stehen in [AGENTS.md](AGENTS.md).
 
@@ -30,21 +29,21 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 
 - Farben, Schriftgrößen, Abstände, Karten, Dialoge, Statusanzeigen, Rezeptbilder und Symbole aus der Web-App übernehmen. Die vorhandenen Zutaten- und Platzhaltersymbole werden mit der APK ausgeliefert. Dunkelmodus und benutzerdefinierte Akzentfarben gelten auch für Dialoge, Navigation und Rückmeldungen.
 - Auf schmalen Displays die mobile Anordnung abbilden. Auf breiteren Android-Displays dient die breite Webansicht als Vorlage. Android-Systemleisten und große Systemeinstellungen für Schriftgröße bei der Anordnung berücksichtigen.
-- Vergleichsaufnahmen von APK und PWA mit demselben isolierten Testdatenstand erstellen. Normalzustände, leere Ansichten, lange Rezeptnamen, Lade- und Fehlerzustände, Hell- und Dunkelmodus sowie Telegram-Ansichten prüfen.
+- Vergleichsaufnahmen von APK und PWA mit demselben isolierten Testdatenstand erstellen. Normalzustände, leere Ansichten, lange Rezeptnamen, Lade- und Fehlerzustände sowie Hell- und Dunkelmodus prüfen.
 - Wochenwechsel, langes Drücken, Wischen, Rückgängig, Einkaufs-Häkchen und Android-Zurück-Navigation auf einem echten Gerät prüfen.
 
-## Telegram
+## Externe Integrationen
 
-Die APK verwendet das bestehende Bot-zu-Bot-Protokoll für den lesenden Zugriff außerhalb des Heimnetzes. Sie speichert Client-Bot-Token und Kopplungsschlüssel im geschützten Android-Speicher. Der Server-Bot bleibt serverseitig konfiguriert. Beide Clients benötigen getrennte Client-Bots und getrennte Schlüssel, damit ihre Update-Abfragen unabhängig laufen.
+Die Android-App greift über die Rezeptgarten-API im Heimnetz auf Woche,
+Einkaufswagen und Sammlung zu. Bot-zu-Bot-Kommunikation und die
+Google-API-Schlüsselverwaltung für Gemini sind aus der APK entfernt. Die
+bisherigen Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
 
-Der Server speichert eine kontogebundene Kopplung für den Browser und eine für
-Android. Die vorhandene Browserkopplung bleibt lesbar. Der Telegram-Dienst auf
-dem Proxmox-Host ordnet Anfragen und verschlüsselte Antworten der jeweiligen
-Kopplung zu. Android kann seine Kopplung im Heimnetz einrichten und per
-Nachrichtentest prüfen. Der Abruf und die Anzeige von Wochen- und
-Einkaufswagen-Momentaufnahmen in der APK folgen noch.
-
-Die App prüft Absender, Anfragekennung und Vollständigkeit jeder Antwort sowie die Authentizität der verschlüsselten Momentaufnahme. Sie übernimmt die bestehende optionale Komprimierung und die lokal gespeicherten Einkaufs-Häkchen je Kopplung. Bei fehlendem Heimnetz erfolgt der Zugriff rein lesend. Bilder und Notizinhalte werden über Telegram nicht übertragen.
+Ein späterer Telegram-Zugriff über ein Benutzerkonto wäre ein eigener
+Funktionsumfang. TDLib verwendet dafür eine API-ID und einen API-Hash sowie
+eine separate Benutzersitzung. Telegram verlangt eine eigene API-ID für die
+Anwendung. Details stehen in den [Telegram-API-Bedingungen](https://core.telegram.org/api/terms)
+und der [TDLib-Dokumentation](https://core.telegram.org/tdlib/getting-started).
 
 ## APK-Veröffentlichung auf LXC 103
 
@@ -75,9 +74,9 @@ Abruf. Die Prüfung lädt nur das Manifest über HTTPS. Die APK wird erst über
 
 1. Toolchain unter WSL prüfen, Flutter-Projekt und gemeinsame UI-Komponenten anlegen und Snapshots der Weboberfläche mit Testdaten als Vorlage erfassen.
 2. Einen vollständigen Heimnetzablauf auf Android prüfen. „Meine Woche“ öffnen, Rezepte in den Wagen übernehmen, eine Zutat abhaken und nach einem erneuten Laden den gespeicherten Stand in APK und PWA prüfen.
-3. Die übrigen Ansichten und Einstellungen samt Fehlerbehandlung portieren. Telegram-Kopplungen für den Parallelbetrieb erweitern und den Wechsel zwischen Heimnetz und Telegram auf beiden Clients prüfen.
+3. Die übrigen Ansichten und Einstellungen samt Fehlerbehandlung portieren.
 4. Den signierten Build- und Veröffentlichungsablauf erproben. Android-Neuinstallation und anschließendes Update über den Container-Download prüfen. Daten und Einstellungen müssen beim Update erhalten bleiben. Einen abgebrochenen Upload prüfen und bestätigen, dass der vorherige Download erreichbar bleibt.
-5. Vor der regulären Freigabe die vollständige Funktionsliste und den visuellen Vergleich abnehmen. Die Kernabläufe auf demselben Gerät und Netz mit der mobilen PWA vergleichen. Zeit bis zur ersten bedienbaren Ansicht, bis zum geladenen Inhalt und bis zur bestätigten Aktion separat messen. Heimnetz und Telegram getrennt erfassen.
+5. Vor der regulären Freigabe die vollständige Funktionsliste und den visuellen Vergleich abnehmen. Die Kernabläufe auf demselben Gerät im Heimnetz mit der mobilen PWA vergleichen. Zeit bis zur ersten bedienbaren Ansicht, bis zum geladenen Inhalt und bis zur bestätigten Aktion separat messen.
 6. Relevante App- und Betriebsänderungen nach den bestehenden Projektregeln versionieren, dokumentieren, mit isolierten Daten testen und auf die bestehende Instanz deployen. Bereitstellung prüfen und die Versionsänderung anschließend committen und nach `origin/main` pushen.
 
 ## Erster Teststand
@@ -105,11 +104,11 @@ das Verschieben per Maus sowie durch Halten und Wischen, die Wochenablage,
 Platzhalter, die Übernahme aus lokalen Listen und fünf Sekunden Rückgängig
 bei Rezeptentfernungen. Auf schmalen Displays rasten die Tage ein. Die
 Übersicht zeigt Sammlungsstatistik und Rezeptvorschauen. Android bietet
-Einstellungen für Cookidoo, Synchronisierung, Google-API-Schlüssel, Dunkelmodus
+Einstellungen für Cookidoo, Synchronisierung, Dunkelmodus
 und Akzentfarbe. Der JSON-Export verwendet die Android-Dateiauswahl. In den
 Einstellungen steht die installierte Version mit einem Update-Button für den
 passenden Downloadkanal. Die Tabelle oben beschreibt die Anforderungen für die vollständige
-Portierung einschließlich Telegram.
+Portierung.
 
 Testbuilds verwenden `de.rezeptgarten.rezeptgarten.test` und die separate
 Downloadseite `https://192.168.184.30/android/test/`. Das folgende Beispiel
@@ -136,12 +135,12 @@ Zertifikatfingerabdruck als `-SignerSha256` voraus.
 Die Datei aus dem Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md` dient als Referenz für
 die lokale Toolchain und den Aufbau des Build-Ablaufs. Für Rezeptgarten
-gelten die in diesem Dokument beschriebenen Paket-IDs, der eigene LXC-Download
-und das bestehende Rezeptgarten-Bot-Protokoll. Die lokale WSL-Toolchain wurde
+gelten die in diesem Dokument beschriebenen Paket-IDs und der eigene LXC-Download.
+Die lokale WSL-Toolchain wurde
 mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 12 von Rezeptgarten 0.16.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur
-stimmt mit Build 11 überein. Paketdaten, ARM64-Architektur, Update-Manifest und
+Build 13 von Rezeptgarten 0.17.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur
+stimmt mit Build 12 überein. Paketdaten, ARM64-Architektur, Update-Manifest und
 SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
 Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
@@ -151,27 +150,22 @@ Rückgängig, Platzhalter und die Sperre beim fehlgeschlagenen Wochenwechsel.
 Der Einstellungstest prüft die Übergabe der Konto- und Synchronisierungsdaten,
 der lokalen Darstellung und der JSON-Bytes an ihre jeweiligen Schnittstellen.
 Ein Widgettest prüft Update-Hinweis, aktuellen Stand, fehlgeschlagene Prüfung
-und die Übergabe des Downloads an Android. Die Abnahme auf dem Gerät steht
-noch aus.
-Der Telegram-Test verwendet simulierte Bot-Antworten. Er prüft die getrennte
-Android-Kopplung und verwirft fremde, alte und falsch zugeordnete Nachrichten.
+und die Übergabe des Downloads an Android. Der Einstellungstest prüft auch,
+dass die Android-App selbst bei gesetzten Serverwerten keine Bot- und
+Google-API-Einstellungen zeigt. Die Abnahme auf dem Gerät steht noch aus.
 
 ## Offene Arbeiten vor der regulären Freigabe
 
-- **Telegram unterwegs fertigstellen.** Woche und Einkaufswagen als
-  authentifizierte, verschlüsselte Momentaufnahmen abrufen und anzeigen.
-  Wochenwechsel, lokale Häkchen pro Kopplung sowie den Wechsel ins und aus
-  dem Heimnetz auf Android prüfen.
 - **Funktionsumfang und Design abgleichen.** Jede Zeile der Funktionsliste gegen
   die aktuelle mobile PWA prüfen und fehlende Funktionen, Schnellaktionen und
   Bedienzustände ergänzen. Die Ansichten mit identischen Testdaten nebeneinander
   prüfen und sichtbare Abweichungen bei Layout, Typografie, Symbolen und Gesten
   korrigieren.
 - **Auf ARM64-Gerät abnehmen.** Test-APK über HTTPS vom LXC herunterladen,
-  installieren und die Kernabläufe im Heimnetz und über Telegram durchspielen.
+  installieren und die Kernabläufe im Heimnetz durchspielen.
   Start, Laden und Aktionsbestätigung mit der PWA auf demselben Gerät vergleichen.
 - **Release und Update erproben.** Stabile Release-Signatur bereitstellen,
   Veröffentlichung und Download im regulären Kanal prüfen und anschließend
   ein Update mit höherem `versionCode` installieren. Dabei den Erhalt lokaler
-  Einstellungen und der Telegram-Kopplung sowie den vorherigen Download bei
+  Einstellungen sowie den vorherigen Download bei
   abgebrochenem Upload prüfen.

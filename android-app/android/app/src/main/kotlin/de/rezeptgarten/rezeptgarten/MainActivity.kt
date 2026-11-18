@@ -16,22 +16,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         apkUpdater.register(flutterEngine.dartExecutor.binaryMessenger)
-        val telegram = TelegramStorage(this)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/telegram")
-            .setMethodCallHandler { call, result ->
-                try {
-                    when (call.method) {
-                        "read" -> result.success(telegram.read())
-                        "write" -> {
-                            telegram.write(call.arguments as String?)
-                            result.success(null)
-                        }
-                        else -> result.notImplemented()
-                    }
-                } catch (_: Exception) {
-                    result.error("telegram_storage", "Der geschützte Telegram-Speicher ist nicht verfügbar.", null)
-                }
-            }
         val preferences = getPreferences(MODE_PRIVATE)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/preferences")
             .setMethodCallHandler { call, result ->

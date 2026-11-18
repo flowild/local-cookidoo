@@ -5,34 +5,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 # Rezeptgarten entwickeln
 
-- Die native Android-Portierung liegt in `android-app/`. Ihre Funktions- und
-  Designvorlage ist die bestehende Web-App. Stand und Abnahme stehen in
-  `FLUTTER-PORTIERUNG.md`. Der Testclient nutzt die vorhandenen Server-APIs.
-  Im Android-Einkaufswagen folgen abgehakte Zutaten und Zusatzartikel auf die
-  offenen Einträge. Aktuelle Vorratszutaten und Wasser bleiben ausgeblendet.
-  Die Android-Rezeptdetails zeigen Listenzuordnungen und Versionen sowie
-  Vorratsstatus, gruppierte Zubereitung und Tipps. Die Anordnung der Abschnitte
-  entspricht der Web-App.
-  Die Android-Rezeptbibliothek nutzt dieselbe serverseitige Suche, Filterung und
-  Familiengruppierung wie die PWA. In Listen bleiben Rezepte außerhalb des
-  Filters ausgegraut sichtbar. Lokale Listen werden über die gemeinsamen APIs
-  angelegt, gelöscht und um weitere Rezepte ergänzt.
-  „Mein Vorrat“ in Android lädt alphabetische Zutaten und Vorschläge aus dem
-  gemeinsamen Katalog. Kategorien sind einklappbar und am Griff sortierbar.
-  Beim Suchen bleiben Änderungen an Zutaten möglich, die Sortierung ist gesperrt.
-  Die Android-Wochenansicht rastet auf schmalen Displays tageweise ein und merkt
-  den sichtbaren Wochentag lokal. Gehaltene Tages- und Ablagekacheln verwenden
-  die Wischrichtungen der mobilen Web-App.
-  Android speichert Dunkelmodus und Akzentfarbe pro Installation. Die
-  Einstellungen öffnen für den JSON-Export den nativen Dateidialog und zeigen
-  die installierte APK-Version mit einem Button für den In-App-Download aus
-  dem zugehörigen Kanal. Beim Öffnen und über „Nach Updates suchen“ wird der
-  installierte Build mit dem verfügbaren Build verglichen. Nach der
-  Integritäts- und Paketprüfung öffnet sich der
-  Android-Installer. Eine eventuell erforderliche Quellenfreigabe erfolgt
-  über die Android-Systemeinstellungen.
-  Android nutzt für die Telegram-Kopplung einen eigenen Client-Bot und schützt
-  das lokale Token und den Kopplungsschlüssel mit dem Android Keystore.
+- Für Android-Widgets, APK-Builds und Geräteprüfungen verwende
+  [rezeptgarten-android](../rezeptgarten-android/SKILL.md). Änderungen an
+  gemeinsamen Rezeptgarten-APIs mit beiden Clients prüfen.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen
