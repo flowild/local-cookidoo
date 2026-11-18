@@ -31,6 +31,9 @@ Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Noti
 Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
 Portionen, Gesamtzeit und Sortierung. Lokale Listen lassen sich anlegen, nach
 Bestätigung löschen und um noch nicht enthaltene Rezepte ergänzen.
+Der Android-Vorrat verwendet den gemeinsamen Zutatenkatalog und die gespeicherte
+Kategorienreihenfolge. Kategorien und Vorratseinträge können wie im Web verwaltet
+werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 

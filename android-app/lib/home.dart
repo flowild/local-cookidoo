@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'ingredient_icon.dart';
+import 'pantry_view.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
@@ -41,7 +42,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     '/api/recipes',
     '/api/calendar/week',
     '/api/cart',
-    '/api/pantry',
   ];
   static const weekdays = [
     'Montag',
@@ -59,7 +59,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   int weekOffset = 0;
   String? weekReference;
   bool busy = false;
-  int libraryRefresh = 0;
+  int viewRefresh = 0;
+  final pantryCollapsed = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
   late Future<dynamic> data = _load();
@@ -74,7 +75,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   }
 
   Future<dynamic> _load() async {
-    if (area == 1 || area == 2) return null;
+    if (area == 1 || area == 2 || area == 5) return null;
     if (area == 3) {
       final day = _requestedDay();
       final status = await api.get('/api/status', timeout: shortRead) as Json;
@@ -102,8 +103,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   Future<void> _refresh() async {
     if (busy) return;
-    if (area == 1 || area == 2) {
-      setState(() => libraryRefresh++);
+    if (area == 1 || area == 2 || area == 5) {
+      setState(() => viewRefresh++);
       return;
     }
     final updated = _load();
@@ -635,44 +636,25 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     );
   }
 
-  Widget _other(Object? result) {
+  Widget _overview(Object? result) {
     final map = result is Json ? result : <String, dynamic>{};
-    return switch (area) {
-      0 => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _heading('Dein Rezeptgarten'),
-          if ((map['recipe'] ?? map['featured']) case final Json recipe) ...[
-            RecipeCard(api: api, recipe: recipe, onTap: () => _recipe(recipe)),
-            OutlinedButton.icon(
-              onPressed: busy || map['can_shuffle'] == false
-                  ? null
-                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
-              icon: const Icon(Icons.shuffle),
-              label: const Text('Anderes Rezept'),
-            ),
-          ] else
-            const Text('Kein Zufallsrezept vorhanden.'),
-        ],
-      ),
-      _ => _section('Mein Vorrat', [
-        for (final category in objects(map['categories']))
-          ExpansionTile(
-            title: Text(text(category['name'])),
-            children: [
-              for (final item in objects(
-                map['items'],
-              ).where((item) => item['category_id'] == category['id']))
-                ListTile(
-                  title: Text(text(item['name'])),
-                  subtitle: item['quantity'] == null
-                      ? null
-                      : Text(text(item['quantity'])),
-                ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _heading('Dein Rezeptgarten'),
+        if ((map['recipe'] ?? map['featured']) case final Json recipe) ...[
+          RecipeCard(api: api, recipe: recipe, onTap: () => _recipe(recipe)),
+          OutlinedButton.icon(
+            onPressed: busy || map['can_shuffle'] == false
+                ? null
+                : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+            icon: const Icon(Icons.shuffle),
+            label: const Text('Anderes Rezept'),
           ),
-      ]),
-    };
+        ] else
+          const Text('Kein Zufallsrezept vorhanden.'),
+      ],
+    );
   }
 
   @override
@@ -710,7 +692,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
             : switch (area) {
                 3 => _week(snapshot.data as Json),
                 4 => _cart(snapshot.data as Json),
-                _ => _other(snapshot.data),
+                _ => _overview(snapshot.data),
               };
         return Scaffold(
           appBar: AppBar(
@@ -754,13 +736,18 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
               1 => RecipeCollections(
                 api: api,
                 openRecipe: _recipe,
-                refreshCount: libraryRefresh,
+                refreshCount: viewRefresh,
               ),
               2 => RecipeBrowser(
                 api: api,
                 openRecipe: _recipe,
                 searchFocus: recipeSearch,
-                refreshCount: libraryRefresh,
+                refreshCount: viewRefresh,
+              ),
+              5 => PantryView(
+                api: api,
+                collapsed: pantryCollapsed,
+                refreshCount: viewRefresh,
               ),
               _ => RefreshIndicator(
                 onRefresh: _refresh,
