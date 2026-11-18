@@ -5,6 +5,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 # Rezeptgarten entwickeln
 
+- Die native Android-Portierung liegt in `android-app/`. Ihre Funktions- und
+  Designvorlage ist die bestehende Web-App. Stand und Abnahme stehen in
+  `FLUTTER-PORTIERUNG.md`. Der Testclient nutzt die vorhandenen Server-APIs.
+
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen
   denselben Stand. Nach Prüfung und Deployment Versionsänderungen mit den zugehörigen

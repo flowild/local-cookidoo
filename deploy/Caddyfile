@@ -8,7 +8,21 @@ https://192.168.184.30 {
     bind 192.168.184.30
     tls internal
     encode zstd gzip
-    reverse_proxy 127.0.0.1:8000
+    redir /android /android/ 308
+    redir /android/test /android/test/ 308
+    handle_path /android/test/* {
+        root * /var/lib/rezeptgarten-downloads/test
+        header Cache-Control "no-cache"
+        file_server
+    }
+    handle_path /android/* {
+        root * /var/lib/rezeptgarten-downloads/release
+        header Cache-Control "no-cache"
+        file_server
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8000
+    }
 }
 
 http://192.168.184.30 {

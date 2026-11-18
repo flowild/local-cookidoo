@@ -17,6 +17,16 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 - [rezeptgarten-betrieb](.agents/skills/rezeptgarten-betrieb/SKILL.md): bestehende
   Serverinstanz, SSH, Deployment, Testumgebungen und lokales HTTPS.
 
+## Android
+
+Die native Flutter-App entsteht unter `android-app/`. Die
+[Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
+Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
+Downloadseite `https://192.168.184.30/android/test/`. Das
+Veröffentlichungsskript prüft und überträgt die APK getrennt vom Web-Deployment.
+Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
+Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
+
 ## Telegram
 
 Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
