@@ -66,9 +66,13 @@ zeigt Warenbereiche, gruppierte Zutaten, Symbole und Häkchen. Dort können
 Zusatzartikel hinzugefügt, Einträge entfernt, der Wagen geleert und die
 Übertragung an Cookidoo ausdrücklich ausgelöst werden. Ungeklärte Übertragungen
 können nach Prüfung in Cookidoo bestätigt oder wieder freigegeben werden.
-Rezepte lassen sich auch über ihre Detailansicht hinzufügen. Übersicht, Listen,
-Rezepte und Vorrat haben weiterhin Teilumfang. Die Tabelle oben beschreibt die
-Anforderungen für die vollständige Portierung.
+Rezepte lassen sich auch über ihre Detailansicht hinzufügen. Dort zeigt die APK
+Rezeptversionen, Listenzuordnungen, Zutaten mit Vorratsstatus, Zubereitung und
+Tipps. Persönliche Notizen werden beim Abschluss der Eingabe oder beim
+Verlassen gespeichert. Bei einem Cookidoo-Konflikt bleibt der Entwurf im Feld.
+„Heute kochen“ meldet, ob Cookidoo die Planung verifizieren konnte. Übersicht,
+Rezeptsuche, Listen und Vorrat haben weiterhin Teilumfang. Die Tabelle oben
+beschreibt die Anforderungen für die vollständige Portierung.
 
 Testbuilds verwenden `de.rezeptgarten.rezeptgarten.test` und die separate
 Downloadseite `https://192.168.184.30/android/test/`. Das folgende Beispiel
@@ -95,9 +99,10 @@ Die Flutter-Referenz liegt im Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md`. Die lokale
 WSL-Toolchain wurde mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 4 von Rezeptgarten 0.8.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
+Build 5 von Rezeptgarten 0.9.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
 Paketdaten, ARM64-Architektur und SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
-Speichern eines Einkaufs-Häkchens sowie Zusatzartikel, Übertragung und manuelle
-Klärung ab. Installation und Bedienung auf
+Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
+Klärung sowie Rezeptdetails mit erfolgreicher und konfliktbehafteter
+Notizspeicherung ab. Installation und Bedienung auf
 einem physischen Android-Gerät stehen noch zur Prüfung aus.

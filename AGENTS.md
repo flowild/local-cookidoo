@@ -26,6 +26,8 @@ Downloadseite `https://192.168.184.30/android/test/`. Das
 Veröffentlichungsskript prüft und überträgt die APK getrennt vom Web-Deployment.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
+Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
+über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 

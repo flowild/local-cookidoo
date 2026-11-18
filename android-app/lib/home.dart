@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'ingredient_icon.dart';
 import 'recipe_card.dart';
+import 'recipe_detail.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
@@ -171,84 +170,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   }
 
   Future<void> _recipe(Json recipe, {bool calendar = false}) async {
-    final id = recipe['id'];
-    if (id is! String) return;
-    final encoded = Uri.encodeComponent(id);
-    final details = api.get(
-      '/api/recipes/$encoded${calendar ? '?calendar=true' : ''}',
-    );
+    if (recipe['id'] is! String) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (context) => Scaffold(
-          appBar: AppBar(title: Text(text(recipe['name'], 'Rezept'))),
-          body: FutureBuilder<dynamic>(
-            future: details,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(child: Text(snapshot.error.toString()));
-              }
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final result = snapshot.data as Json;
-              final item = result['recipe'] is Json
-                  ? result['recipe'] as Json
-                  : result;
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  RecipeCard(api: api, recipe: item),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await _mutate('POST', '/api/cart/recipes', {
-                        'recipe_id': id,
-                        'calendar': calendar,
-                      }, 'Rezept im Einkaufswagen.');
-                    },
-                    icon: const Icon(Icons.shopping_cart_outlined),
-                    label: const Text('In den Einkaufswagen'),
-                  ),
-                  ExpansionTile(
-                    title: const Text('Zutaten'),
-                    initiallyExpanded: true,
-                    children: _detailLines(
-                      item['ingredients_json'],
-                      hidden: item['hidden_ingredient_positions'],
-                    ),
-                  ),
-                  ExpansionTile(
-                    title: const Text('Zubereitung'),
-                    children: _detailLines(item['instructions_json']),
-                  ),
-                  if (item['tips_json'] != null)
-                    ExpansionTile(
-                      title: const Text('Tipps'),
-                      children: _detailLines(item['tips_json']),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
+        builder: (_) =>
+            RecipeDetail(api: api, preview: recipe, calendar: calendar),
       ),
     );
-  }
-
-  List<Widget> _detailLines(Object? encoded, {Object? hidden}) {
-    final value = encoded is String ? jsonDecode(encoded) : encoded;
-    if (value is! List) return [];
-    return [
-      for (final (index, line) in value.indexed)
-        if (hidden is! List || !hidden.contains(index))
-          ListTile(
-            title: Text(
-              line is Json
-                  ? text(line['text'] ?? line['description'] ?? line['name'])
-                  : text(line),
-            ),
-          ),
-    ];
+    if (mounted) await _refresh();
   }
 
   Widget _heading(String title, [String? description]) => Padding(

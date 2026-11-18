@@ -10,24 +10,33 @@ class RecipeCard extends StatefulWidget {
     required this.api,
     required this.recipe,
     this.onTap,
+    this.detail = false,
   });
 
   final RezeptgartenApi api;
   final Json recipe;
   final VoidCallback? onTap;
+  final bool detail;
 
   @override
   State<RecipeCard> createState() => _RecipeCardState();
 }
 
 class _RecipeCardState extends State<RecipeCard> {
-  late Future<Uint8List?> image = widget.api.image(widget.recipe['image_file']);
+  late Future<Uint8List?> image = widget.api.image(
+    widget.recipe['image_file'],
+    full: widget.detail,
+  );
 
   @override
   void didUpdateWidget(RecipeCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.recipe['image_file'] != oldWidget.recipe['image_file']) {
-      image = widget.api.image(widget.recipe['image_file']);
+    if (widget.recipe['image_file'] != oldWidget.recipe['image_file'] ||
+        widget.detail != oldWidget.detail) {
+      image = widget.api.image(
+        widget.recipe['image_file'],
+        full: widget.detail,
+      );
     }
   }
 
@@ -59,7 +68,7 @@ class _RecipeCardState extends State<RecipeCard> {
                           )
                         : Image.memory(snapshot.data!, fit: BoxFit.cover),
                   ),
-                  if (seconds is num || servings != null)
+                  if (!widget.detail && (seconds is num || servings != null))
                     Positioned(
                       bottom: 6,
                       right: 6,
@@ -87,28 +96,29 @@ class _RecipeCardState extends State<RecipeCard> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text(recipe['name'], 'Rezept'),
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  if (recipe['difficulty'] != null)
-                    Text(switch (text(recipe['difficulty'])
-                        .toLowerCase()
-                        .split('.')
-                        .last) {
-                      'easy' => 'Einfach',
-                      'medium' => 'Mittel',
-                      'hard' => 'Schwierig',
-                      _ => text(recipe['difficulty']),
-                    }),
-                ],
+            if (!widget.detail)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text(recipe['name'], 'Rezept'),
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    if (recipe['difficulty'] != null)
+                      Text(switch (text(recipe['difficulty'])
+                          .toLowerCase()
+                          .split('.')
+                          .last) {
+                        'easy' => 'Einfach',
+                        'medium' => 'Mittel',
+                        'hard' => 'Schwierig',
+                        _ => text(recipe['difficulty']),
+                      }),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),

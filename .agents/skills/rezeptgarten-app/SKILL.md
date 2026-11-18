@@ -10,6 +10,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   `FLUTTER-PORTIERUNG.md`. Der Testclient nutzt die vorhandenen Server-APIs.
   Im Android-Einkaufswagen folgen abgehakte Zutaten und Zusatzartikel auf die
   offenen Einträge. Aktuelle Vorratszutaten und Wasser bleiben ausgeblendet.
+  Die Android-Rezeptdetails zeigen Listenzuordnungen und Versionen sowie
+  Vorratsstatus, gruppierte Zubereitung und Tipps. Die Anordnung der Abschnitte
+  entspricht der Web-App.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen

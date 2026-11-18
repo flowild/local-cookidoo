@@ -138,7 +138,7 @@ class RezeptgartenApi {
     }
   }
 
-  Future<Uint8List?> image(Object? filename) async {
+  Future<Uint8List?> image(Object? filename, {bool full = false}) async {
     if (filename is! String ||
         !RegExp(r'^[a-f0-9]{40}\.webp$').hasMatch(filename)) {
       return null;
@@ -146,7 +146,7 @@ class RezeptgartenApi {
     try {
       final response = await _request(
         'GET',
-        '/api/images/$filename?size=thumb',
+        '/api/images/$filename${full ? '' : '?size=thumb'}',
       );
       if (response.statusCode != 200) {
         await response.drain<void>();

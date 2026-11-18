@@ -11,6 +11,9 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   Der Android-Client löst den Cookidoo-Transfer ausdrücklich aus und führt
   ungeklärte Einträge erst nach manueller Prüfung einer Bestätigung oder
   erneuten Freigabe zu.
+  Die Android-Rezeptdetails speichern Notizen mit der zuletzt geladenen Fassung
+  als Vergleichswert. Bei einem Fehler bleibt der eingegebene Entwurf erhalten.
+  „Heute kochen“ meldet unbestätigte Cookidoo-Ergebnisse ausdrücklich.
 
 - Die Telegram-Wochenansicht nutzt den bestehenden Kalenderclient und Lock im
   laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält
