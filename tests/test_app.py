@@ -100,6 +100,32 @@ class AppTests(unittest.TestCase):
         self.assertNotIn(key, response.text)
         self.assertEqual(self.client.post('/api/telegram-pair', json={'client_id':111, 'cart_key':'bad'}, headers=ORIGIN).status_code, 400)
 
+    def test_android_and_browser_telegram_pairs_are_independent(self):
+        token = '123456789:' + 'a' * 35
+        browser_key = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='
+        android_key = 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI='
+        self.client.post('/api/telegram-server-bot', json={'token': token}, headers=ORIGIN)
+        result = httpx.Response(200, json={'ok': True, 'result': {'id': 222, 'is_bot': True, 'username': 'ServerBot'}})
+        vault = Vault(self.tmp.name, 'telegram-server-bot.enc')
+        with patch('app.main.httpx.AsyncClient') as factory:
+            factory.return_value.__aenter__.return_value.post = AsyncMock(return_value=result)
+            def pair(client_id, key, **extra):
+                return self.client.post('/api/telegram-pair', json={'client_id': client_id, 'cart_key': key, **extra}, headers=ORIGIN)
+
+            self.assertEqual(pair(111, browser_key).status_code, 200)
+            self.assertEqual(pair(111, android_key, client='android').status_code, 409)
+            self.assertEqual(pair(333, None, client='android').status_code, 400)
+            response = pair(333, android_key, client='android')
+            self.assertEqual(response.json(), {'id': 222, 'username': 'ServerBot'})
+            self.assertNotIn(android_key, response.text)
+            self.assertEqual(vault.read()['cart_key'], browser_key)
+            self.assertEqual(pair(444, browser_key).status_code, 200)
+        stored = vault.read()
+        self.assertEqual(stored['client_id'], 444)
+        self.assertEqual(stored['android_pair'], {
+            'client_id': 333, 'cart_key': android_key, 'cart_owner': self.app.state.sync.cart_owner(),
+        })
+
     def test_app_version_is_shared_by_health_and_cached_shell(self):
         from app.version import APP_VERSION
         health = self.client.get('/api/health')

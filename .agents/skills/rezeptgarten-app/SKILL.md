@@ -26,6 +26,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Android speichert Dunkelmodus und Akzentfarbe pro Installation. Die
   Einstellungen öffnen für den JSON-Export den nativen Dateidialog und zeigen
   die installierte APK-Version mit einem Link zum zugehörigen Downloadkanal.
+  Android nutzt für die Telegram-Kopplung einen eigenen Client-Bot und schützt
+  das lokale Token und den Kopplungsschlüssel mit dem Android Keystore.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen

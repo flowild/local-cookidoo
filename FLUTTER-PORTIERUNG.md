@@ -35,7 +35,12 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. V
 
 Die APK verwendet das bestehende Bot-zu-Bot-Protokoll für den lesenden Zugriff außerhalb des Heimnetzes. Sie speichert Client-Bot-Token und Kopplungsschlüssel im geschützten Android-Speicher. Der Server-Bot bleibt serverseitig konfiguriert. Beide Clients benötigen getrennte Client-Bots und getrennte Schlüssel, damit ihre Update-Abfragen unabhängig laufen.
 
-Der bestehende Server speichert derzeit eine einzige Kopplung. Für den Parallelbetrieb wird die Serverkonfiguration auf mehrere kontogebundene Kopplungen erweitert. Die vorhandene Browserkopplung wird dabei übernommen. Der Telegram-Dienst auf dem Proxmox-Host ordnet Anfragen und verschlüsselte Antworten der jeweiligen Kopplung zu. Kontoänderungen, ungültige Kopplungen und ungeklärte Kalenderstände bleiben für den Nutzer sichtbar.
+Der Server speichert eine kontogebundene Kopplung für den Browser und eine für
+Android. Die vorhandene Browserkopplung bleibt lesbar. Der Telegram-Dienst auf
+dem Proxmox-Host ordnet Anfragen und verschlüsselte Antworten der jeweiligen
+Kopplung zu. Android kann seine Kopplung im Heimnetz einrichten und per
+Nachrichtentest prüfen. Der Abruf und die Anzeige von Wochen- und
+Einkaufswagen-Momentaufnahmen in der APK folgen noch.
 
 Die App prüft Absender, Anfragekennung und Vollständigkeit jeder Antwort sowie die Authentizität der verschlüsselten Momentaufnahme. Sie übernimmt die bestehende optionale Komprimierung und die lokal gespeicherten Einkaufs-Häkchen je Kopplung. Bei fehlendem Heimnetz erfolgt der Zugriff rein lesend. Bilder und Notizinhalte werden über Telegram nicht übertragen.
 
@@ -114,7 +119,7 @@ Die Flutter-Referenz liegt im Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md`. Die lokale
 WSL-Toolchain wurde mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 9 von Rezeptgarten 0.13.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
+Build 10 von Rezeptgarten 0.14.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
 Paketdaten, ARM64-Architektur und SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
 Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
@@ -123,5 +128,7 @@ Verwaltung lokaler Listen und des Vorrats ab. Der Wochentest prüft Wischen,
 Rückgängig, Platzhalter und die Sperre beim fehlgeschlagenen Wochenwechsel.
 Der Einstellungstest prüft die Übergabe der Konto- und Synchronisierungsdaten,
 der lokalen Darstellung und der JSON-Bytes an ihre jeweiligen Schnittstellen.
+Der Telegram-Test verwendet simulierte Bot-Antworten. Er prüft die getrennte
+Android-Kopplung und verwirft fremde, alte und falsch zugeordnete Nachrichten.
 Installation und Bedienung auf
 einem physischen Android-Gerät stehen noch zur Prüfung aus.

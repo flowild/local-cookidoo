@@ -10,6 +10,7 @@ import httpx
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
+from threading import Lock
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -25,6 +26,7 @@ from .ingredients import ingredient_available, ingredient_group_key, ingredient_
 from .version import APP_VERSION
 from .telegram_cart import encrypt_payload
 from .telegram_week import snapshot as telegram_week_snapshot
+from .telegram_pairs import select_pair
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -125,6 +127,7 @@ def create_app(directory=None, secure_cookies=None):
     vault = Vault(database.directory)
     google_key_vault = Vault(database.directory, 'google-api-key.enc')
     telegram_vault = Vault(database.directory, 'telegram-server-bot.enc')
+    telegram_lock = Lock()
     service = SyncService(database, vault)
     @asynccontextmanager
     async def lifespan(app):
@@ -185,12 +188,14 @@ def create_app(directory=None, secure_cookies=None):
         token = payload.get('token') if isinstance(payload, dict) else None
         if not isinstance(token, str) or not re.fullmatch(r'[0-9]{1,20}:[A-Za-z0-9_-]{20,200}', token.strip()):
             raise HTTPException(400, 'Bitte gib ein gültiges Bot-Token ein.')
-        telegram_vault.write({'token': token.strip()})
+        with telegram_lock:
+            telegram_vault.write({'token': token.strip()})
         return {'ok': True}
 
     @app.delete('/api/telegram-server-bot')
     def delete_telegram_server_bot():
-        telegram_vault.clear()
+        with telegram_lock:
+            telegram_vault.clear()
         return {'ok': True}
 
     @app.post('/api/telegram-pair')
@@ -201,20 +206,25 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(400, 'Ungültige Bot-Kennung.') from None
         client_id = payload.get('client_id') if isinstance(payload, dict) else None
         cart_key = payload.get('cart_key') if isinstance(payload, dict) else None
+        client = payload.get('client', 'browser') if isinstance(payload, dict) else None
         if type(client_id) is not int or not 0 < client_id < 2**53:
             raise HTTPException(400, 'Ungültige Bot-Kennung.')
+        if client not in ('browser', 'android') or (client == 'android' and cart_key is None):
+            raise HTTPException(400, 'Ungültige Client-Kopplung.')
         if cart_key is not None:
             try:
                 if not isinstance(cart_key, str) or len(base64.b64decode(cart_key, validate=True)) != 32:
                     raise ValueError()
             except (ValueError, TypeError):
                 raise HTTPException(400, 'Ungültiger Verschlüsselungsschlüssel.') from None
-        saved = telegram_vault.read()
+        with telegram_lock:
+            saved = telegram_vault.read()
+        owner = service.cart_owner()
         if not saved or not saved.get('token'):
             raise HTTPException(409, 'Bitte zuerst das Server-Bot-Token speichern.')
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-                response = await client.post('https://api.telegram.org/bot' + saved['token'] + '/getMe')
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as telegram:
+                response = await telegram.post('https://api.telegram.org/bot' + saved['token'] + '/getMe')
                 data = response.json()
             bot = data.get('result') if response.status_code == 200 and isinstance(data, dict) and data.get('ok') else None
             if not isinstance(bot, dict) or not bot.get('is_bot') or not isinstance(bot.get('id'), int) or not re.fullmatch(r'[A-Za-z0-9_]{5,32}', bot.get('username') or ''):
@@ -223,10 +233,24 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(502, 'Server-Bot konnte bei Telegram nicht geprüft werden.') from None
         if bot['id'] == client_id:
             raise HTTPException(400, 'Bitte zwei unterschiedliche Bots verwenden.')
-        pair = {'token': saved['token'], 'client_id': client_id}
+        pair = {'client_id': client_id}
         if cart_key is not None:
-            pair.update({'cart_key': cart_key, 'cart_owner': service.cart_owner()})
-        telegram_vault.write(pair)
+            pair.update({'cart_key': cart_key, 'cart_owner': owner})
+        with telegram_lock:
+            current = telegram_vault.read() or {}
+            if current.get('token') != saved['token'] or owner != service.cart_owner():
+                raise HTTPException(409, 'Server-Bot oder Cookidoo-Konto wurde inzwischen geändert.')
+            android = current.get('android_pair') or {}
+            other = current if client == 'android' else android
+            if other.get('client_id') == client_id:
+                raise HTTPException(409, 'Verwende für Browser und Android unterschiedliche Client-Bots.')
+            if client == 'android':
+                current['android_pair'] = pair
+            else:
+                current = {'token': current['token'], **pair}
+                if android:
+                    current['android_pair'] = android
+            telegram_vault.write(current)
         return {'username': bot['username'], 'id': bot['id']}
 
     @app.post('/api/google-api-key')
@@ -261,10 +285,10 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(502, 'Deine Woche konnte nicht von Cookidoo geladen werden. Bitte versuche es erneut.') from None
 
     @app.get('/api/telegram-week')
-    async def telegram_week(request: Request, day: date, nonce: str, compressed: bool = False):
+    async def telegram_week(request: Request, day: date, nonce: str, compressed: bool = False, client_id: int | None = None):
         if not request.client or request.client.host != '127.0.0.1':
             raise HTTPException(403, 'Nur lokal verfügbar.')
-        config = telegram_vault.read() or {}
+        config = select_pair(telegram_vault.read() or {}, client_id)
         owner = config.get('cart_owner')
         if not owner or owner != service.cart_owner() or owner != service.week_collection_owner():
             raise HTTPException(409, 'Die Bot-Kopplung gehört zu einem anderen Konto.')

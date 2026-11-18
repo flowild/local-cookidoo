@@ -1,8 +1,20 @@
 import unittest
-from scripts.telegram_bridge import reply_for
+from app.telegram_pairs import bridge_config
+from scripts.telegram_bridge import reply_for, same_pair
 
 
 class TelegramBridgeTests(unittest.TestCase):
+    def test_repairing_android_does_not_interrupt_browser_responses(self):
+        raw = {'token': 'fixture', 'client_id': 111, 'cart_key': 'browser-fixture',
+               'android_pair': {'client_id': 333, 'cart_key': 'android-fixture'}}
+        before = bridge_config(raw)
+        changed = bridge_config({**raw, 'android_pair': {'client_id': 333, 'cart_key': 'new-fixture'}})
+        self.assertEqual(set(before['clients']), {'111', '333'})
+        self.assertNotIn('browser-fixture', str(before))
+        self.assertTrue(same_pair(before, changed, 111))
+        self.assertFalse(same_pair(before, changed, 333))
+        self.assertFalse(same_pair(before, changed, 444))
+
     def test_only_fresh_private_ping_from_paired_bot_receives_reply(self):
         nonce = 'a' * 32
         message = {'from': {'id': 123, 'is_bot': True}, 'chat': {'id': 123, 'type': 'private'},

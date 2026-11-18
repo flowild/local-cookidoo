@@ -45,6 +45,11 @@ Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
 ## Telegram
 
+Browser und Android verwenden getrennte Client-Bots für denselben Server-Bot.
+Eine Android-Kopplung lässt die Browserkopplung bestehen. Android speichert
+Client-Token und Kopplungsschlüssel verschlüsselt mit dem Android Keystore.
+Einrichtung und Nachrichtentest sind in den Android-Einstellungen verfügbar.
+
 Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
 und ein Client-Bot-Token unverschlüsselt im jeweiligen Browser. Sie zeigen nur an,
 ob ein Token vorhanden ist. Mit „Bots verbinden“ wird der Client-Bot für den

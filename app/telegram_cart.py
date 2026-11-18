@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, shopping_category
 from .security import Vault
+from .telegram_pairs import select_pair
 
 
 class ReadOnlyCartDatabase:
@@ -59,13 +60,13 @@ def snapshot(database, paired_owner):
     return result
 
 
-def encrypted_snapshot(directory, request_id, compress=False):
+def encrypted_snapshot(directory, request_id, compress=False, client_id=None):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('invalid request')
     root = Path(directory)
     if not (root / 'vault.key').is_file() or not (root / 'telegram-server-bot.enc').is_file():
         raise ValueError('not paired')
-    config = Vault(directory, 'telegram-server-bot.enc').read() or {}
+    config = select_pair(Vault(directory, 'telegram-server-bot.enc').read() or {}, client_id)
     if not config.get('cart_owner'):
         raise ValueError('not paired')
     connection = sqlite3.connect((root / 'library.sqlite3').resolve().as_uri() + '?mode=ro', uri=True)

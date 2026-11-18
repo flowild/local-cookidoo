@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'telegram_access.dart';
 
 const _regions = {'de': 'Deutschland', 'at': 'Österreich', 'ch': 'Schweiz'};
 const _intervals = {
@@ -35,12 +36,16 @@ class _SettingsViewState extends State<SettingsView> {
   bool _busy = false;
   int _request = 0;
   Timer? _poll;
+  late final _telegram = TelegramAccess(widget.api);
+  ({bool tokenSet, bool paired})? _telegramState;
+  String? _telegramMessage;
 
   @override
   void initState() {
     super.initState();
     unawaited(_load(showLoading: true));
     unawaited(_loadVersion());
+    unawaited(_loadTelegram());
     _poll = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!_busy && !_loading && ModalRoute.of(context)?.isCurrent == true) {
         unawaited(_load());
@@ -51,6 +56,7 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     _poll?.cancel();
+    _telegram.close();
     super.dispose();
   }
 
@@ -64,6 +70,105 @@ class _SettingsViewState extends State<SettingsView> {
       // App metadata is only available in the Android activity.
     }
   }
+
+  Future<void> _loadTelegram() async {
+    try {
+      final state = await _telegram.state();
+      if (mounted) setState(() => _telegramState = state);
+    } on MissingPluginException {
+      // Protected storage is supplied by the Android activity.
+    } on PlatformException catch (error) {
+      if (mounted) {
+        setState(() => _telegramMessage = error.message);
+      }
+    } on Exception {
+      if (mounted) {
+        setState(
+          () => _telegramMessage =
+              'Die gespeicherte Telegram-Kopplung konnte nicht gelesen werden.',
+        );
+      }
+    }
+  }
+
+  Future<void> _telegramToken({required bool server}) async {
+    final token = await showDialog<String>(
+      context: context,
+      builder: (_) => _ValueDialog(
+        title: server ? 'Server-Bot-Token' : 'Android-Client-Bot-Token',
+        label: 'Bot-Token',
+        maxLength: 221,
+        secret: true,
+        validate: (value) => TelegramAccess.validToken(value)
+            ? null
+            : 'Bitte gib ein gültiges Bot-Token ein.',
+      ),
+    );
+    if (token == null || !mounted) return;
+    if (server) {
+      await _write('POST', '/api/telegram-server-bot', {
+        'token': token,
+      }, 'Server-Bot-Token gespeichert. Verbinde die Bots erneut.');
+    } else {
+      await _perform(() async {
+        await _telegram.setToken(token);
+        await _loadTelegram();
+        _message('Android-Client-Bot-Token gespeichert.');
+      });
+    }
+  }
+
+  Future<void> _removeTelegramToken({required bool server}) async {
+    final accepted = await _confirm(
+      server
+          ? 'Server-Bot-Token und alle Server-Kopplungen entfernen?'
+          : 'Android-Client-Token und lokale Kopplung entfernen?',
+      'Entfernen',
+    );
+    if (!accepted || !mounted) return;
+    if (server) {
+      await _write(
+        'DELETE',
+        '/api/telegram-server-bot',
+        null,
+        'Server-Bot-Token entfernt.',
+      );
+    } else {
+      await _perform(() async {
+        await _telegram.removeToken();
+        await _loadTelegram();
+      });
+    }
+  }
+
+  Future<void> _pairTelegram() => _perform(() async {
+    if (mounted) setState(() => _telegramMessage = null);
+    await _telegram.pair();
+    await _loadTelegram();
+    if (mounted) {
+      setState(
+        () => _telegramMessage =
+            'Bots verbunden. Der Nachrichtentest kann jetzt gestartet werden.',
+      );
+    }
+  });
+
+  Future<void> _testTelegram() => _perform(() async {
+    setState(() => _telegramMessage = 'Telegram-Nachrichtentest läuft …');
+    try {
+      await _telegram.test();
+      if (mounted) {
+        setState(() => _telegramMessage = 'Telegram-Verbindung bestätigt.');
+      }
+    } on Exception {
+      if (mounted) {
+        setState(
+          () => _telegramMessage = 'Telegram-Verbindungstest nicht bestätigt.',
+        );
+      }
+      rethrow;
+    }
+  });
 
   Future<void> _load({bool showLoading = false}) async {
     final request = ++_request;
@@ -414,6 +519,84 @@ class _SettingsViewState extends State<SettingsView> {
     ];
   }
 
+  Widget _telegramOptions() {
+    final server = _status?['telegram_server_bot_set'];
+    final client = _telegramState?.tokenSet;
+    return _card('Telegram', [
+      Text(switch (server) {
+        true => 'Ein Server-Bot-Token ist gespeichert.',
+        false => 'Kein Server-Bot-Token gespeichert.',
+        _ => 'Status des Server-Bot-Tokens unbekannt.',
+      }),
+      if (server is bool)
+        Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton(
+              onPressed: _busy ? null : () => _telegramToken(server: true),
+              child: Text(
+                server ? 'Server-Token ersetzen' : 'Server-Token speichern',
+              ),
+            ),
+            if (server)
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => _removeTelegramToken(server: true),
+                child: const Text('Server-Token entfernen'),
+              ),
+          ],
+        ),
+      Text(switch (client) {
+        true => 'Ein Android-Client-Bot-Token ist gespeichert.',
+        false => 'Kein Android-Client-Bot-Token gespeichert.',
+        _ => 'Status des Android-Client-Bot-Tokens unbekannt.',
+      }),
+      Wrap(
+        spacing: 8,
+        children: [
+          OutlinedButton(
+            onPressed: _busy ? null : () => _telegramToken(server: false),
+            child: Text(
+              client == true
+                  ? 'Android-Token ersetzen'
+                  : 'Android-Token speichern',
+            ),
+          ),
+          if (client == true)
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _removeTelegramToken(server: false),
+              child: const Text('Android-Token entfernen'),
+            ),
+        ],
+      ),
+      const Text(
+        'Verwende für Android einen eigenen Client-Bot. Beide Bots benötigen die Bot-zu-Bot-Freigabe und einen eigenen Update-Kanal.',
+      ),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton(
+            onPressed: _busy || client != true || server != true
+                ? null
+                : _pairTelegram,
+            child: const Text('Android-Bots verbinden'),
+          ),
+          OutlinedButton(
+            onPressed: _busy || _telegramState?.paired != true
+                ? null
+                : _testTelegram,
+            child: const Text('Nachrichtentest starten'),
+          ),
+        ],
+      ),
+      if (_telegramMessage != null) Text(_telegramMessage!),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Einstellungen')),
@@ -431,6 +614,7 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           ],
           if (_status case final Json status) ..._serverOptions(status),
+          _telegramOptions(),
           _card('Rezeptgarten für Android', [
             if (_version != null) Text('Installierte Version $_version'),
             OutlinedButton.icon(

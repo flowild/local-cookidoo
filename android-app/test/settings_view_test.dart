@@ -28,7 +28,7 @@ void main() {
           case 'weekDay':
             return 0;
           case 'version':
-            return '0.13.0-test';
+            return '0.14.0-test';
           case 'setAppearance':
             changes.add(call.arguments as Map);
         }
@@ -48,7 +48,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Einstellungen öffnen'));
       await tester.pumpAndSettle();
-      expect(find.text('Installierte Version 0.13.0-test'), findsOneWidget);
       await tester.tap(find.text('Dunkelmodus'));
       await tester.pumpAndSettle();
       expect(changes.single['dark'], true);
@@ -83,6 +82,9 @@ void main() {
       await tester.tap(find.text('Sammlung als JSON exportieren'));
       await tester.pumpAndSettle();
       expect(exported, orderedEquals([123, 125]));
+      final version = find.text('Installierte Version 0.14.0-test');
+      await tester.scrollUntilVisible(version, 280);
+      expect(version, findsOneWidget);
     },
   );
 }

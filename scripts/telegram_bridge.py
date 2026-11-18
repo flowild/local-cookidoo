@@ -1,4 +1,4 @@
-"""Respond to explicitly paired Telegram bot pings on the Proxmox host."""
+"""Serve explicitly paired Telegram clients from the Proxmox host."""
 import json
 import os
 import re
@@ -11,18 +11,25 @@ from datetime import date
 from pathlib import Path
 
 STATE = Path('/var/lib/rezeptgarten-telegram/offset.json')
-CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; import json; v=Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read() or {}; print(json.dumps({k:v.get(k) for k in ('token','client_id')}))"
-CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1], sys.argv[2] == 'compressed'))"
-WEEK_READER = "import sys,json,urllib.parse,urllib.request; q=urllib.parse.urlencode({'nonce':sys.argv[1],'day':sys.argv[2],'compressed':sys.argv[3]}); r=urllib.request.urlopen('http://127.0.0.1:8000/api/telegram-week?'+q,timeout=45); print(json.load(r)['data'])"
+CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; from app.telegram_pairs import bridge_config; import json; v=Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read() or {}; print(json.dumps(bridge_config(v)))"
+CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1], sys.argv[2] == 'compressed', int(sys.argv[3])))"
+WEEK_READER = "import sys,json,urllib.parse,urllib.request; q=urllib.parse.urlencode({'nonce':sys.argv[1],'day':sys.argv[2],'compressed':sys.argv[3],'client_id':sys.argv[4]}); r=urllib.request.urlopen('http://127.0.0.1:8000/api/telegram-week?'+q,timeout=45); print(json.load(r)['data'])"
 
 
 def config():
     result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CONFIG_READER],
                             capture_output=True, timeout=15, check=True)
     value = json.loads(result.stdout)
-    if not isinstance(value, dict) or not isinstance(value.get('token'), str) or not isinstance(value.get('client_id'), int):
+    if (not isinstance(value, dict) or not isinstance(value.get('token'), str)
+            or not isinstance(value.get('clients'), dict) or not value['clients']):
         return None
     return value
+
+
+def same_pair(before, after, client_id):
+    key = str(client_id)
+    return bool(after and before['token'] == after['token'] and key in before['clients']
+                and before['clients'][key] == after['clients'].get(key))
 
 
 def call(token, method, payload):
@@ -60,8 +67,8 @@ def reply_for(update, client_id, now):
     return 'rezeptgarten-' + command + ' ' + nonce
 
 
-def cart_messages(nonce, compress=False):
-    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CART_READER, nonce, 'compressed' if compress else 'plain'],
+def cart_messages(nonce, client_id, compress=False):
+    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', CART_READER, nonce, 'compressed' if compress else 'plain', str(client_id)],
                             capture_output=True, timeout=20, check=True)
     encoded = result.stdout.decode('ascii').strip()
     if not re.fullmatch(r'[A-Za-z0-9+/=]{1,54000}', encoded):
@@ -70,8 +77,8 @@ def cart_messages(nonce, compress=False):
     return [f'rezeptgarten-cart-part {nonce} {i + 1}/{len(pieces)} {piece}' for i, piece in enumerate(pieces)]
 
 
-def week_messages(nonce, day, compress=False):
-    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', WEEK_READER, nonce, day, 'true' if compress else 'false'],
+def week_messages(nonce, day, client_id, compress=False):
+    result = subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', WEEK_READER, nonce, day, 'true' if compress else 'false', str(client_id)],
                             capture_output=True, timeout=50, check=True)
     encoded = result.stdout.decode('ascii').strip()
     if not re.fullmatch(r'[A-Za-z0-9+/=]{1,54000}', encoded):
@@ -95,7 +102,7 @@ def main():
             if not value:
                 time.sleep(10)
                 continue
-            token, client_id = value['token'], value['client_id']
+            token = value['token']
             identity = hashlib.sha256(token.encode()).hexdigest()
             if identity != last_token:
                 offset, last_token = 0, identity
@@ -104,21 +111,24 @@ def main():
                 update_id = update.get('update_id')
                 if not isinstance(update_id, int):
                     continue
-                reply = reply_for(update, client_id, int(time.time()))
+                sender = (update.get('message') or {}).get('from') or {}
+                client_id = sender.get('id')
+                reply = (reply_for(update, client_id, int(time.time()))
+                         if type(client_id) is int and str(client_id) in value['clients'] else None)
                 if reply:
                     time.sleep(max(0, 1 - (time.monotonic() - last_reply)))
                     # Recheck pairing after the long poll before sending anything.
-                    if config() == value:
+                    if same_pair(value, config(), client_id):
                         if reply.startswith(('rezeptgarten-cart ', 'rezeptgarten-cartz ')):
                             nonce = reply.split(' ')[1]
                             try:
-                                messages = cart_messages(nonce, compress=reply.startswith('rezeptgarten-cartz '))
+                                messages = cart_messages(nonce, client_id, compress=reply.startswith('rezeptgarten-cartz '))
                             except (OSError, ValueError, subprocess.SubprocessError):
                                 messages = ['rezeptgarten-cart-error ' + nonce]
                         elif reply.startswith(('rezeptgarten-week ', 'rezeptgarten-weekz ')):
                             _, nonce, day = reply.split(' ')
                             try:
-                                messages = week_messages(nonce, day, compress=reply.startswith('rezeptgarten-weekz '))
+                                messages = week_messages(nonce, day, client_id, compress=reply.startswith('rezeptgarten-weekz '))
                             except (OSError, ValueError, subprocess.SubprocessError):
                                 messages = ['rezeptgarten-week-error ' + nonce]
                         else:
@@ -126,7 +136,7 @@ def main():
                         for index, message in enumerate(messages):
                             if index:
                                 time.sleep(1.1)
-                            if config() != value:
+                            if not same_pair(value, config(), client_id):
                                 break
                             call(token, 'sendMessage', {'chat_id': client_id, 'text': message})
                         last_reply = time.monotonic()

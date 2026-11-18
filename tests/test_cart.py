@@ -86,6 +86,23 @@ class CartTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encrypted_snapshot(self.tmp.name, nonce)
 
+    def test_telegram_cart_uses_the_requesting_clients_key(self):
+        self.add_recipe()
+        owner = self.app.state.sync.cart_owner()
+        keys = {111: os.urandom(32), 333: os.urandom(32)}
+        pairs = {client: {'client_id': client, 'cart_owner': owner, 'cart_key': base64.b64encode(key).decode()}
+                 for client, key in keys.items()}
+        Vault(self.tmp.name, 'telegram-server-bot.enc').write({**pairs[111], 'android_pair': pairs[333]})
+        nonce = 'a' * 32
+        encoded = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, client_id=333))
+        decoded = AESGCM(keys[333]).decrypt(encoded[:12], encoded[12:], nonce.encode())
+        self.assertEqual(json.loads(decoded)['items'][0]['name'], 'Testrezept')
+        from cryptography.exceptions import InvalidTag
+        with self.assertRaises(InvalidTag):
+            AESGCM(keys[111]).decrypt(encoded[:12], encoded[12:], nonce.encode())
+        with self.assertRaises(ValueError):
+            encrypted_snapshot(self.tmp.name, nonce, client_id=444)
+
     def test_local_add_deduplicates_survives_library_sync_and_scopes_account(self):
         self.assertEqual(self.client.post('/api/recipes/r1/shopping').status_code, 403)
         self.assertTrue(self.add_recipe()['added'])
