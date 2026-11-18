@@ -34,6 +34,9 @@ Bestätigung löschen und um noch nicht enthaltene Rezepte ergänzen.
 Der Android-Vorrat verwendet den gemeinsamen Zutatenkatalog und die gespeicherte
 Kategorienreihenfolge. Kategorien und Vorratseinträge können wie im Web verwaltet
 werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
+„Meine Woche“ auf Android verwendet die serverseitige Warteschlange und die
+kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
+Rückgängig sind über diese Ansicht erreichbar.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 

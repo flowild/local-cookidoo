@@ -71,6 +71,18 @@ class _RecipeCardState extends State<RecipeCard> {
                           )
                         : Image.memory(snapshot.data!, fit: BoxFit.cover),
                   ),
+                  if (!widget.detail && recipe['has_note'] == true)
+                    const Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Tooltip(
+                        message: 'Persönliche Notiz vorhanden',
+                        child: CircleAvatar(
+                          radius: 13,
+                          child: Icon(Icons.sticky_note_2_outlined, size: 15),
+                        ),
+                      ),
+                    ),
                   if (!widget.detail && (seconds is num || servings != null))
                     Positioned(
                       bottom: 6,

@@ -14,6 +14,10 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   Die Android-Rezeptdetails speichern Notizen mit der zuletzt geladenen Fassung
   als Vergleichswert. Bei einem Fehler bleibt der eingegebene Entwurf erhalten.
   „Heute kochen“ meldet unbestätigte Cookidoo-Ergebnisse ausdrücklich.
+  Die Android-Wochenansicht übernimmt vorgemerkte Tagesänderungen und die
+  serverseitig geführte Ablage. Platzhalter bleiben lokale Einträge. Bei
+  fehlgeschlagenem Wochenwechsel sind weitere Änderungen gesperrt, bis die
+  gewählte Woche erfolgreich geladen wurde.
 
 - Die Telegram-Wochenansicht nutzt den bestehenden Kalenderclient und Lock im
   laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält

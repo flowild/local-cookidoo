@@ -6,6 +6,7 @@ import 'pantry_view.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
+import 'week_view.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
@@ -36,28 +37,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     Icons.shopping_cart_outlined,
     Icons.kitchen_outlined,
   ];
-  static const endpoints = [
-    '/api/featured-recipe',
-    '/api/collections',
-    '/api/recipes',
-    '/api/calendar/week',
-    '/api/cart',
-  ];
-  static const weekdays = [
-    'Montag',
-    'Dienstag',
-    'Mittwoch',
-    'Donnerstag',
-    'Freitag',
-    'Samstag',
-    'Sonntag',
-  ];
-
   RezeptgartenApi get api => widget.api;
   int area = 3;
   int? serverCartCount;
-  int weekOffset = 0;
-  String? weekReference;
   bool busy = false;
   int viewRefresh = 0;
   final pantryCollapsed = <int>{};
@@ -65,33 +47,11 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   final cartItem = TextEditingController();
   late Future<dynamic> data = _load();
 
-  String? _requestedDay() {
-    if (weekOffset == 0) return null;
-    final reference = DateTime.parse('${weekReference!}T12:00:00Z');
-    return reference
-        .add(Duration(days: 7 * weekOffset))
-        .toIso8601String()
-        .substring(0, 10);
-  }
-
-  Future<dynamic> _load() async {
-    if (area == 1 || area == 2 || area == 5) return null;
-    if (area == 3) {
-      final day = _requestedDay();
-      final status = await api.get('/api/status', timeout: shortRead) as Json;
-      final week = await api.get(
-        day == null ? endpoints[3] : '${endpoints[3]}?day=$day',
-      ) as Json;
-      final days = objects(week['days']);
-      return {
-        ...week,
-        'queue': status['calendar_queue'],
-        'cart_count': status['cart_recipe_count'],
-        'loaded_monday': days.isEmpty ? null : days.first['date'],
-      };
-    }
-    return api.get(endpoints[area], timeout: area == 4 ? shortRead : null);
-  }
+  Future<dynamic> _load() async => switch (area) {
+    0 => api.get('/api/featured-recipe'),
+    4 => api.get('/api/cart', timeout: shortRead),
+    _ => null,
+  };
 
   void _open(int index) {
     if (busy || (area == index && index != 3)) return;
@@ -103,7 +63,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   Future<void> _refresh() async {
     if (busy) return;
-    if (area == 1 || area == 2 || area == 5) {
+    if (area == 1 || area == 2 || area == 3 || area == 5) {
       setState(() => viewRefresh++);
       return;
     }
@@ -116,14 +76,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     } on Exception {
       // The view displays the load error.
     }
-  }
-
-  void _changeWeek(int offset, String reference) {
-    setState(() {
-      weekReference = reference;
-      weekOffset = offset;
-      data = _load();
-    });
   }
 
   Future<bool> _mutate(
@@ -187,7 +139,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
             RecipeDetail(api: api, preview: recipe, calendar: calendar),
       ),
     );
-    if (mounted && area != 1 && area != 2) await _refresh();
+    if (mounted && area != 1 && area != 2 && area != 3) await _refresh();
   }
 
   Widget _heading(String title, [String? description]) => Padding(
@@ -215,108 +167,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
       ),
     ),
   );
-
-  List<Widget> _weekEntries(Json week, String target, List<Json> recipes) {
-    final placements = objects(week['placeholder_placements'])
-        .where((item) => item['target'] == target);
-    const names = {
-      'restaurant': 'Im Restaurant essen',
-      'fastfood': 'Fastfood',
-      'sushi': 'Sushi',
-      'pesto': 'Pasta mit Pesto',
-      'abendbrot': 'Abendbrot',
-      'resteessen': 'Resteessen',
-    };
-    return [
-      for (final recipe in recipes)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: RecipeCard(
-            key: ValueKey(recipe['id']),
-            api: api,
-            recipe: recipe,
-            onTap: () => _recipe(recipe, calendar: true),
-          ),
-        ),
-      for (final placement in placements)
-        ListTile(
-          leading: const Icon(Icons.restaurant_outlined),
-          title: Text(
-            names[placement['placeholder']] ?? text(placement['placeholder']),
-          ),
-        ),
-    ];
-  }
-
-  Widget _week(Json week) {
-    final today = text(week['today']);
-    final days = objects(week['days']);
-    final activeWeek = week['loaded_monday'] as String?;
-    serverCartCount = week['cart_count'] as int?;
-    final queue = week['queue'] is Json
-        ? week['queue'] as Json
-        : <String, dynamic>{};
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _heading('Meine Woche'),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            IconButton.outlined(
-              tooltip: 'Vorherige Woche',
-              onPressed: busy ? null : () => _changeWeek(weekOffset - 1, today),
-              icon: const Icon(Icons.chevron_left),
-            ),
-            OutlinedButton(
-              onPressed: busy ? null : () => _changeWeek(0, today),
-              child: const Text('Diese Woche'),
-            ),
-            IconButton.outlined(
-              tooltip: 'Nächste Woche',
-              onPressed: busy ? null : () => _changeWeek(weekOffset + 1, today),
-              icon: const Icon(Icons.chevron_right),
-            ),
-            FilledButton.icon(
-              onPressed: busy || activeWeek == null
-                  ? null
-                  : () => _mutate(
-                      'POST',
-                      '/api/calendar/shopping',
-                      {'day': activeWeek},
-                      'Die Wochenrezepte wurden für den Einkaufswagen übernommen.',
-                    ),
-              icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('In den Einkaufswagen'),
-            ),
-          ],
-        ),
-        if (queue['error'] != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(text(queue['error'])),
-          ),
-        const SizedBox(height: 14),
-        for (final (index, day) in days.indexed)
-          _section(
-            '${weekdays[index % weekdays.length]}, ${text(day['date']).split('-').reversed.join('.')}${day['date'] == today ? ' · Heute' : ''}',
-            _entriesOrHint(
-              _weekEntries(week, text(day['date']), objects(day['recipes'])),
-              'Noch nichts geplant',
-            ),
-          ),
-        _section(
-          'Ablage für diese Woche',
-          _entriesOrHint(
-            _weekEntries(week, 'shelf', objects(week['shelf'])),
-            'Rezepte hier ablegen, wenn der Tag noch offen ist.',
-          ),
-        ),
-      ],
-    );
-  }
 
   List<Widget> _entriesOrHint(List<Widget> entries, String hint) =>
       entries.isEmpty ? [Text(hint)] : entries;
@@ -678,19 +528,11 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                         onPressed: busy ? null : _refresh,
                         child: const Text('Erneut laden'),
                       ),
-                      if (area == 3 && weekOffset != 0 && weekReference != null)
-                        OutlinedButton(
-                          onPressed: busy
-                              ? null
-                              : () => _changeWeek(0, weekReference!),
-                          child: const Text('Diese Woche'),
-                        ),
                     ],
                   ),
                 ],
               )
             : switch (area) {
-                3 => _week(snapshot.data as Json),
                 4 => _cart(snapshot.data as Json),
                 _ => _overview(snapshot.data),
               };
@@ -743,6 +585,17 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 openRecipe: _recipe,
                 searchFocus: recipeSearch,
                 refreshCount: viewRefresh,
+              ),
+              3 => WeekView(
+                api: api,
+                refreshCount: viewRefresh,
+                openRecipe: (recipe, calendar) =>
+                    _recipe(recipe, calendar: calendar),
+                cartCountChanged: (count) {
+                  if (mounted && area == 3 && serverCartCount != count) {
+                    setState(() => serverCartCount = count);
+                  }
+                },
               ),
               5 => PantryView(
                 api: api,

@@ -10,6 +10,23 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val preferences = getPreferences(MODE_PRIVATE)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/preferences")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "weekDay" -> result.success(preferences.getInt("weekDay", 0))
+                    "setWeekDay" -> {
+                        val day = call.arguments as? Int
+                        if (day == null || day !in 0..6) {
+                            result.error("invalid_day", "Dieser Wochentag ist ungültig.", null)
+                        } else {
+                            preferences.edit().putInt("weekDay", day).apply()
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/links")
             .setMethodCallHandler { call, result ->
                 if (call.method != "openCookidoo") {

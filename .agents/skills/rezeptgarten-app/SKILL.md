@@ -20,6 +20,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   „Mein Vorrat“ in Android lädt alphabetische Zutaten und Vorschläge aus dem
   gemeinsamen Katalog. Kategorien sind einklappbar und am Griff sortierbar.
   Beim Suchen bleiben Änderungen an Zutaten möglich, die Sortierung ist gesperrt.
+  Die Android-Wochenansicht rastet auf schmalen Displays tageweise ein und merkt
+  den sichtbaren Wochentag lokal. Gehaltene Tages- und Ablagekacheln verwenden
+  die Wischrichtungen der mobilen Web-App.
 
 - Die App-Version wird zentral als `APP_VERSION` in `app/version.py` gepflegt und
   nach SemVer bei relevanten App-Änderungen erhöht. App und Health-Endpunkt zeigen
