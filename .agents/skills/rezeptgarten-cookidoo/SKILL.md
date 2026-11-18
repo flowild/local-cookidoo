@@ -8,6 +8,9 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
 - Der native Android-Testclient nutzt die vorhandenen Kalender- und
   Einkaufswagen-APIs. Er teilt den serverseitigen Cookidoo-Client und dessen
   Kontostand mit der Web-App.
+  Der Android-Client löst den Cookidoo-Transfer ausdrücklich aus und führt
+  ungeklärte Einträge erst nach manueller Prüfung einer Bestätigung oder
+  erneuten Freigabe zu.
 
 - Die Telegram-Wochenansicht nutzt den bestehenden Kalenderclient und Lock im
   laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält

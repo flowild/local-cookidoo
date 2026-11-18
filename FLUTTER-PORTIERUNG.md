@@ -60,11 +60,15 @@ Die vorhandene Flutter- und Android-Toolchain aus Ubuntu 24.04 unter WSL ist das
 
 ## Erster Teststand
 
-Der erste native Android-Teststand verwendet die bestehende API für die
-Wochenansicht, die Übernahme in den Einkaufswagen und das Speichern von
-Einkaufs-Häkchen. Übersicht, Listen, Rezepte und Vorrat sind zunächst lesende
-Ansichten mit Teilumfang. Die Tabelle oben beschreibt die Anforderungen für die
-vollständige Portierung.
+Der native Android-Teststand verwendet die bestehende API für die
+Wochenansicht und die Übernahme in den Einkaufswagen. Der Android-Einkaufswagen
+zeigt Warenbereiche, gruppierte Zutaten, Symbole und Häkchen. Dort können
+Zusatzartikel hinzugefügt, Einträge entfernt, der Wagen geleert und die
+Übertragung an Cookidoo ausdrücklich ausgelöst werden. Ungeklärte Übertragungen
+können nach Prüfung in Cookidoo bestätigt oder wieder freigegeben werden.
+Rezepte lassen sich auch über ihre Detailansicht hinzufügen. Übersicht, Listen,
+Rezepte und Vorrat haben weiterhin Teilumfang. Die Tabelle oben beschreibt die
+Anforderungen für die vollständige Portierung.
 
 Testbuilds verwenden `de.rezeptgarten.rezeptgarten.test` und die separate
 Downloadseite `https://192.168.184.30/android/test/`. Das folgende Beispiel
@@ -91,8 +95,9 @@ Die Flutter-Referenz liegt im Nachbarprojekt unter
 `C:/Github/Telegram2Homeassistant/FLUTTER-PORTIERUNG.md`. Die lokale
 WSL-Toolchain wurde mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 3 von Rezeptgarten 0.7.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
+Build 4 von Rezeptgarten 0.8.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur,
 Paketdaten, ARM64-Architektur und SHA-256 des HTTPS-Downloads wurden geprüft. Die
-Flutter-Tests decken die Übernahme der Woche und das Speichern samt Neuladen eines
-Einkaufs-Häkchens mit isolierten Testdaten ab. Installation und Bedienung auf
+Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
+Speichern eines Einkaufs-Häkchens sowie Zusatzartikel, Übertragung und manuelle
+Klärung ab. Installation und Bedienung auf
 einem physischen Android-Gerät stehen noch zur Prüfung aus.

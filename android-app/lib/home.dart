@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'ingredient_icon.dart';
 import 'recipe_card.dart';
+
+typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
 class RezeptgartenHome extends StatefulWidget {
   const RezeptgartenHome({super.key, required this.api});
@@ -56,6 +59,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   int weekOffset = 0;
   String? weekReference;
   bool busy = false;
+  final cartItem = TextEditingController();
   late Future<dynamic> data = _load();
 
   String? _requestedDay() {
@@ -114,21 +118,26 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     });
   }
 
-  Future<void> _mutate(
+  Future<bool> _mutate(
     String method,
     String path, [
     Json? body,
     String? success,
   ]) async {
-    if (busy) return;
+    if (busy) return false;
     setState(() => busy = true);
     String? message = success;
+    var saved = false;
     try {
-      await api.write(method, path, body);
+      final result = await api.write(method, path, body);
+      saved = true;
+      if (result is Json && result['message'] is String) {
+        message = result['message'] as String;
+      }
     } on Exception catch (error) {
       message = error.toString();
     }
-    if (!mounted) return;
+    if (!mounted) return saved;
     final updated = _load();
     setState(() {
       data = updated;
@@ -138,12 +147,27 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     } on Exception {
       // The view displays the load error.
     }
-    if (!mounted) return;
+    if (!mounted) return saved;
     setState(() => busy = false);
     if (message != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     }
+    return saved;
+  }
+
+  Future<void> _addCartItem() async {
+    final name = cartItem.text.trim();
+    if (name.isEmpty || name.length > 100) return;
+    if (await _mutate('POST', '/api/cart/items', {'name': name}) && mounted) {
+      cartItem.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    cartItem.dispose();
+    super.dispose();
   }
 
   Future<void> _recipe(Json recipe, {bool calendar = false}) async {
@@ -174,6 +198,17 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   RecipeCard(api: api, recipe: item),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await _mutate('POST', '/api/cart/recipes', {
+                        'recipe_id': id,
+                        'calendar': calendar,
+                      }, 'Rezept im Einkaufswagen.');
+                    },
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    label: const Text('In den Einkaufswagen'),
+                  ),
                   ExpansionTile(
                     title: const Text('Zutaten'),
                     initiallyExpanded: true,
@@ -347,12 +382,83 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   List<Widget> _entriesOrHint(List<Widget> entries, String hint) =>
       entries.isEmpty ? [Text(hint)] : entries;
 
+  Future<bool> _confirm(String message, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(action),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
   Widget _cart(Json cart) {
     final items = objects(cart['items']);
     final recipes = items.where((item) => item['kind'] == 'recipe').toList();
     serverCartCount = recipes.length;
-    final transferring = cart['transferring'] == true;
-    final rows = <({Json entry, Json row, int? position, String category})>[];
+    final editable = !busy && cart['transferring'] != true;
+    const statusLabels = {
+      'processing': 'Wird übertragen',
+      'done': 'Übertragen',
+      'existing': 'Bereits in Cookidoo',
+      'uncertain': 'Übertragung ungeklärt',
+    };
+    String entryPath(Json item) =>
+        '/api/cart/${Uri.encodeComponent(text(item['id']))}';
+
+    Widget remove(Json item) => IconButton(
+      tooltip: '${text((item['data'] as Json)['name'])} entfernen',
+      onPressed: editable ? () => _mutate('DELETE', entryPath(item)) : null,
+      icon: const Icon(Icons.delete_outline),
+    );
+
+    List<Widget> status(Json item) => [
+      if (statusLabels[item['status']] case final String label)
+        Text(
+          label,
+          style: item['status'] == 'uncertain'
+              ? TextStyle(color: Theme.of(context).colorScheme.error)
+              : null,
+        ),
+      if (item['status'] == 'uncertain') ...[
+        const Text('Bitte prüfe den Eintrag in Cookidoo.'),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final (value, label) in [
+              ('done', 'Dort vorhanden'),
+              ('pending', 'Dort nicht vorhanden'),
+            ])
+              OutlinedButton(
+                onPressed: editable
+                    ? () async {
+                        if (await _confirm(
+                              'Hast du diesen Eintrag in Cookidoo geprüft?',
+                              label,
+                            ) &&
+                            mounted) {
+                          await _mutate('POST', '${entryPath(item)}/resolve', {
+                            'status': value,
+                          });
+                        }
+                      }
+                    : null,
+                child: Text(label),
+              ),
+          ],
+        ),
+      ],
+    ];
+    final rows = <_CartRow>[];
     for (final item in items) {
       final details = item['data'] as Json;
       if (item['kind'] == 'additional' && details['is_water'] != true) {
@@ -378,7 +484,16 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
       }
     }
     rows.sort((a, b) {
-      final group = a.category.compareTo(b.category);
+      int rank(String name) => switch (name) {
+        'Weitere Artikel' => 2,
+        'Sonstiges' => 1,
+        _ => 0,
+      };
+      final order = rank(a.category).compareTo(rank(b.category));
+      if (order != 0) return order;
+      final group = a.category.toLowerCase().compareTo(
+        b.category.toLowerCase(),
+      );
       return group == 0
           ? text(a.row['name'] ?? a.row['text'])
                 .compareTo(text(b.row['name'] ?? b.row['text']))
@@ -388,52 +503,79 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     List<Widget> shoppingRows(bool checked) {
       final rendered = <Widget>[];
       String? category;
+      final grouped = <(String, bool, String), List<_CartRow>>{};
       for (final item in rows.where(
         (item) => (item.row['owned'] == true) == checked,
       )) {
-        if (category != item.category) {
-          category = item.category;
+        final key = item.position != null
+            ? text(item.row['key'], text(item.row['name'] ?? item.row['text']))
+            : text(item.entry['id']);
+        (grouped[(item.category, item.position != null, key)] ??= []).add(item);
+      }
+      for (final group in grouped.values) {
+        final first = group.first;
+        if (category != first.category) {
+          category = first.category;
           rendered.add(
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                item.category,
+                first.category,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
           );
         }
-        final entry = item.entry;
-        final isRecipe = item.position != null;
-        final entryId = Uri.encodeComponent(text(entry['id']));
-        final suffix = isRecipe ? 'ingredients/${item.position}' : 'owned';
-        rendered.add(
-          Row(
-            children: [
-              Checkbox(
-                value: checked,
-                onChanged: busy || transferring || entry['status'] != 'pending'
-                    ? null
-                    : (value) => _mutate('PUT', '/api/cart/$entryId/$suffix', {
-                        'owned': value,
-                      }),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(text(item.row['text'] ?? item.row['name'])),
-                    if (isRecipe)
-                      Text(
-                        text((entry['data'] as Json)['name']),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                  ],
+        if (group.length > 1) {
+          rendered.add(
+            Text(
+              text(first.row['name'] ?? first.row['text']),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          );
+        }
+        for (final item in group) {
+          final entry = item.entry;
+          final isRecipe = item.position != null;
+          final suffix = isRecipe ? 'ingredients/${item.position}' : 'owned';
+          rendered.add(
+            Row(
+              children: [
+                Checkbox(
+                  value: checked,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: !editable || entry['status'] != 'pending'
+                      ? null
+                      : (value) => _mutate(
+                          'PUT',
+                          '${entryPath(entry)}/$suffix',
+                          {'owned': value},
+                        ),
                 ),
-              ),
-            ],
-          ),
-        );
+                IngredientIcon(
+                  text(item.row['name'] ?? item.row['text']),
+                  category: item.category,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(text(item.row['text'] ?? item.row['name'])),
+                      if (isRecipe)
+                        Text(
+                          text((entry['data'] as Json)['name']),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+                if (!isRecipe) remove(entry),
+              ],
+            ),
+          );
+          if (!isRecipe) rendered.addAll(status(entry));
+        }
       }
       return rendered;
     }
@@ -445,19 +587,79 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
           'Mein Einkaufswagen',
           'Ein Häkchen bedeutet: bereits vorhanden.',
         ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed:
+                  editable && items.any((item) => item['status'] == 'pending')
+                  ? () => _mutate(
+                      'POST',
+                      '/api/cart/transfer',
+                      null,
+                      'Einkaufswagen an Cookidoo übertragen.',
+                    )
+                  : null,
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: const Text('An Cookidoo übertragen'),
+            ),
+            OutlinedButton(
+              onPressed: editable && items.isNotEmpty
+                  ? () async {
+                      if (await _confirm(
+                            'Den gesamten lokalen Einkaufswagen leeren?',
+                            'Einkaufswagen leeren',
+                          ) &&
+                          mounted) {
+                        await _mutate(
+                          'DELETE',
+                          '/api/cart',
+                          null,
+                          'Einkaufswagen geleert.',
+                        );
+                      }
+                    }
+                  : null,
+              child: const Text('Einkaufswagen leeren'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         _section(
           'Rezepte',
           _entriesOrHint([
             for (final entry in recipes)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: RecipeCard(
-                  api: api,
-                  recipe: entry['data'] as Json,
-                  onTap: () => _recipe({
-                    ...entry['data'] as Json,
-                    'id': entry['recipe_id'],
-                  }, calendar: true),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        RecipeCard(
+                          api: api,
+                          recipe: entry['data'] as Json,
+                          onTap: () => _recipe({
+                            ...entry['data'] as Json,
+                            'id': entry['recipe_id'],
+                          }, calendar: true),
+                        ),
+                        Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: const CircleBorder(),
+                          child: remove(entry),
+                        ),
+                      ],
+                    ),
+                    if ((entry['data'] as Json)['ingredients_complete'] ==
+                        false)
+                      const Text(
+                        'Zutaten fehlen. Bitte nach der Synchronisierung erneut hinzufügen.',
+                      ),
+                    ...status(entry),
+                  ],
                 ),
               ),
           ], 'Noch keine Rezepte im Einkaufswagen.'),
@@ -468,6 +670,29 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
         ),
         if (rows.any((item) => item.row['owned'] == true))
           _section('Abgehakt', shoppingRows(true)),
+        _section('Artikel hinzufügen', [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: cartItem,
+                  enabled: editable,
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                    labelText: 'Artikel',
+                    counterText: '',
+                  ),
+                  onSubmitted: editable ? (_) => _addCartItem() : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: editable ? _addCartItem : null,
+                child: const Text('Hinzufügen'),
+              ),
+            ],
+          ),
+        ]),
       ],
     );
   }

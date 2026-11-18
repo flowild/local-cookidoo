@@ -34,6 +34,47 @@ void main() {
     expect(api.owned, isTrue);
     expect(tester.widget<Checkbox>(checkbox).value, isTrue);
   });
+
+  testWidgets('additional item supports explicit transfer and review', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _TestApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '  Küchenrolle  ');
+    await tester.tap(find.text('Hinzufügen').hitTestable());
+    await tester.pumpAndSettle();
+    expect(api.cartItem, 'Küchenrolle');
+    expect(api.extraStatus, 'pending');
+
+    await tester.tap(find.text('An Cookidoo übertragen').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Übertragung ungeklärt'), findsOneWidget);
+    expect(find.text('Cookidoo prüfen.'), findsOneWidget);
+    await tester.tap(find.text('Dort vorhanden').hitTestable());
+    await tester.pumpAndSettle();
+    expect(api.extraStatus, 'uncertain');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Dort vorhanden'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.extraStatus, 'done');
+    expect(find.text('Übertragen'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Küchenrolle entfernen').hitTestable());
+    await tester.pumpAndSettle();
+    expect(api.cartItem, isNull);
+  });
 }
 
 class _TestApi extends RezeptgartenApi {
@@ -41,6 +82,8 @@ class _TestApi extends RezeptgartenApi {
 
   String? addedDay;
   bool owned = false;
+  String? cartItem;
+  String extraStatus = 'pending';
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async => switch (path) {
@@ -58,6 +101,13 @@ class _TestApi extends RezeptgartenApi {
     },
     '/api/cart' => {
       'items': [
+        if (cartItem != null)
+          {
+            'id': 'cart-extra',
+            'kind': 'additional',
+            'status': extraStatus,
+            'data': {'name': cartItem, 'owned': false},
+          },
         if (addedDay != null)
           {
             'id': 'cart-entry',
@@ -83,6 +133,15 @@ class _TestApi extends RezeptgartenApi {
         addedDay = body?['day'] as String?;
       case ('PUT', '/api/cart/cart-entry/ingredients/0'):
         owned = body?['owned'] == true;
+      case ('POST', '/api/cart/items'):
+        cartItem = body?['name'] as String?;
+      case ('POST', '/api/cart/transfer'):
+        extraStatus = 'uncertain';
+        return {'status': 'partial', 'message': 'Cookidoo prüfen.'};
+      case ('POST', '/api/cart/cart-extra/resolve'):
+        extraStatus = body?['status'] as String;
+      case ('DELETE', '/api/cart/cart-extra'):
+        cartItem = null;
       default:
         throw StateError('Unexpected API write: $method $path');
     }
