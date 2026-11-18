@@ -13,12 +13,31 @@ void main() {
   testWidgets('hands an APK update to Android without opening a browser', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(412, 1500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     const channel = MethodChannel('de.rezeptgarten/update');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final pending = Completer<String>();
     var requests = 0;
-    messenger.setMockMethodCallHandler(channel, (call) {
+    var checks = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'checkUpdate') {
+        checks++;
+        if (checks == 3) {
+          throw PlatformException(
+            code: 'update_check',
+            message: 'Updateprüfung fehlgeschlagen.',
+          );
+        }
+        return {
+          'version': '0.16.0',
+          'build': 12,
+          'installedBuild': checks == 1 ? 11 : 12,
+        };
+      }
       expect(call.method, 'downloadAndInstall');
       requests++;
       return pending.future;
@@ -33,6 +52,21 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final check = find.text('Nach Updates suchen');
+    await tester.scrollUntilVisible(check, 240);
+    await tester.pumpAndSettle();
+    expect(checks, 1);
+    expect(
+      find.text('Update verfügbar · Version 0.16.0 (Build 12)'),
+      findsOneWidget,
+    );
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    expect(find.text('Deine App ist aktuell.'), findsOneWidget);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    expect(find.text('Updateprüfung fehlgeschlagen.'), findsOneWidget);
+    expect(find.text('Deine App ist aktuell.'), findsNothing);
     final button = find.text('APK herunterladen und installieren');
     await tester.scrollUntilVisible(button, 240);
     await tester.tap(button);

@@ -25,7 +25,13 @@ import javax.net.ssl.TrustManagerFactory
 class ApkFileProvider : FileProvider()
 
 internal class ApkUpdater(private val activity: Activity) {
+    private data class Release(val version: String, val build: Long, val size: Long, val hash: String, val file: String)
+
     private val permissionRequest = 2174
+    private val channel by lazy {
+        if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) "test" else "release"
+    }
+    private val base get() = if (channel == "test") "https://192.168.184.30/android/test/" else "https://192.168.184.30/android/"
     private var result: MethodChannel.Result? = null
     private var ready: File? = null
     private var awaitingPermission = false
@@ -34,11 +40,34 @@ internal class ApkUpdater(private val activity: Activity) {
     fun register(messenger: BinaryMessenger) {
         MethodChannel(messenger, "de.rezeptgarten/update").setMethodCallHandler { call, reply ->
             when {
+                call.method == "checkUpdate" -> checkUpdate(reply)
                 call.method != "downloadAndInstall" -> reply.notImplemented()
                 result != null -> reply.error("busy", "Ein APK-Download läuft bereits.", null)
                 else -> start(reply)
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun checkUpdate(reply: MethodChannel.Result) {
+        Thread {
+            try {
+                val release = latestRelease(trustedTransport())
+                val installed = activity.packageManager.getPackageInfo(activity.packageName, 0)
+                val status = mapOf(
+                    "version" to release.version,
+                    "build" to release.build,
+                    "installedBuild" to versionCode(installed),
+                )
+                activity.runOnUiThread { reply.success(status) }
+            } catch (error: UpdateException) {
+                activity.runOnUiThread { reply.error("update_check", error.message, null) }
+            } catch (_: Exception) {
+                activity.runOnUiThread {
+                    reply.error("update_check", "Updateprüfung fehlgeschlagen. Prüfe die Verbindung zum Heimnetz.", null)
+                }
+            }
+        }.start()
     }
 
     private fun start(reply: MethodChannel.Result) {
@@ -122,13 +151,8 @@ internal class ApkUpdater(private val activity: Activity) {
         else reply?.error("apk_update", error, null)
     }
 
-    @Suppress("DEPRECATION")
-    private fun download(): File {
-        val test = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val channel = if (test) "test" else "release"
-        val base = if (test) "https://192.168.184.30/android/test/" else "https://192.168.184.30/android/"
-        val transport = trustedTransport()
-        val manifest = JSONObject(read(base + "latest.json", transport) { connection ->
+    private fun latestRelease(transport: SSLSocketFactory): Release {
+        val manifest = JSONObject(read(base + "latest.json", transport, timeoutMillis = 3500) { connection ->
             connection.inputStream.use { input ->
                 val buffer = ByteArray(4097)
                 var size = 0
@@ -151,7 +175,13 @@ internal class ApkUpdater(private val activity: Activity) {
             !hash.matches(Regex("[a-f0-9]{64}")) || size !in 1L..(512L * 1024 * 1024) ||
             filename != "rezeptgarten-$channel-$version-$build-${hash.take(12)}.apk"
         ) throw UpdateException("Die Update-Informationen sind ungültig.")
+        return Release(version, build, size, hash, filename)
+    }
 
+    @Suppress("DEPRECATION")
+    private fun download(): File {
+        val transport = trustedTransport()
+        val (version, build, size, hash, filename) = latestRelease(transport)
         val manager = activity.packageManager
         val installed = manager.getPackageInfo(activity.packageName, 0)
         if (build < versionCode(installed)) {
@@ -218,14 +248,19 @@ internal class ApkUpdater(private val activity: Activity) {
         return SSLContext.getInstance("TLS").apply { init(null, managers.trustManagers, null) }.socketFactory
     }
 
-    private fun <T> read(url: String, transport: SSLSocketFactory, consume: (HttpsURLConnection) -> T): T {
+    private fun <T> read(
+        url: String,
+        transport: SSLSocketFactory,
+        timeoutMillis: Int? = null,
+        consume: (HttpsURLConnection) -> T,
+    ): T {
         val connection = URL(url).openConnection() as HttpsURLConnection
         try {
             connection.sslSocketFactory = transport
             connection.instanceFollowRedirects = false
             connection.useCaches = false
-            connection.connectTimeout = 8000
-            connection.readTimeout = 15000
+            connection.connectTimeout = timeoutMillis ?: 8000
+            connection.readTimeout = timeoutMillis ?: 15000
             when (connection.responseCode) {
                 200 -> return consume(connection)
                 404 -> throw UpdateException("Für diesen Downloadkanal ist derzeit keine APK verfügbar.")

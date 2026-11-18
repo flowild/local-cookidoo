@@ -50,6 +50,8 @@ geprüft und erst danach freigegeben. Danach aktualisiert der Publisher
 Downloadseite und `latest.json` je Kanal atomar. Das Build-Skript gleicht den
 erneut per HTTPS geladenen APK-Hash sowie das Manifest mit dem lokalen Build
 ab. APK-Downloads liegen getrennt von den produktiven Anwendungsdaten.
+Android liest für die Updateprüfung nur `latest.json` des eigenen Kanals.
+Maßgeblich ist der `versionCode`, auch bei gleicher sichtbarer Versionsnummer.
 
 App-Änderungen nach der Prüfung grundsätzlich auf die bestehende Instanz übertragen
 und die Bereitstellung prüfen, sofern der Nutzer nichts anderes vorgibt.

@@ -28,6 +28,9 @@ In den Android-Einstellungen lädt „APK herunterladen und installieren“ die
 aktuelle APK aus dem eigenen Kanal über HTTPS. Die App prüft Größe, SHA-256,
 Paket-ID und Versionsdaten und startet den Android-Installer. Android verwaltet
 die Quellenfreigabe und die Bestätigung der Installation.
+Beim Öffnen der Einstellungen und über „Nach Updates suchen“ vergleicht Android
+den installierten `versionCode` mit dem Manifest des eigenen Kanals. Ein
+fehlgeschlagener Abruf bleibt als Fehler sichtbar.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen

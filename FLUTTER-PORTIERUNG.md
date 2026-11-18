@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **0.15.0, Build 11** ist der zuletzt geprüfte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Rezeptgarten **0.16.0, Build 12** ist der zuletzt geprüfte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -64,6 +64,12 @@ Dateigröße, SHA-256, Paket-ID und Versionsdaten und übergibt die private
 Cachedatei an den Android-Installer. Bei der ersten Aktualisierung kann Android
 eine Freigabe für diese Installationsquelle verlangen. Nach der Freigabe und
 Rückkehr zur App öffnet sich der Installer, in dem der Nutzer das Update bestätigt.
+
+Ab Version 0.16.0 prüft Android beim Öffnen der Einstellungen und über „Nach
+Updates suchen“ das Manifest des eigenen Kanals. Die Anzeige unterscheidet
+einen verfügbaren neueren Build, einen aktuellen Stand und einen fehlgeschlagenen
+Abruf. Die Prüfung lädt nur das Manifest über HTTPS. Die APK wird erst über
+„APK herunterladen und installieren“ geladen.
 
 ## Umsetzung und Freigabe
 
@@ -134,8 +140,8 @@ gelten die in diesem Dokument beschriebenen Paket-IDs, der eigene LXC-Download
 und das bestehende Rezeptgarten-Bot-Protokoll. Die lokale WSL-Toolchain wurde
 mit Flutter 3.50.0 und Dart 3.14.0 erkannt.
 
-Build 11 von Rezeptgarten 0.15.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur
-stimmt mit Build 10 überein. Paketdaten, ARM64-Architektur, Update-Manifest und
+Build 12 von Rezeptgarten 0.16.0 wurde auf LXC 103 veröffentlicht. Die APK-Signatur
+stimmt mit Build 11 überein. Paketdaten, ARM64-Architektur, Update-Manifest und
 SHA-256 des HTTPS-Downloads wurden geprüft. Die
 Flutter-Tests decken mit isolierten Testdaten die Übernahme der Woche, das
 Speichern eines Einkaufs-Häkchens, Zusatzartikel, Übertragung und manuelle
@@ -144,9 +150,9 @@ Verwaltung lokaler Listen und des Vorrats ab. Der Wochentest prüft Wischen,
 Rückgängig, Platzhalter und die Sperre beim fehlgeschlagenen Wochenwechsel.
 Der Einstellungstest prüft die Übergabe der Konto- und Synchronisierungsdaten,
 der lokalen Darstellung und der JSON-Bytes an ihre jeweiligen Schnittstellen.
-Ein Widgettest prüft, dass der Download-Button den nativen Kanal anspricht
-und den laufenden Abruf anzeigt. Die Abnahme des Installers auf dem Gerät
-steht noch aus.
+Ein Widgettest prüft Update-Hinweis, aktuellen Stand, fehlgeschlagene Prüfung
+und die Übergabe des Downloads an Android. Die Abnahme auf dem Gerät steht
+noch aus.
 Der Telegram-Test verwendet simulierte Bot-Antworten. Er prüft die getrennte
 Android-Kopplung und verwirft fremde, alte und falsch zugeordnete Nachrichten.
 

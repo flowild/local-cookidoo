@@ -33,6 +33,8 @@ class _SettingsViewState extends State<SettingsView> {
   String? _error;
   String? _version;
   String? _updateMessage;
+  String? _updateStatus;
+  bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
   bool _loading = false;
   bool _busy = false;
@@ -47,6 +49,7 @@ class _SettingsViewState extends State<SettingsView> {
     super.initState();
     unawaited(_load(showLoading: true));
     unawaited(_loadVersion());
+    unawaited(_checkUpdate());
     unawaited(_loadTelegram());
     _poll = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!_busy && !_loading && ModalRoute.of(context)?.isCurrent == true) {
@@ -70,6 +73,39 @@ class _SettingsViewState extends State<SettingsView> {
       // The settings screen is still available.
     } on MissingPluginException {
       // App metadata is only available in the Android activity.
+    }
+  }
+
+  Future<void> _checkUpdate() async {
+    if (_checkingUpdate || _downloadingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    var status = 'Der Updatestatus konnte nicht geprüft werden.';
+    try {
+      final metadata = await _update.invokeMapMethod<String, Object?>(
+        'checkUpdate',
+      );
+      if (metadata case {
+        'version': final String version,
+        'build': final int build,
+        'installedBuild': final int installedBuild,
+      }) {
+        status = switch (build.compareTo(installedBuild)) {
+          > 0 => 'Update verfügbar · Version $version (Build $build)',
+          0 => 'Deine App ist aktuell.',
+          _ => 'Deine App ist neuer als der Build auf dem Server.',
+        };
+      }
+    } on PlatformException catch (error) {
+      status = error.message ?? status;
+    } on MissingPluginException {
+      status = 'Die Updateprüfung ist nur in der Android-App verfügbar.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updateStatus = status;
+          _checkingUpdate = false;
+        });
+      }
     }
   }
 
@@ -645,6 +681,21 @@ class _SettingsViewState extends State<SettingsView> {
           _telegramOptions(),
           _card('Rezeptgarten für Android', [
             if (_version != null) Text('Installierte Version $_version'),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _checkingUpdate
+                    ? 'Suche nach Updates …'
+                    : _updateStatus ?? 'Updatestatus unbekannt.',
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _checkingUpdate || _downloadingUpdate
+                  ? null
+                  : _checkUpdate,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Nach Updates suchen'),
+            ),
             OutlinedButton.icon(
               onPressed: _downloadingUpdate ? null : _installUpdate,
               icon: const Icon(Icons.download),
