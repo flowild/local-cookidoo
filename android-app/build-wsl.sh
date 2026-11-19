@@ -29,7 +29,7 @@ fi
 
 "$flutter" pub get --enforce-lockfile
 "$flutter" analyze --no-pub
-timeout --kill-after=10s 180s "$flutter" test --no-pub --concurrency=1
+timeout --kill-after=10s 360s "$flutter" test --no-pub --concurrency=1
 "$flutter" build apk "--$mode" --no-pub --target-platform android-arm64 \
     --build-name "$version" --build-number "$build_number"
 

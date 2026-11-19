@@ -19,18 +19,23 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Google-API-Schlüsselverwaltung. Die browserseitigen Integrationen gehören
   zur Web-App. Änderungen an den gemeinsamen APIs mit dem Betriebs- und
   gegebenenfalls dem Cookidoo-Skill abgleichen.
-- Eine spätere Telegram-Benutzeranmeldung erfordert einen definierten Ablauf
-  und eine eigene Telegram-API-ID für die Anwendung gemäß den
-  [Telegram-API-Bedingungen](https://core.telegram.org/api/terms).
-  API-Hash und Sitzungen bleiben aus Git und Logs ausgeschlossen. Werte,
-  die beim Build eingebettet werden, sind aus der APK auslesbar.
+- Android erkennt `ThomasWlan` mit Standortberechtigung und prüft den Server
+  über die gebündelte CA. Außerhalb des Heimnetzes sowie bei nicht erreichbarem
+  Server stehen Woche und Einkaufswagen nach Telegram-Benutzeranmeldung und
+  bestätigter Kopplung lesend bereit. Der Einkaufswagen speichert Häkchen
+  geräte- und kopplungsbezogen. TDLib verwendet die eingegebene eigene Telegram-
+  API-ID und den API-Hash. Der Android-Keystore schützt Zugangsdaten und
+  Geräteschlüssel, die TDLib-Sitzung liegt im Backup-ausgeschlossenen Bereich.
+  Keine Zugangsdaten, Sitzungen oder Nachrichten in Git und Logs aufnehmen.
+  Bei einer späteren Umstellung des Android-Ziel-SDK auf 37 oder höher die
+  Laufzeitberechtigung `ACCESS_LOCAL_NETWORK` ergänzen und prüfen.
 - Build und Veröffentlichung aus der Projektwurzel mit
   `scripts/Android-APK-veroeffentlichen.ps1`. Der WSL-Build prüft Flutter,
   führt die Widgettests aus und baut ARM64. Verwende eine steigende
   Buildnummer je Kanal und eine stabile Signatur. Test-App und Release
   haben unterschiedliche Paket-IDs und Downloadpfade. Mit `-Upload` prüft
   das Skript den HTTPS-Download und sein `latest.json` auf LXC 103.
-- Der Updatestatus in den Einstellungen vergleicht den installierten
+- Die manuelle Updateprüfung in den Einstellungen vergleicht den installierten
   `versionCode` mit `latest.json` des eigenen Kanals. Der separate Download
   prüft die APK vor der Übergabe an den Android-Installer. Prüfe bei
   Änderungen den tatsächlich veröffentlichten Kanal und auf einem Gerät

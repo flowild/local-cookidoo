@@ -5,6 +5,9 @@ import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'telegram_service.dart';
+import 'telegram_setup.dart';
+import 'connection.dart';
 
 const _regions = {'de': 'Deutschland', 'at': 'Österreich', 'ch': 'Schweiz'};
 const _intervals = {
@@ -15,9 +18,17 @@ const _intervals = {
 };
 
 class SettingsView extends StatefulWidget {
-  const SettingsView({super.key, required this.api, required this.appearance});
+  const SettingsView({
+    super.key,
+    required this.api,
+    required this.appearance,
+    this.telegram,
+    this.connection,
+  });
   final RezeptgartenApi api;
   final AppearanceController appearance;
+  final TelegramService? telegram;
+  final ConnectionController? connection;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -39,15 +50,21 @@ class _SettingsViewState extends State<SettingsView> {
   bool _busy = false;
   int _request = 0;
   Timer? _poll;
+  bool get _local =>
+      widget.connection == null ||
+      widget.connection!.mode == ConnectionMode.local;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load(showLoading: true));
+    widget.connection?.addListener(_connectionChanged);
+    if (_local) unawaited(_load(showLoading: true));
     unawaited(_loadVersion());
-    unawaited(_checkUpdate());
     _poll = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!_busy && !_loading && ModalRoute.of(context)?.isCurrent == true) {
+      if (_local &&
+          !_busy &&
+          !_loading &&
+          ModalRoute.of(context)?.isCurrent == true) {
         unawaited(_load());
       }
     });
@@ -55,8 +72,20 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   void dispose() {
+    widget.connection?.removeListener(_connectionChanged);
     _poll?.cancel();
     super.dispose();
+  }
+
+  void _connectionChanged() {
+    if (!mounted) return;
+    ++_request;
+    setState(() {
+      _status = null;
+      _error = null;
+      _loading = false;
+    });
+    if (_local) unawaited(_load(showLoading: true));
   }
 
   Future<void> _loadVersion() async {
@@ -130,6 +159,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _load({bool showLoading = false}) async {
+    if (!_local) return;
     final request = ++_request;
     if (showLoading) setState(() => _loading = true);
     try {
@@ -194,6 +224,7 @@ class _SettingsViewState extends State<SettingsView> {
     Json? body,
     String? notice,
   ]) => _perform(() async {
+    if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
     await widget.api.write(method, path, body);
     if (notice != null) _message(notice);
   }, refresh: true);
@@ -248,6 +279,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _sync() => _perform(() async {
+    if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
     final response = await widget.api.write('POST', '/api/sync') as Json;
     _message(
       response['started'] == true
@@ -257,6 +289,7 @@ class _SettingsViewState extends State<SettingsView> {
   }, refresh: true);
 
   Future<void> _export() => _perform(() async {
+    if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
     final bytes = await widget.api.exportCollection();
     if (!mounted) return;
     final saved = await _documents.invokeMethod<bool>('saveCollection', bytes);
@@ -438,6 +471,38 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           ],
           if (_status case final Json status) ..._serverOptions(status),
+          if (widget.connection case final ConnectionController connection)
+            _card('Heimnetz', [
+              const Text(
+                'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
+              ),
+              TextButton(
+                onPressed: connection.requestPermission,
+                child: const Text('WLAN-Erkennung einrichten'),
+              ),
+            ]),
+          if (widget.telegram case final TelegramService telegram)
+            _card('Telegram', [
+              ListenableBuilder(
+                listenable: telegram,
+                builder: (context, _) => Text(
+                  telegram.paired
+                      ? 'Mit Rezeptgarten verbunden'
+                      : 'Noch nicht verbunden',
+                ),
+              ),
+              TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => TelegramSetup(
+                    telegram: telegram,
+                    api: widget.api,
+                    connection: widget.connection,
+                  ),
+                ),
+                child: const Text('Telegram einrichten'),
+              ),
+            ]),
           _card('Rezeptgarten für Android', [
             if (_version != null) Text('Installierte Version $_version'),
             Semantics(
@@ -449,14 +514,14 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ),
             TextButton.icon(
-              onPressed: _checkingUpdate || _downloadingUpdate
+              onPressed: _checkingUpdate || _downloadingUpdate || !_local
                   ? null
                   : _checkUpdate,
               icon: const Icon(Icons.refresh),
               label: const Text('Nach Updates suchen'),
             ),
             OutlinedButton.icon(
-              onPressed: _downloadingUpdate ? null : _installUpdate,
+              onPressed: _downloadingUpdate || !_local ? null : _installUpdate,
               icon: const Icon(Icons.download),
               label: const Text('APK herunterladen und installieren'),
             ),
@@ -465,6 +530,13 @@ class _SettingsViewState extends State<SettingsView> {
               const Text('APK wird heruntergeladen und geprüft …'),
             ],
             if (_updateMessage != null) Text(_updateMessage!),
+            TextButton(
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: 'Rezeptgarten',
+              ),
+              child: const Text('Open-Source-Lizenzen'),
+            ),
           ]),
         ],
       ),

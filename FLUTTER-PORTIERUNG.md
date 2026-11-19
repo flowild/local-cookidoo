@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **0.17.0, Build 13** ist der zuletzt geprüfte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Rezeptgarten **0.18.0, Build 14** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -34,16 +34,96 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 
 ## Externe Integrationen
 
-Die Android-App greift über die Rezeptgarten-API im Heimnetz auf Woche,
-Einkaufswagen und Sammlung zu. Bot-zu-Bot-Kommunikation und die
-Google-API-Schlüsselverwaltung für Gemini sind aus der APK entfernt. Die
-bisherigen Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
+Die Android-App verwendet die Rezeptgarten-API im Heimnetz und die Telegram-
+Benutzeranmeldung für die lesenden Wochen- und Einkaufswagenansichten unterwegs.
+Die Google-API-Schlüsselverwaltung für Gemini gehört zur Web-App. Die
+Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
 
-Ein späterer Telegram-Zugriff über ein Benutzerkonto wäre ein eigener
-Funktionsumfang. TDLib verwendet dafür eine API-ID und einen API-Hash sowie
-eine separate Benutzersitzung. Telegram verlangt eine eigene API-ID für die
-Anwendung. Details stehen in den [Telegram-API-Bedingungen](https://core.telegram.org/api/terms)
-und der [TDLib-Dokumentation](https://core.telegram.org/tdlib/getting-started).
+### ThomasWlan und Telegram-Zugriff
+
+1. **Verbindung automatisch wählen.** Beim Start, bei Rückkehr in die App und
+   bei Netzwechseln prüft Android die SSID des verbundenen WLANs. Bei exakt
+   `ThomasWlan` prüft die App den vorhandenen HTTPS-Endpunkt mit der gebündelten
+   Rezeptgarten-CA innerhalb von 2,5 Sekunden. Bei erfolgreicher Prüfung stehen
+   die vollständigen lokalen Funktionen zur Verfügung. Bei einem anderen WLAN,
+   Mobilfunk oder unbekannter SSID verwendet die App mit Internet und aktiver
+   Kopplung Telegram. Bei einem Timeout oder Verbindungsfehler in `ThomasWlan`
+   gilt derselbe Telegram-Rückfall für Lesezugriffe. Zertifikatsfehler werden
+   sichtbar gemeldet. Fehlen die Voraussetzungen für beide Wege, zeigt die App
+   „Offline“ mit dem konkreten Grund. Die Android-Berechtigung für die
+   SSID-Erkennung wird im Vordergrund erklärt und angefragt; bei Ablehnung lässt
+   sie sich über die Einstellungen nachholen. Die lokale Netzwerkberechtigung
+   richtet sich nach Android- und Ziel-SDK-Version. Laufende Schreibvorgänge
+   behalten ihre lokale Fehler- und Konfliktbehandlung. Antworten eines zuvor
+   gewählten Transportwegs dürfen nach einem Wechsel die neue Ansicht nicht
+   überschreiben.
+
+2. **Telegram beim Start einrichten.** Fehlt die Telegram-App-ID (`api_id`) oder
+   der API-Hash (`api_hash`), erscheint beim Start „Telegram einrichten“ mit
+   Eingabefeldern und „Später“. „Später“ lässt die Heimnetzfunktionen direkt zu;
+   beim nächsten Start fragt die App erneut. Die Werte stammen aus den
+   [Telegram API development tools](https://my.telegram.org/). Nach dem Speichern
+   führt TDLib durch die Telegram-Anmeldung mit Telefonnummer, Bestätigungscode
+   und gegebenenfalls Zwei-Schritt-Passwort. Eine gültige Sitzung wird beim
+   nächsten Start wiederverwendet. Die App erklärt vor der Anmeldung, wann sie
+   automatisch Anfragen an den Rezeptgarten-Bot sendet. Einstellungen bieten
+   Einrichten, Ändern, Verbindung testen und Trennen. API-Hash, Telegram-Sitzung
+   und Geräteschlüssel werden lokal verschlüsselt mit Schlüsselschutz durch den
+   Android Keystore gespeichert und von Backups ausgeschlossen. Zugangsdaten
+   bleiben außerhalb von APK, Quellcode und Logs. Der Server-Bot-Token bleibt im
+   Server-Vault. Siehe [TDLib](https://core.telegram.org/tdlib/getting-started),
+   [Telegram-API-Bedingungen](https://core.telegram.org/api/terms) und
+   [Android Keystore](https://developer.android.com/privacy-and-security/keystore).
+
+3. **Gerät im Heimnetz koppeln.** Android koppelt die angemeldete Telegram-
+   Benutzer-ID und einen zufälligen Geräteschlüssel über den bestehenden
+   HTTPS-Weg mit dem aktuell gewählten Rezeptgarten-Konto. Eine kurzlebige
+   Einmalkennung im privaten Dialog mit dem konfigurierten Server-Bot bestätigt
+   den Telegram-Absender. Erst nach bestätigter Kopplung darf die Bridge frische,
+   authentifizierte Android-Anfragen dieser Benutzer-ID annehmen. Eine eigene
+   Android-Kopplung und ein eigener Nachrichtentyp erhalten die bestehenden
+   Web-Bot-Kopplungen. Antworten verwenden die vorhandenen Wochen- und
+   Einkaufswagen-Momentaufnahmen, AES-256-GCM und eindeutige Anfragekennungen.
+   Die App prüft Bot-ID, Zuordnung, Vollständigkeit und Authentizität vor der
+   Anzeige. Bei Kontowechsel ist eine erneute Kopplung erforderlich. Ein Gerät
+   kann im Heimnetz serverseitig entkoppelt werden.
+
+4. **Telegram-Funktionsumfang der ersten Version.** „Meine Woche“ mit
+   Wochenwechsel, Tagesrezepten, Platzhaltern und Ablage sowie „Mein
+   Einkaufswagen“ stehen als verschlüsselte Momentaufnahmen zur Verfügung.
+   Einkaufs-Häkchen lassen sich auf dem Gerät ändern und zurücksetzen. Die
+   Änderungen gelten nur für die jeweilige Kopplung auf dem Gerät. Weitere
+   Serverfunktionen und Schreibaktionen sind verfügbar, sobald die lokale
+   Verbindung zurückkehrt. Die Kopfzeile zeigt „Heimnetz“, „Telegram“ oder
+   „Offline“. Bei Rückkehr ins Heimnetz lädt die aktuelle Ansicht den
+   Serverstand neu.
+
+5. **Alte Android-Bot-Absender bereinigen.** Vor der Umstellung die Nutzung des
+   bisherigen Android-Bot-Kopplungsplatzes und seiner Konfiguration prüfen.
+   Den alten Android-Pfad in `app/main.py`, `app/telegram_pairs.py`, der Bridge
+   und den zugehörigen Tests nach Einführung der neuen Benutzerkopplung
+   entfernen oder gezielt ersetzen. Vorhandene Android-Bot-Kopplungsdaten beim
+   Wechsel auf die neue Kopplung kontrolliert entfernen und eine erneute
+   Einrichtung anzeigen. Gemeinsame Bot-Funktionen für die Web-App und deren
+   gespeicherte Kopplung bleiben erhalten. Tests prüfen alte Konfigurationen,
+   die Umstellung und den parallelen Betrieb der Web-App. Veraltete Aussagen
+   in `AGENTS.md` und den betroffenen Projektskills aktualisieren.
+
+6. **Updateprüfung.** Beim Öffnen der Android-Einstellungen wird keine
+   Updateprüfung ausgelöst. Die
+   installierte Version, „Nach Updates suchen“ und der ausdrücklich gestartete
+   APK-Download mit Installation bleiben verfügbar. Den Einstellungstest so
+   prüfen, dass das Öffnen keinen Manifestabruf auslöst und die manuelle
+   Prüfung weiterhin funktioniert.
+
+7. **Prüfen und veröffentlichen.** Mit isolierten Daten zunächst Anmeldung,
+   Kopplung und den bestehenden Web-Zugriff mit isolierten Daten prüfen.
+   Automatisierte Tests decken Netzwechsel, nicht erreichbaren Heimnetzserver,
+   Kontowechsel, unvollständige und veränderte Antworten ab. Eine Geräteabnahme
+   mit ADB wurde vom Nutzer abgelehnt. Dann
+   die kompatible Bridge auf dem Proxmox-Host und die signierte APK im Testkanal
+   bereitstellen. Vor der regulären Freigabe Web-Kopplung, Testdownload und
+   Upgrade einer vorhandenen Android-Installation abnehmen.
 
 ## APK-Veröffentlichung auf LXC 103
 
@@ -64,8 +144,9 @@ Cachedatei an den Android-Installer. Bei der ersten Aktualisierung kann Android
 eine Freigabe für diese Installationsquelle verlangen. Nach der Freigabe und
 Rückkehr zur App öffnet sich der Installer, in dem der Nutzer das Update bestätigt.
 
-Ab Version 0.16.0 prüft Android beim Öffnen der Einstellungen und über „Nach
-Updates suchen“ das Manifest des eigenen Kanals. Die Anzeige unterscheidet
+Von Version 0.16.0 bis 0.17.0 prüfte Android beim Öffnen der Einstellungen und
+über „Nach Updates suchen“ das Manifest des eigenen Kanals. Ab 0.18.0 wird die
+Prüfung über „Nach Updates suchen“ gestartet. Die Anzeige unterscheidet
 einen verfügbaren neueren Build, einen aktuellen Stand und einen fehlgeschlagenen
 Abruf. Die Prüfung lädt nur das Manifest über HTTPS. Die APK wird erst über
 „APK herunterladen und installieren“ geladen.
@@ -153,6 +234,14 @@ Ein Widgettest prüft Update-Hinweis, aktuellen Stand, fehlgeschlagene Prüfung
 und die Übergabe des Downloads an Android. Der Einstellungstest prüft auch,
 dass die Android-App selbst bei gesetzten Serverwerten keine Bot- und
 Google-API-Einstellungen zeigt. Die Abnahme auf dem Gerät steht noch aus.
+
+Build 14 von Rezeptgarten 0.18.0 enthält die Android-Telegram-Benutzeranmeldung,
+die Heimnetzerkennung und die lesenden Wochen- und Einkaufswagenansichten. Die
+Signatur entspricht dem bisherigen Testkanal. Analyse, 17 Flutter-Tests,
+132 Backendtests auf dem Server, Paketdaten, ARM64-Architektur, Update-Manifest
+und SHA-256 des HTTPS-Downloads wurden geprüft. Server und Telegram-Bridge sind
+bereitgestellt. Eine Anmeldung und ein Netzwechsel auf einem Android-Gerät wurden
+auf Nutzerwunsch nicht durchgeführt.
 
 ## Offene Arbeiten vor der regulären Freigabe
 

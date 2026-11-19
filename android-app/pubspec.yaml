@@ -9,6 +9,9 @@ dependencies:
   flutter:
     sdk: flutter
   material_ui: ^1.1.0
+  flutter_secure_storage: ^11.2.0
+  handy_tdlib_next: ^2.3.16
+  cryptography: ^2.7.0
 
 dev_dependencies:
   flutter_test:

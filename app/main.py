@@ -1,11 +1,14 @@
 import asyncio
 import copy
+import hashlib
 import json
 import json
 import logging
 import os
 import re
 import base64
+import secrets
+import time
 import httpx
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -128,6 +131,7 @@ def create_app(directory=None, secure_cookies=None):
     google_key_vault = Vault(database.directory, 'google-api-key.enc')
     telegram_vault = Vault(database.directory, 'telegram-server-bot.enc')
     telegram_lock = Lock()
+    telegram_pending = {}
     service = SyncService(database, vault)
     @asynccontextmanager
     async def lifespan(app):
@@ -189,12 +193,14 @@ def create_app(directory=None, secure_cookies=None):
         if not isinstance(token, str) or not re.fullmatch(r'[0-9]{1,20}:[A-Za-z0-9_-]{20,200}', token.strip()):
             raise HTTPException(400, 'Bitte gib ein gültiges Bot-Token ein.')
         with telegram_lock:
+            telegram_pending.clear()
             telegram_vault.write({'token': token.strip()})
         return {'ok': True}
 
     @app.delete('/api/telegram-server-bot')
     def delete_telegram_server_bot():
         with telegram_lock:
+            telegram_pending.clear()
             telegram_vault.clear()
         return {'ok': True}
 
@@ -209,7 +215,7 @@ def create_app(directory=None, secure_cookies=None):
         client = payload.get('client', 'browser') if isinstance(payload, dict) else None
         if type(client_id) is not int or not 0 < client_id < 2**53:
             raise HTTPException(400, 'Ungültige Bot-Kennung.')
-        if client not in ('browser', 'android') or (client == 'android' and cart_key is None):
+        if client != 'browser':
             raise HTTPException(400, 'Ungültige Client-Kopplung.')
         if cart_key is not None:
             try:
@@ -240,18 +246,98 @@ def create_app(directory=None, secure_cookies=None):
             current = telegram_vault.read() or {}
             if current.get('token') != saved['token'] or owner != service.cart_owner():
                 raise HTTPException(409, 'Server-Bot oder Cookidoo-Konto wurde inzwischen geändert.')
-            android = current.get('android_pair') or {}
-            other = current if client == 'android' else android
-            if other.get('client_id') == client_id:
-                raise HTTPException(409, 'Verwende für Browser und Android unterschiedliche Client-Bots.')
-            if client == 'android':
-                current['android_pair'] = pair
-            else:
-                current = {'token': current['token'], **pair}
-                if android:
-                    current['android_pair'] = android
+            android = current.get('android_user_pair') or {}
+            legacy_android = current.get('android_pair')
+            if android.get('client_id') == client_id or (isinstance(legacy_android, dict) and legacy_android.get('client_id') == client_id):
+                raise HTTPException(409, 'Diese Telegram-Kennung ist bereits vergeben.')
+            current = {'token': current['token'], **pair}
+            if android:
+                current['android_user_pair'] = android
+            if legacy_android:
+                current['android_pair'] = legacy_android
             telegram_vault.write(current)
         return {'username': bot['username'], 'id': bot['id']}
+
+    @app.post('/api/telegram-android-pair')
+    async def begin_telegram_android_pair(request: Request):
+        try:
+            payload = await request.json()
+            client_id = payload['client_id']
+            cart_key = payload['cart_key']
+            if type(client_id) is not int or not 0 < client_id < 2**53:
+                raise ValueError()
+            if not isinstance(cart_key, str) or len(base64.b64decode(cart_key, validate=True)) != 32:
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(400, 'Ungültige Telegram-Kopplung.') from None
+        with telegram_lock:
+            saved = telegram_vault.read() or {}
+        token = saved.get('token')
+        owner = service.cart_owner()
+        if not token:
+            raise HTTPException(409, 'Bitte zuerst das Server-Bot-Token speichern.')
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as telegram:
+                response = await telegram.post('https://api.telegram.org/bot' + token + '/getMe')
+                result = response.json()
+            bot = result.get('result') if response.status_code == 200 and result.get('ok') else None
+            if not isinstance(bot, dict) or bot.get('is_bot') is not True or type(bot.get('id')) is not int or not re.fullmatch(r'[A-Za-z0-9_]{5,32}', bot.get('username') or ''):
+                raise ValueError()
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+            raise HTTPException(502, 'Server-Bot konnte bei Telegram nicht geprüft werden.') from None
+        with telegram_lock:
+            current = telegram_vault.read() or {}
+            if current.get('token') != token or service.cart_owner() != owner:
+                raise HTTPException(409, 'Server-Bot oder Cookidoo-Konto wurde inzwischen geändert.')
+            if current.get('client_id') == client_id or bot['id'] == client_id:
+                raise HTTPException(409, 'Diese Telegram-Kennung ist bereits vergeben.')
+            challenge = secrets.token_hex(32)
+            telegram_pending.clear()
+            telegram_pending.update({'challenge': challenge, 'expires': time.monotonic() + 120,
+                                     'token': token, 'client_id': client_id, 'cart_key': cart_key,
+                                     'cart_owner': owner})
+        return {'challenge': challenge, 'username': bot['username'], 'id': bot['id']}
+
+    @app.post('/api/telegram-android-confirm')
+    async def confirm_telegram_android_pair(request: Request):
+        if not request.client or request.client.host != '127.0.0.1':
+            raise HTTPException(403, 'Nur lokal verfügbar.')
+        try:
+            payload = await request.json()
+            client_id, challenge, token_hash = payload['client_id'], payload['challenge'], payload['token_hash']
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(400, 'Ungültige Telegram-Kopplung.') from None
+        with telegram_lock:
+            pending = telegram_pending
+            current = telegram_vault.read() or {}
+            if (type(client_id) is not int or not isinstance(challenge, str)
+                    or not re.fullmatch(r'[a-f0-9]{64}', challenge)
+                    or pending.get('client_id') != client_id
+                    or not secrets.compare_digest(pending.get('challenge', ''), challenge)
+                    or pending.get('expires', 0) < time.monotonic()
+                    or pending.get('token') != current.get('token')
+                    or not isinstance(token_hash, str)
+                    or not re.fullmatch(r'[a-f0-9]{64}', token_hash)
+                    or not secrets.compare_digest(hashlib.sha256(str(current.get('token', '')).encode()).hexdigest(), token_hash)
+                    or pending.get('cart_owner') != service.cart_owner()
+                    or current.get('client_id') == client_id):
+                raise HTTPException(409, 'Telegram-Kopplung abgelaufen oder ungültig.')
+            current['android_user_pair'] = {key: pending[key] for key in ('client_id', 'cart_key', 'cart_owner')}
+            current.pop('android_pair', None)
+            telegram_vault.write(current)
+            telegram_pending.clear()
+        return {'ok': True}
+
+    @app.delete('/api/telegram-android-pair')
+    def delete_telegram_android_pair():
+        with telegram_lock:
+            telegram_pending.clear()
+            current = telegram_vault.read() or {}
+            if current:
+                current.pop('android_user_pair', None)
+                current.pop('android_pair', None)
+                telegram_vault.write(current)
+        return {'ok': True}
 
     @app.post('/api/google-api-key')
     async def set_google_api_key(request: Request):

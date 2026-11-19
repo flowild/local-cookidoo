@@ -22,11 +22,14 @@ Lesetransaktion und verschlüsselt ihn vor der Weitergabe an den Host mit AES-25
 Keine Tokens, Schlüssel oder Nachrichten protokollieren.
 Wochenanfragen verwenden die nur über Loopback erreichbare verschlüsselte App-API;
 die App nutzt den bestehenden Cookidoo-Client und prüft das gekoppelte Konto.
-Die Bridge wählt die Kopplung nach Absender-ID und prüft vor der Antwort,
-ob die Kopplung noch gültig ist. Bridge-Änderungen auch auf dem Host unter
+Die Bridge wählt die Kopplung nach Absender-ID und Typ. Für Android bestätigt
+ein privater Dialog eine kurzlebige Kennung der zuvor im Heimnetz gestarteten
+Benutzerkopplung. Vor jeder Antwort prüft die Bridge die Kopplung erneut.
+Bridge-Änderungen auch auf dem Host unter
 `/opt/rezeptgarten-telegram/telegram_bridge.py` bereitstellen und den
-vorhandenen Dienst neu starten. Der Browser nutzt diesen Dienst. Der zweite
-Kopplungsplatz dient der Kompatibilität mit älteren Android-Testbuilds.
+vorhandenen Dienst neu starten. Der Browser nutzt denselben Dienst weiterhin
+über seine Bot-Kopplung. Ein alter Android-Bot-Kopplungsplatz bleibt bis zur
+neuen Benutzerkopplung lesbar und wird bei dieser entfernt.
 
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,

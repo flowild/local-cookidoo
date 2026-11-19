@@ -11,6 +11,9 @@ import 'recipe_detail.dart';
 import 'recipe_library.dart';
 import 'settings_view.dart';
 import 'week_view.dart';
+import 'telegram_service.dart';
+import 'connection.dart';
+import 'telegram_view.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
@@ -19,10 +22,14 @@ class RezeptgartenHome extends StatefulWidget {
     super.key,
     required this.api,
     required this.appearance,
+    this.telegram,
+    this.connection,
   });
 
   final RezeptgartenApi api;
   final AppearanceController appearance;
+  final TelegramService? telegram;
+  final ConnectionController? connection;
 
   @override
   State<RezeptgartenHome> createState() => _RezeptgartenHomeState();
@@ -60,11 +67,56 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   final cartItem = TextEditingController();
   late Future<dynamic> data = _load();
 
-  Future<dynamic> _load() async => switch (area) {
-    0 => _loadOverview(),
-    4 => api.get('/api/cart', timeout: shortRead),
-    _ => null,
-  };
+  bool get _local =>
+      widget.connection == null ||
+      widget.connection!.mode == ConnectionMode.local;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.connection?.addListener(_connectionChanged);
+  }
+
+  void _connectionChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (!_local && area != 3 && area != 4) area = 3;
+      serverCartCount = null;
+      viewRefresh++;
+      data = _load();
+    });
+  }
+
+  Future<void> _networkPermission() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Heimnetz erkennen'),
+        content: const Text(
+          'Android benötigt die Standortberechtigung, damit Rezeptgarten das WLAN ThomasWlan erkennen kann.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Später'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Weiter'),
+          ),
+        ],
+      ),
+    );
+    if (approved == true) await widget.connection?.requestPermission();
+  }
+
+  Future<dynamic> _load() async => !_local
+      ? null
+      : switch (area) {
+          0 => _loadOverview(),
+          4 => api.get('/api/cart', timeout: shortRead),
+          _ => null,
+        };
 
   Future<Json> _loadOverview() async {
     final responses = await Future.wait<dynamic>([
@@ -97,7 +149,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   Future<void> _settings() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsView(api: api, appearance: widget.appearance),
+        builder: (_) => SettingsView(
+          api: api,
+          appearance: widget.appearance,
+          telegram: widget.telegram,
+          connection: widget.connection,
+        ),
       ),
     );
     if (mounted && !busy) await _refresh();
@@ -146,6 +203,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   }
 
   void _open(int index) {
+    if (!_local && index != 3 && index != 4) return;
     if (busy || (area == index && index != 3)) return;
     setState(() {
       area = index;
@@ -218,6 +276,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   @override
   void dispose() {
+    widget.connection?.removeListener(_connectionChanged);
     syncPoll?.cancel();
     recipeSearch.dispose();
     cartItem.dispose();
@@ -680,7 +739,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 ],
               )
             : switch (area) {
-                4 => _cart(snapshot.data as Json),
+                4 when _local => _cart(snapshot.data as Json),
                 _ => _overview(snapshot.data),
               };
         return Scaffold(
@@ -697,7 +756,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (connected != null)
+                if (widget.connection != null)
+                  Text(switch (widget.connection!.mode) {
+                    ConnectionMode.local => 'Heimnetz',
+                    ConnectionMode.telegram => 'Telegram',
+                    ConnectionMode.checking => 'Verbindung wird geprüft',
+                    ConnectionMode.offline => 'Offline',
+                  }, style: Theme.of(context).textTheme.labelSmall)
+                else if (connected != null)
                   Text(
                     connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
                     maxLines: 1,
@@ -707,9 +773,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
               ],
             ),
             actions: [
+              if (widget.connection?.mode == ConnectionMode.telegram)
+                const Icon(
+                  Icons.send,
+                  color: Colors.blue,
+                  semanticLabel: 'Telegram-Verbindung',
+                ),
               IconButton(
                 tooltip: 'Rezepte suchen',
-                onPressed: busy
+                onPressed: busy || !_local
                     ? null
                     : () {
                         _open(2);
@@ -732,7 +804,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                 tooltip: syncRunning
                     ? 'Synchronisierung läuft'
                     : 'Synchronisieren',
-                onPressed: busy || syncPending || syncRunning
+                onPressed: busy || syncPending || syncRunning || !_local
                     ? null
                     : _beginSync,
                 icon: syncPending || syncRunning
@@ -751,44 +823,78 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
           ),
           body: SafeArea(
             top: false,
-            child: switch (area) {
-              1 => RecipeCollections(
-                api: api,
-                openRecipe: _recipe,
-                refreshCount: viewRefresh,
-              ),
-              2 => RecipeBrowser(
-                api: api,
-                openRecipe: _recipe,
-                searchFocus: recipeSearch,
-                refreshCount: viewRefresh,
-              ),
-              3 => WeekView(
-                api: api,
-                refreshCount: viewRefresh,
-                openRecipe: (recipe, calendar) =>
-                    _recipe(recipe, calendar: calendar),
-                statusChanged: _adoptStatus,
-                cartCountChanged: (count) {
-                  if (mounted && area == 3 && serverCartCount != count) {
-                    setState(() => serverCartCount = count);
-                  }
-                },
-              ),
-              5 => PantryView(
-                api: api,
-                collapsed: pantryCollapsed,
-                refreshCount: viewRefresh,
-              ),
-              _ => RefreshIndicator(
-                onRefresh: _refresh,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                  children: [if (busy) const LinearProgressIndicator(), body],
-                ),
-              ),
-            },
+            child: !_local
+                ? widget.connection?.mode == ConnectionMode.telegram &&
+                          widget.telegram != null
+                      ? TelegramView(
+                          key: ValueKey('telegram-$area'),
+                          telegram: widget.telegram!,
+                          cart: area == 4,
+                          notice: widget.connection?.error,
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.connection?.error ??
+                                    'Verbindung wird geprüft.',
+                              ),
+                              if (widget.connection?.hasPermission == false)
+                                TextButton(
+                                  onPressed: _networkPermission,
+                                  child: const Text(
+                                    'WLAN-Erkennung einrichten',
+                                  ),
+                                ),
+                              TextButton(
+                                onPressed: widget.connection?.refresh,
+                                child: const Text('Erneut prüfen'),
+                              ),
+                            ],
+                          ),
+                        )
+                : switch (area) {
+                    1 => RecipeCollections(
+                      api: api,
+                      openRecipe: _recipe,
+                      refreshCount: viewRefresh,
+                    ),
+                    2 => RecipeBrowser(
+                      api: api,
+                      openRecipe: _recipe,
+                      searchFocus: recipeSearch,
+                      refreshCount: viewRefresh,
+                    ),
+                    3 => WeekView(
+                      api: api,
+                      refreshCount: viewRefresh,
+                      openRecipe: (recipe, calendar) =>
+                          _recipe(recipe, calendar: calendar),
+                      statusChanged: _adoptStatus,
+                      cartCountChanged: (count) {
+                        if (mounted && area == 3 && serverCartCount != count) {
+                          setState(() => serverCartCount = count);
+                        }
+                      },
+                    ),
+                    5 => PantryView(
+                      api: api,
+                      collapsed: pantryCollapsed,
+                      refreshCount: viewRefresh,
+                    ),
+                    _ => RefreshIndicator(
+                      onRefresh: _refresh,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                        children: [
+                          if (busy) const LinearProgressIndicator(),
+                          body,
+                        ],
+                      ),
+                    ),
+                  },
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: area,
@@ -796,7 +902,11 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
             onDestinationSelected: _open,
             destinations: [
               for (final (index, label) in areas.indexed)
-                NavigationDestination(icon: Icon(icons[index]), label: label),
+                NavigationDestination(
+                  icon: Icon(icons[index]),
+                  label: label,
+                  enabled: _local || index == 3 || index == 4,
+                ),
             ],
           ),
         );

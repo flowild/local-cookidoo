@@ -14,6 +14,7 @@ STATE = Path('/var/lib/rezeptgarten-telegram/offset.json')
 CONFIG_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.security import Vault; from app.telegram_pairs import bridge_config; import json; v=Vault('/var/lib/cookidoo-manager', 'telegram-server-bot.enc').read() or {}; print(json.dumps(bridge_config(v)))"
 CART_READER = "import sys; sys.path.insert(0, '/opt/cookidoo-manager/source'); from app.telegram_cart import encrypted_snapshot; print(encrypted_snapshot('/var/lib/cookidoo-manager', sys.argv[1], sys.argv[2] == 'compressed', int(sys.argv[3])))"
 WEEK_READER = "import sys,json,urllib.parse,urllib.request; q=urllib.parse.urlencode({'nonce':sys.argv[1],'day':sys.argv[2],'compressed':sys.argv[3],'client_id':sys.argv[4]}); r=urllib.request.urlopen('http://127.0.0.1:8000/api/telegram-week?'+q,timeout=45); print(json.load(r)['data'])"
+PAIR_CONFIRM = "import sys,urllib.request; data=sys.stdin.buffer.read(); req=urllib.request.Request('http://127.0.0.1:8000/api/telegram-android-confirm',data=data,headers={'Content-Type':'application/json','Origin':'http://127.0.0.1:8000'}); urllib.request.urlopen(req,timeout=10).read()"
 
 
 def config():
@@ -21,7 +22,7 @@ def config():
                             capture_output=True, timeout=15, check=True)
     value = json.loads(result.stdout)
     if (not isinstance(value, dict) or not isinstance(value.get('token'), str)
-            or not isinstance(value.get('clients'), dict) or not value['clients']):
+            or not isinstance(value.get('clients'), dict)):
         return None
     return value
 
@@ -42,13 +43,13 @@ def call(token, method, payload):
     return result['result']
 
 
-def reply_for(update, client_id, now):
+def reply_for(update, client_id, now, is_bot=True):
     message = update.get('message') or {}
     sender = message.get('from') or {}
     chat = message.get('chat') or {}
     text = message.get('text') or ''
     match = re.fullmatch(r'rezeptgarten-(ping|cart|cartz|week|weekz) ([a-f0-9]{32})(?: (\d{4}-\d{2}-\d{2}))?', text)
-    if (not match or sender.get('id') != client_id or not sender.get('is_bot')
+    if (not match or sender.get('id') != client_id or sender.get('is_bot') is not is_bot
             or chat.get('type') != 'private' or chat.get('id') != client_id
             or not isinstance(message.get('date'), int) or abs(now - message['date']) > 120):
         return None
@@ -65,6 +66,25 @@ def reply_for(update, client_id, now):
     if command == 'ping':
         return 'rezeptgarten-pong ' + nonce
     return 'rezeptgarten-' + command + ' ' + nonce
+
+
+def pairing_request(update, now):
+    message = update.get('message') or {}
+    sender = message.get('from') or {}
+    chat = message.get('chat') or {}
+    match = re.fullmatch(r'rezeptgarten-pair ([a-f0-9]{64})', message.get('text') or '')
+    client_id = sender.get('id')
+    if (not match or type(client_id) is not int or sender.get('is_bot') is not False
+            or chat.get('type') != 'private' or chat.get('id') != client_id
+            or type(message.get('date')) is not int or abs(now - message['date']) > 120):
+        return None
+    return client_id, match.group(1)
+
+
+def confirm_pair(client_id, challenge, token_hash):
+    payload = json.dumps({'client_id': client_id, 'challenge': challenge, 'token_hash': token_hash}).encode()
+    subprocess.run(['pct', 'exec', '103', '--', '/opt/cookidoo-manager/.venv/bin/python', '-c', PAIR_CONFIRM],
+                   input=payload, capture_output=True, timeout=15, check=True)
 
 
 def cart_messages(nonce, client_id, compress=False):
@@ -113,7 +133,16 @@ def main():
                     continue
                 sender = (update.get('message') or {}).get('from') or {}
                 client_id = sender.get('id')
-                reply = (reply_for(update, client_id, int(time.time()))
+                pairing = pairing_request(update, int(time.time()))
+                if pairing:
+                    try:
+                        confirm_pair(*pairing, identity)
+                        updated = config()
+                        if updated and updated['token'] == token and updated['clients'].get(str(pairing[0]), {}).get('is_bot') is False:
+                            call(token, 'sendMessage', {'chat_id': pairing[0], 'text': 'rezeptgarten-paired ' + pairing[1]})
+                    except (OSError, ValueError, subprocess.SubprocessError, urllib.error.URLError):
+                        pass
+                reply = (reply_for(update, client_id, int(time.time()), value['clients'][str(client_id)]['is_bot'])
                          if type(client_id) is int and str(client_id) in value['clients'] else None)
                 if reply:
                     time.sleep(max(0, 1 - (time.monotonic() - last_reply)))

@@ -113,18 +113,54 @@ class AppTests(unittest.TestCase):
                 return self.client.post('/api/telegram-pair', json={'client_id': client_id, 'cart_key': key, **extra}, headers=ORIGIN)
 
             self.assertEqual(pair(111, browser_key).status_code, 200)
-            self.assertEqual(pair(111, android_key, client='android').status_code, 409)
-            self.assertEqual(pair(333, None, client='android').status_code, 400)
-            response = pair(333, android_key, client='android')
-            self.assertEqual(response.json(), {'id': 222, 'username': 'ServerBot'})
+            self.assertEqual(pair(333, android_key, client='android').status_code, 400)
+            response = self.client.post('/api/telegram-android-pair', json={'client_id': 333, 'cart_key': android_key}, headers=ORIGIN)
+            self.assertEqual(response.status_code, 200)
+            challenge = response.json()['challenge']
             self.assertNotIn(android_key, response.text)
+            self.assertNotIn('android_user_pair', vault.read())
+            confirmation = {'client_id': 333, 'challenge': challenge, 'token_hash': hashlib.sha256(token.encode()).hexdigest()}
+            self.assertEqual(self.client.post('/api/telegram-android-confirm', json=confirmation, headers=ORIGIN).status_code, 403)
+            with TestClient(self.app, base_url='https://testserver', client=('127.0.0.1', 1234)) as local:
+                self.assertEqual(local.post('/api/telegram-android-confirm', json={**confirmation, 'challenge': 'a' * 64}, headers=ORIGIN).status_code, 409)
+                self.assertEqual(local.post('/api/telegram-android-confirm', json=confirmation, headers=ORIGIN).status_code, 200)
+                self.assertEqual(local.post('/api/telegram-android-confirm', json=confirmation, headers=ORIGIN).status_code, 409)
             self.assertEqual(vault.read()['cart_key'], browser_key)
             self.assertEqual(pair(444, browser_key).status_code, 200)
         stored = vault.read()
         self.assertEqual(stored['client_id'], 444)
-        self.assertEqual(stored['android_pair'], {
+        self.assertEqual(stored['android_user_pair'], {
             'client_id': 333, 'cart_key': android_key, 'cart_owner': self.app.state.sync.cart_owner(),
         })
+        self.assertEqual(self.client.delete('/api/telegram-android-pair', headers=ORIGIN).status_code, 200)
+        self.assertEqual(vault.read()['client_id'], 444)
+        self.assertNotIn('android_user_pair', vault.read())
+
+    def test_android_pairing_rejects_changed_account_and_server_bot(self):
+        token = '123456789:' + 'a' * 35
+        key = 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI='
+        self.client.post('/api/telegram-server-bot', json={'token': token}, headers=ORIGIN)
+        result = httpx.Response(200, json={'ok': True, 'result': {'id': 222, 'is_bot': True, 'username': 'ServerBot'}})
+        with patch('app.main.httpx.AsyncClient') as factory:
+            factory.return_value.__aenter__.return_value.post = AsyncMock(return_value=result)
+            response = self.client.post('/api/telegram-android-pair', json={'client_id': 333, 'cart_key': key}, headers=ORIGIN)
+        confirmation = {'client_id': 333, 'challenge': response.json()['challenge'], 'token_hash': hashlib.sha256(token.encode()).hexdigest()}
+        with TestClient(self.app, base_url='https://testserver', client=('127.0.0.1', 1234)) as local:
+            self.assertEqual(local.post('/api/telegram-android-confirm', json={**confirmation, 'token_hash': 'a' * 64}, headers=ORIGIN).status_code, 409)
+            self.app.state.database.set('account', {'region': 'de', 'email': 'other@example.invalid'})
+            self.assertEqual(local.post('/api/telegram-android-confirm', json=confirmation, headers=ORIGIN).status_code, 409)
+        self.assertNotIn('android_user_pair', Vault(self.tmp.name, 'telegram-server-bot.enc').read())
+
+    def test_legacy_android_bot_cannot_be_reused_by_browser(self):
+        token = '123456789:' + 'a' * 35
+        vault = Vault(self.tmp.name, 'telegram-server-bot.enc')
+        vault.write({'token': token, 'android_pair': {'client_id': 333}})
+        result = httpx.Response(200, json={'ok': True, 'result': {'id': 222, 'is_bot': True, 'username': 'ServerBot'}})
+        with patch('app.main.httpx.AsyncClient') as factory:
+            factory.return_value.__aenter__.return_value.post = AsyncMock(return_value=result)
+            response = self.client.post('/api/telegram-pair', json={'client_id': 333}, headers=ORIGIN)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(vault.read()['android_pair']['client_id'], 333)
 
     def test_app_version_is_shared_by_health_and_cached_shell(self):
         from app.version import APP_VERSION

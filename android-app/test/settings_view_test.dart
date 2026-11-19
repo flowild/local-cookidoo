@@ -55,6 +55,10 @@ void main() {
     final check = find.text('Nach Updates suchen');
     await tester.scrollUntilVisible(check, 240);
     await tester.pumpAndSettle();
+    expect(checks, 0);
+    expect(find.text('Updatestatus unbekannt.'), findsOneWidget);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
     expect(checks, 1);
     expect(
       find.text('Update verfügbar · Version 0.16.0 (Build 12)'),
@@ -170,7 +174,7 @@ void main() {
       final version = find.text('Installierte Version 0.14.0-test');
       await tester.scrollUntilVisible(version, 280);
       expect(version, findsOneWidget);
-      expect(find.text('Telegram'), findsNothing);
+      expect(find.text('Telegram'), findsOneWidget);
       expect(find.text('Google API'), findsNothing);
     },
   );

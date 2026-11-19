@@ -30,8 +30,8 @@ In den Android-Einstellungen lädt „APK herunterladen und installieren“ die
 aktuelle APK aus dem eigenen Kanal über HTTPS. Die App prüft Größe, SHA-256,
 Paket-ID und Versionsdaten und startet den Android-Installer. Android verwaltet
 die Quellenfreigabe und die Bestätigung der Installation.
-Beim Öffnen der Einstellungen und über „Nach Updates suchen“ vergleicht Android
-den installierten `versionCode` mit dem Manifest des eigenen Kanals. Ein
+Über „Nach Updates suchen“ vergleicht Android den installierten `versionCode`
+mit dem Manifest des eigenen Kanals. Ein
 fehlgeschlagener Abruf bleibt als Fehler sichtbar.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
@@ -49,9 +49,15 @@ Rückgängig sind über diese Ansicht erreichbar.
 Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo und
 Synchronisierung. Dunkelmodus und Akzentfarbe
 werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
-Die APK enthält keine Bot-zu-Bot-Kommunikation und keine Gemini- oder
-Google-API-Schlüsselverwaltung. Eine spätere Telegram-Funktion benötigt eine
-gesonderte Entscheidung über Funktionsumfang, Transport und Zugangsdaten.
+Android nutzt bei verbundenem WLAN `ThomasWlan` und erreichbarem Server den
+lokalen HTTPS-Zugang. Andernfalls stehen nach Telegram-Benutzeranmeldung und
+Kopplung im Heimnetz die verschlüsselten, lesenden Ansichten „Meine Woche“ und
+„Mein Einkaufswagen“ zur Verfügung. Einkaufs-Häkchen im Telegram-Modus werden
+auf dem Gerät gespeichert. Die App fragt nach Telegram-API-ID und API-Hash, wenn
+sie fehlen, und schützt Zugangsdaten und Sitzung auf dem Gerät. Die Android-
+Kopplung ist an das bei der Verbindung ausgewählte Cookidoo-Konto gebunden.
+Die Web-App behält ihre Bot-zu-Bot-Verbindung. Die APK enthält keine Gemini-
+oder Google-API-Schlüsselverwaltung.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
@@ -63,8 +69,9 @@ ob ein Token vorhanden ist. Mit „Bots verbinden“ wird der Client-Bot für de
 Server-Bot zugelassen; ein ausdrücklich gestarteter Nachrichtentest erwartet eine
 Bestätigung mit zufälliger Kennung. Beide Bots benötigen Bot-zu-Bot-Freigabe und
 einen eigenen Update-Kanal ohne parallelen Webhook oder andere Verbraucher. Der
-Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet nur frische private
-Test-, Wochen- und Einkaufswagenanfragen des zugeordneten Bots. Dabei werden Telegram-Updates abgerufen
+Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet frische private
+Test-, Wochen- und Einkaufswagenanfragen des zugeordneten Browser-Bots sowie des
+bestätigten Android-Benutzerkontos. Dabei werden Telegram-Updates abgerufen
 und bestätigt. Nach vorheriger Verbindung im Heimnetz ist der Test auch ohne Heimnetz
 mit Internetzugang möglich. Bei nicht erreichbarem Server bleibt der Status des
 Server-Tokens unbekannt; Browserdaten können vom Browser gelöscht werden. Keine

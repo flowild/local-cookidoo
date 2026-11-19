@@ -7,7 +7,7 @@ def select_pair(config, client_id=None):
     # The top-level pairing remains readable by the existing browser bridge.
     if client_id is None or client_id == config.get('client_id'):
         return config
-    android = config.get('android_pair')
+    android = config.get('android_user_pair') or config.get('android_pair')
     if isinstance(android, dict) and client_id == android.get('client_id'):
         return android
     return {}
@@ -15,7 +15,7 @@ def select_pair(config, client_id=None):
 
 def bridge_config(config):
     clients = {}
-    android = config.get('android_pair')
+    android = config.get('android_user_pair') or config.get('android_pair')
     for pair in (config, android):
         if not isinstance(pair, dict):
             continue
@@ -25,5 +25,8 @@ def bridge_config(config):
         # Compare complete pairings across a long poll without copying raw keys
         # to the Proxmox host.
         identity = {key: pair.get(key) for key in ('cart_key', 'cart_owner')}
-        clients[str(client_id)] = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        clients[str(client_id)] = {
+            'identity': hashlib.sha256(json.dumps(identity).encode()).hexdigest(),
+            'is_bot': pair is config or not config.get('android_user_pair'),
+        }
     return {'token': config.get('token'), 'clients': clients}

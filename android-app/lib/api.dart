@@ -28,6 +28,7 @@ class RezeptgartenApi {
 
   final Uri server;
   final Future<HttpClient> _client;
+  bool Function()? localAllowed;
 
   static Future<HttpClient> _localClient() async {
     final certificate = await rootBundle.load('assets/rezeptgarten-ca.pem');
@@ -47,7 +48,11 @@ class RezeptgartenApi {
     String path, {
     Json? body,
     Duration? timeout,
+    bool probe = false,
   }) async {
+    if (!probe && localAllowed?.call() == false) {
+      throw const ApiException('Das Heimnetz ist nicht verbunden.');
+    }
     const timeoutError = ApiException(
       'Der Rezeptgarten-Server antwortet nicht.',
     );
@@ -100,6 +105,19 @@ class RezeptgartenApi {
           );
   }
 
+  Future<dynamic> probeHealth() =>
+      _json(
+        'GET',
+        '/api/health',
+        timeout: const Duration(milliseconds: 2500),
+        probe: true,
+      ).timeout(
+        const Duration(milliseconds: 2500),
+        onTimeout: () => throw const ApiException(
+          'Der Rezeptgarten-Server antwortet nicht.',
+        ),
+      );
+
   Future<dynamic> write(String method, String path, [Json? body]) =>
       _json(method, path, body: body);
 
@@ -108,6 +126,7 @@ class RezeptgartenApi {
     String path, {
     Json? body,
     Duration? timeout,
+    bool probe = false,
   }) async {
     try {
       final response = await _request(
@@ -115,6 +134,7 @@ class RezeptgartenApi {
         path,
         body: body,
         timeout: timeout,
+        probe: probe,
       );
       final reading = utf8.decoder.bind(response).join();
       final content = timeout == null
@@ -131,6 +151,10 @@ class RezeptgartenApi {
       return decoded;
     } on ApiException {
       rethrow;
+    } on HandshakeException {
+      throw const ApiException(
+        'Das Zertifikat des Heimnetzservers konnte nicht geprüft werden.',
+      );
     } on Exception {
       throw ApiException(
         method == 'GET' ? 'Rezeptgarten ist im Heimnetz nicht erreichbar.' : 'Das Ergebnis konnte nicht bestätigt werden. Bitte lade den aktuellen Stand.',

@@ -1,6 +1,6 @@
 import unittest
 from app.telegram_pairs import bridge_config
-from scripts.telegram_bridge import reply_for, same_pair
+from scripts.telegram_bridge import pairing_request, reply_for, same_pair
 
 
 class TelegramBridgeTests(unittest.TestCase):
@@ -32,6 +32,18 @@ class TelegramBridgeTests(unittest.TestCase):
         for key, value in [('text', 'rezeptgarten-pong ' + nonce), ('chat', {'id': 123, 'type': 'group'}),
                            ('from', {'id': 123, 'is_bot': False})]:
             self.assertIsNone(reply_for({'message': {**message, key: value}}, 123, 1000))
+
+    def test_user_pairing_requires_fresh_private_user_message(self):
+        challenge = 'a' * 64
+        message = {'from': {'id': 123, 'is_bot': False}, 'chat': {'id': 123, 'type': 'private'},
+                   'date': 1000, 'text': 'rezeptgarten-pair ' + challenge}
+        self.assertEqual(pairing_request({'message': message}, 1000), (123, challenge))
+        self.assertIsNone(pairing_request({'message': message}, 1121))
+        self.assertIsNone(pairing_request({'message': {**message, 'from': {'id': 123, 'is_bot': True}}}, 1000))
+        self.assertIsNone(pairing_request({'message': {**message, 'chat': {'id': 123, 'type': 'group'}}}, 1000))
+        user = {**message, 'text': 'rezeptgarten-ping ' + 'b' * 32}
+        self.assertIsNone(reply_for({'message': user}, 123, 1000))
+        self.assertIsNotNone(reply_for({'message': user}, 123, 1000, is_bot=False))
 
 
 if __name__ == '__main__':

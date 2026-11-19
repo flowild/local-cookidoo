@@ -12,10 +12,17 @@ class MainActivity : FlutterActivity() {
     private var pendingExport: Export? = null
     private val exportRequestCode = 2173
     private val apkUpdater = ApkUpdater(this)
+    private val wifiStatus = WifiStatus(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         apkUpdater.register(flutterEngine.dartExecutor.binaryMessenger)
+        wifiStatus.register(flutterEngine.dartExecutor.binaryMessenger)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/storage")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "noBackupDirectory") result.success(noBackupFilesDir.absolutePath)
+                else result.notImplemented()
+            }
         val preferences = getPreferences(MODE_PRIVATE)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/preferences")
             .setMethodCallHandler { call, result ->
@@ -77,6 +84,12 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        wifiStatus.onPermissionResult(requestCode)
     }
 
     private fun openLink(uri: Uri, result: MethodChannel.Result) {
