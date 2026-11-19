@@ -26,13 +26,12 @@ Die native Flutter-App entsteht unter `android-app/`. Die
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
 Veröffentlichungsskript prüft und überträgt die APK getrennt vom Web-Deployment.
-In den Android-Einstellungen lädt „APK herunterladen und installieren“ die
-aktuelle APK aus dem eigenen Kanal über HTTPS. Die App prüft Größe, SHA-256,
-Paket-ID und Versionsdaten und startet den Android-Installer. Android verwaltet
-die Quellenfreigabe und die Bestätigung der Installation.
-Über „Nach Updates suchen“ vergleicht Android den installierten `versionCode`
-mit dem Manifest des eigenen Kanals. Ein
-fehlgeschlagener Abruf bleibt als Fehler sichtbar.
+In den Android-Einstellungen vergleicht „Nach Updates suchen“ den installierten
+`versionCode` mit dem Manifest des eigenen Kanals. Ist ein neuerer Build
+verfügbar, wird derselbe Knopf zu „APK herunterladen und installieren“.
+Die App lädt die APK über HTTPS, prüft Größe, SHA-256, Paket-ID und Version und
+startet den Android-Installer. Android verwaltet Quellenfreigabe und Bestätigung.
+Ein fehlgeschlagener Abruf bleibt als Fehler sichtbar und kann wiederholt werden.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen

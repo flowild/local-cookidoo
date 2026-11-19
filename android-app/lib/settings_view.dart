@@ -44,6 +44,7 @@ class _SettingsViewState extends State<SettingsView> {
   String? _version;
   String? _updateMessage;
   String? _updateStatus;
+  bool _updateAvailable = false;
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
   bool _loading = false;
@@ -101,8 +102,13 @@ class _SettingsViewState extends State<SettingsView> {
 
   Future<void> _checkUpdate() async {
     if (_checkingUpdate || _downloadingUpdate) return;
-    setState(() => _checkingUpdate = true);
+    setState(() {
+      _checkingUpdate = true;
+      _updateAvailable = false;
+      _updateMessage = null;
+    });
     var status = 'Der Updatestatus konnte nicht geprüft werden.';
+    var available = false;
     try {
       final metadata = await _update.invokeMapMethod<String, Object?>(
         'checkUpdate',
@@ -112,6 +118,7 @@ class _SettingsViewState extends State<SettingsView> {
         'build': final int build,
         'installedBuild': final int installedBuild,
       }) {
+        available = build > installedBuild;
         status = switch (build.compareTo(installedBuild)) {
           > 0 => 'Update verfügbar · Version $version (Build $build)',
           0 => 'Deine App ist aktuell.',
@@ -126,6 +133,7 @@ class _SettingsViewState extends State<SettingsView> {
       if (mounted) {
         setState(() {
           _updateStatus = status;
+          _updateAvailable = available;
           _checkingUpdate = false;
         });
       }
@@ -513,30 +521,24 @@ class _SettingsViewState extends State<SettingsView> {
                     : _updateStatus ?? 'Updatestatus unbekannt.',
               ),
             ),
-            TextButton.icon(
+            OutlinedButton.icon(
               onPressed: _checkingUpdate || _downloadingUpdate || !_local
                   ? null
+                  : _updateAvailable
+                  ? _installUpdate
                   : _checkUpdate,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Nach Updates suchen'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _downloadingUpdate || !_local ? null : _installUpdate,
-              icon: const Icon(Icons.download),
-              label: const Text('APK herunterladen und installieren'),
+              icon: Icon(_updateAvailable ? Icons.download : Icons.refresh),
+              label: Text(
+                _updateAvailable
+                    ? 'APK herunterladen und installieren'
+                    : 'Nach Updates suchen',
+              ),
             ),
             if (_downloadingUpdate) ...[
               const LinearProgressIndicator(),
               const Text('APK wird heruntergeladen und geprüft …'),
             ],
             if (_updateMessage != null) Text(_updateMessage!),
-            TextButton(
-              onPressed: () => showLicensePage(
-                context: context,
-                applicationName: 'Rezeptgarten',
-              ),
-              child: const Text('Open-Source-Lizenzen'),
-            ),
           ]),
         ],
       ),

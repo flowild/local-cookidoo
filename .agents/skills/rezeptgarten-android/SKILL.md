@@ -39,7 +39,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   haben unterschiedliche Paket-IDs und Downloadpfade. Mit `-Upload` prüft
   das Skript den HTTPS-Download und sein `latest.json` auf LXC 103.
 - Die manuelle Updateprüfung in den Einstellungen vergleicht den installierten
-  `versionCode` mit `latest.json` des eigenen Kanals. Der separate Download
-  prüft die APK vor der Übergabe an den Android-Installer. Prüfe bei
-  Änderungen den tatsächlich veröffentlichten Kanal und auf einem Gerät
-  den Ablauf über Download, Quellenfreigabe und Installationsbestätigung.
+  `versionCode` mit `latest.json` des eigenen Kanals. Bei einem neueren Build
+  wechselt derselbe Knopf zum Download und zur Installation. Die APK wird vor
+  der Übergabe an den Android-Installer geprüft. Prüfe den veröffentlichten
+  Kanal sowie Download, Quellenfreigabe und Installationsbestätigung, soweit
+  eine vom Nutzer zugelassene Android-Laufzeit zur Verfügung steht.

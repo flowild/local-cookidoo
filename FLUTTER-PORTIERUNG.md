@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **0.18.1, Build 15** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Rezeptgarten **1.0.1, Build 16** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -111,8 +111,8 @@ Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
 
 6. **Updateprüfung.** Beim Öffnen der Android-Einstellungen wird keine
    Updateprüfung ausgelöst. Die
-   installierte Version, „Nach Updates suchen“ und der ausdrücklich gestartete
-   APK-Download mit Installation bleiben verfügbar. Den Einstellungstest so
+   installierte Version und „Nach Updates suchen“ bleiben verfügbar. Bei einem
+   verfügbaren Update wechselt der Knopf zum APK-Download mit Installation. Den Einstellungstest so
    prüfen, dass das Öffnen keinen Manifestabruf auslöst und die manuelle
    Prüfung weiterhin funktioniert.
 
@@ -149,8 +149,9 @@ Von Version 0.16.0 bis 0.17.0 prüfte Android beim Öffnen der Einstellungen und
 über „Nach Updates suchen“ das Manifest des eigenen Kanals. Ab 0.18.0 wird die
 Prüfung über „Nach Updates suchen“ gestartet. Die Anzeige unterscheidet
 einen verfügbaren neueren Build, einen aktuellen Stand und einen fehlgeschlagenen
-Abruf. Die Prüfung lädt nur das Manifest über HTTPS. Die APK wird erst über
-„APK herunterladen und installieren“ geladen.
+Abruf. Die Prüfung lädt nur das Manifest über HTTPS. Ab 1.0.1 wird bei einem
+verfügbaren Update aus dem Suchknopf „APK herunterladen und installieren“;
+erst durch erneutes Drücken wird die APK geladen.
 
 ## Umsetzung und Freigabe
 

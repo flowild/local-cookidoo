@@ -26,7 +26,7 @@ void main() {
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == 'checkUpdate') {
         checks++;
-        if (checks == 3) {
+        if (checks == 1) {
           throw PlatformException(
             code: 'update_check',
             message: 'Updateprüfung fehlgeschlagen.',
@@ -35,7 +35,7 @@ void main() {
         return {
           'version': '0.16.0',
           'build': 12,
-          'installedBuild': checks == 1 ? 11 : 12,
+          'installedBuild': checks == 2 ? 12 : 11,
         };
       }
       expect(call.method, 'downloadAndInstall');
@@ -57,20 +57,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(checks, 0);
     expect(find.text('Updatestatus unbekannt.'), findsOneWidget);
+    expect(find.text('APK herunterladen und installieren'), findsNothing);
+    expect(find.text('Open-Source-Lizenzen'), findsNothing);
     await tester.tap(check);
     await tester.pumpAndSettle();
     expect(checks, 1);
+    expect(find.text('Updateprüfung fehlgeschlagen.'), findsOneWidget);
+    expect(find.text('APK herunterladen und installieren'), findsNothing);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    expect(find.text('Deine App ist aktuell.'), findsOneWidget);
+    expect(find.text('APK herunterladen und installieren'), findsNothing);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
     expect(
       find.text('Update verfügbar · Version 0.16.0 (Build 12)'),
       findsOneWidget,
     );
-    await tester.tap(check);
-    await tester.pumpAndSettle();
-    expect(find.text('Deine App ist aktuell.'), findsOneWidget);
-    await tester.tap(check);
-    await tester.pumpAndSettle();
-    expect(find.text('Updateprüfung fehlgeschlagen.'), findsOneWidget);
-    expect(find.text('Deine App ist aktuell.'), findsNothing);
+    expect(check, findsNothing);
     final button = find.text('APK herunterladen und installieren');
     await tester.scrollUntilVisible(button, 240);
     await tester.tap(button);
