@@ -56,64 +56,26 @@ Kopplung im Heimnetz die verschlüsselten, lesenden Ansichten „Meine Woche“ 
 auf dem Gerät gespeichert. Die App fragt nach Telegram-API-ID und API-Hash, wenn
 sie fehlen, und schützt Zugangsdaten und Sitzung auf dem Gerät. Die Android-
 Kopplung ist an das bei der Verbindung ausgewählte Cookidoo-Konto gebunden.
-Die Web-App behält ihre Bot-zu-Bot-Verbindung. Die APK enthält keine Gemini-
-oder Google-API-Schlüsselverwaltung.
+Die Web-App benötigt das Heimnetz. Die APK enthält keine Gemini- oder
+Google-API-Schlüsselverwaltung.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
 Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
-## Telegram in der Web-App
+## Telegram-Verbindung
 
-Die Einstellungen speichern ein Server-Bot-Token verschlüsselt auf dem Rezeptgarten-Server
-und ein Client-Bot-Token unverschlüsselt im jeweiligen Browser. Sie zeigen nur an,
-ob ein Token vorhanden ist. Mit „Bots verbinden“ wird der Client-Bot für den
-Server-Bot zugelassen; ein ausdrücklich gestarteter Nachrichtentest erwartet eine
-Bestätigung mit zufälliger Kennung. Beide Bots benötigen Bot-zu-Bot-Freigabe und
-einen eigenen Update-Kanal ohne parallelen Webhook oder andere Verbraucher. Der
-Server-Bot-Dienst läuft auf dem Proxmox-Host und verarbeitet frische private
-Test-, Wochen- und Einkaufswagenanfragen des zugeordneten Browser-Bots sowie des
-bestätigten Android-Benutzerkontos. Dabei werden Telegram-Updates abgerufen
-und bestätigt. Nach vorheriger Verbindung im Heimnetz ist der Test auch ohne Heimnetz
-mit Internetzugang möglich. Bei nicht erreichbarem Server bleibt der Status des
-Server-Tokens unbekannt; Browserdaten können vom Browser gelöscht werden. Keine
-Tokens oder Nachrichten protokollieren.
-
-Der Einkaufswagen kann ohne Heimnetz bei vorhandener Internetverbindung über Telegram
-lesend geladen werden. Dafür Bots nach Einführung dieser Funktion im Heimnetz erneut
-verbinden: Der Browser erstellt einen AES-256-GCM-Schlüssel, der serverseitig im Vault
-liegt und im jeweiligen Browser gespeichert wird. Einkaufsdaten werden vor der Übertragung
-verschlüsselt; Telegram sieht Metadaten. Der Wagen ist an das bei der Kopplung aktuelle
-Konto gebunden, bei Kontowechsel ist eine erneute Kopplung nötig. Die Ansicht ist eine
-Momentaufnahme; Häkchen lassen sich nur im jeweiligen Browser ändern und zurücksetzen,
-ohne den Server oder Vorrat zu ändern. Sie sind an die jeweilige Kopplung gebunden.
-Telegram-Antworten tragen zufällige
-Anfragekennungen; unvollständige oder nicht authentifizierte Antworten nicht anzeigen.
-Im Telegram-Einkaufswagen stehen Checkboxen und Texte auch auf dem Handy linksbündig
-in kompakten Zeilen; zunächst zeigen die Checkboxen den gespeicherten Serverstand an.
-Zutaten und Zusatzartikel zeigen dieselben lokal in der App-Hülle enthaltenen Icons
-wie die übrigen Ansichten. Über Telegram kommen lediglich die Angaben für die
-Symbolauswahl, keine Icon-Bilddateien.
-Beim Anzeigen der Telegram-Wochenansicht oder des Telegram-Einkaufswagens kennzeichnet
-ein blaues Papierflieger-Symbol in der Kopfzeile den Telegram-Modus; nach erfolgreichem
-Laden derselben Ansicht aus dem Heimnetz verschwindet es wieder.
-In diesem Modus sind „Listen“, „Rezepte“ und „Vorrat“ in Desktop- und Mobilnavigation
-ausgegraut und nicht auswählbar; beim Wechsel zurück ins Heimnetz sind sie wieder aktiv.
-Beim App-Start und Einkaufswagenabruf wird die Erreichbarkeit des Heimnetz-Servers
-maximal 2,5 Sekunden abgewartet; Schreibvorgänge erhalten kein solches Zeitlimit.
-Der Service Worker lädt die zuvor installierte öffentliche App-Hülle beim Neustart
-direkt aus seinem Cache, damit ein nicht erreichbares Heimnetz den Start nicht blockiert.
-Die App muss auf dem Gerät zuvor online geöffnet worden sein; der Browser kann seine
-Speicherdaten löschen. Persönliche API-Antworten bleiben vom Cache ausgeschlossen.
-Der Telegram-Abruf sendet die Anfrage unmittelbar und verarbeitet ältere Updates
-nur zur Fortschaltung; angezeigt wird ausschließlich die zur Anfrage passende Antwort.
-Geeignete Browser fordern die komprimierte Momentaufnahme an; diese wird vor der
-Verschlüsselung komprimiert, um die Zahl der Telegram-Nachrichten zu verringern.
-Ohne Heimnetz zeigt „Meine Woche“ über denselben verschlüsselten Kanal eine rein
-lesende Wochenübersicht mit Tagesrezepten, lokalen Platzhaltern und Ablage. Die Tage
-und die Ablage stehen dabei als kompakte Liste untereinander, auch auf dem Handy.
-Pfeile und „Diese Woche“ wechseln die Woche. Der Server liest Cookidoo über den gemeinsamen
-Client und berücksichtigt vorgemerkte Verschiebungen; Fehler und unklare Warteschlangen
-bleiben sichtbar. Es werden keine Bilder oder Notizinhalte übertragen. Zugriff ist an
-das bei der Bot-Kopplung gewählte Konto gebunden.
+Die Einstellungen verwalten das verschlüsselt auf dem Server gespeicherte Token
+des Rezeptgarten-Server-Bots. Die Android-App meldet sich mit dem Telegram-
+Benutzerkonto an und koppelt dieses im Heimnetz mit dem Server-Bot und dem
+aktuellen Cookidoo-Konto. Der Host-Dienst akzeptiert ausschließlich bestätigte
+private Benutzeranfragen. Woche und Einkaufswagen sind außerhalb des Heimnetzes
+über Telegram verschlüsselt und lesend verfügbar; Einkaufs-Häkchen bleiben lokal.
+Telegram sieht Metadaten. Unvollständige oder nicht authentifizierte Antworten
+werden nicht angezeigt. Nachrichten, Tokens und Schlüssel nicht protokollieren.
+Der frühere Client-Bot und der Telegram-Zugriff der Web-App sind entfernt.
+Beim Start entfernt die Web-App alte lokale Bot-Zugangsdaten; der Server verwirft
+alte Bot-Kopplungen und behält bestehende Android-Benutzerkopplungen.
+Die öffentliche App-Hülle bleibt im Service-Worker-Cache; persönliche API-
+Antworten werden nicht gecacht.
 
 ## Vertrauliche Daten
 

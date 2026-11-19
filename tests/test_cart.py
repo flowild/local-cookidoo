@@ -60,9 +60,9 @@ class CartTests(unittest.TestCase):
         self.client.post('/api/cart/items', json={'name': 'Wasser'}, headers=ORIGIN)
         key = os.urandom(32)
         owner = self.app.state.sync.cart_owner()
-        Vault(self.tmp.name, 'telegram-server-bot.enc').write({'cart_key':base64.b64encode(key).decode(), 'cart_owner':owner})
+        Vault(self.tmp.name, 'telegram-server-bot.enc').write({'android_user_pair': {'client_id': 333, 'cart_key':base64.b64encode(key).decode(), 'cart_owner':owner}})
         nonce = 'a' * 32
-        encoded = encrypted_snapshot(self.tmp.name, nonce)
+        encoded = encrypted_snapshot(self.tmp.name, nonce, client_id=333)
         self.assertNotIn('Milch', encoded)
         packed = base64.b64decode(encoded)
         result = json.loads(AESGCM(key).decrypt(packed[:12], packed[12:], nonce.encode()))
@@ -73,18 +73,18 @@ class CartTests(unittest.TestCase):
         identifiers = [i['check_id'] for i in result['items'][0]['ingredients']] + [result['items'][1]['check_id']]
         self.assertEqual(len(set(identifiers)), 3)
         self.assertEqual(result['items'][1]['category'], 'Milchprodukte')
-        again = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce))
+        again = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, client_id=333))
         self.assertEqual(json.loads(AESGCM(key).decrypt(again[:12], again[12:], nonce.encode())), result)
         self.assertEqual([i['in_pantry'] for i in self.cart()[0]['data']['ingredients']], [True, False])
         self.assertEqual(len(self.cart()), 3)
-        compressed = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, compress=True))
+        compressed = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, compress=True, client_id=333))
         decoded = AESGCM(key).decrypt(compressed[:12], compressed[12:], nonce.encode())
         self.assertEqual(json.loads(zlib.decompress(decoded)), result)
         self.db.save_pantry_item(self.db.pantry()['categories'][0]['id'], 'Mehl', '')
         self.assertEqual([i['in_pantry'] for i in self.cart()[0]['data']['ingredients']], [True, True])
         self.db.set('account', {'email':'other@example.invalid', 'region':'de'})
         with self.assertRaises(ValueError):
-            encrypted_snapshot(self.tmp.name, nonce)
+            encrypted_snapshot(self.tmp.name, nonce, client_id=333)
 
     def test_telegram_cart_uses_the_requesting_clients_key(self):
         self.add_recipe()
@@ -92,7 +92,7 @@ class CartTests(unittest.TestCase):
         keys = {111: os.urandom(32), 333: os.urandom(32)}
         pairs = {client: {'client_id': client, 'cart_owner': owner, 'cart_key': base64.b64encode(key).decode()}
                  for client, key in keys.items()}
-        Vault(self.tmp.name, 'telegram-server-bot.enc').write({**pairs[111], 'android_pair': pairs[333]})
+        Vault(self.tmp.name, 'telegram-server-bot.enc').write({**pairs[111], 'android_user_pair': pairs[333]})
         nonce = 'a' * 32
         encoded = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, client_id=333))
         decoded = AESGCM(keys[333]).decrypt(encoded[:12], encoded[12:], nonce.encode())

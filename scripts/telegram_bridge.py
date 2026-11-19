@@ -43,13 +43,13 @@ def call(token, method, payload):
     return result['result']
 
 
-def reply_for(update, client_id, now, is_bot=True):
+def reply_for(update, client_id, now):
     message = update.get('message') or {}
     sender = message.get('from') or {}
     chat = message.get('chat') or {}
     text = message.get('text') or ''
     match = re.fullmatch(r'rezeptgarten-(ping|cart|cartz|week|weekz) ([a-f0-9]{32})(?: (\d{4}-\d{2}-\d{2}))?', text)
-    if (not match or sender.get('id') != client_id or sender.get('is_bot') is not is_bot
+    if (not match or sender.get('id') != client_id or sender.get('is_bot') is not False
             or chat.get('type') != 'private' or chat.get('id') != client_id
             or not isinstance(message.get('date'), int) or abs(now - message['date']) > 120):
         return None
@@ -142,7 +142,7 @@ def main():
                             call(token, 'sendMessage', {'chat_id': pairing[0], 'text': 'rezeptgarten-paired ' + pairing[1]})
                     except (OSError, ValueError, subprocess.SubprocessError, urllib.error.URLError):
                         pass
-                reply = (reply_for(update, client_id, int(time.time()), value['clients'][str(client_id)]['is_bot'])
+                reply = (reply_for(update, client_id, int(time.time()))
                          if type(client_id) is int and str(client_id) in value['clients'] else None)
                 if reply:
                     time.sleep(max(0, 1 - (time.monotonic() - last_reply)))

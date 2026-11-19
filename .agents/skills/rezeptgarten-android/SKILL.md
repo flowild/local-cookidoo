@@ -20,7 +20,7 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   isolierten Android-Laufzeit prüfen, sofern eine verfügbar ist.
 - Die APK enthält weder Bot-zu-Bot-Kommunikation noch Gemini oder eine
   Google-API-Schlüsselverwaltung. Die browserseitigen Integrationen gehören
-  zur Web-App. Änderungen an den gemeinsamen APIs mit dem Betriebs- und
+  nicht mehr zur Web-App. Der Server-Bot dient der Benutzerkopplung. Änderungen an den gemeinsamen APIs mit dem Betriebs- und
   gegebenenfalls dem Cookidoo-Skill abgleichen.
 - Android erkennt `ThomasWlan` mit Standortberechtigung und prüft den Server
   über die gebündelte CA. Außerhalb des Heimnetzes sowie bei nicht erreichbarem

@@ -135,6 +135,14 @@ def create_app(directory=None, secure_cookies=None):
     service = SyncService(database, vault)
     @asynccontextmanager
     async def lifespan(app):
+        # Remove retired bot pairings while retaining the server token and user session.
+        with telegram_lock:
+            config = telegram_vault.read() or {}
+            legacy_keys = ('client_id', 'cart_key', 'cart_owner', 'android_pair')
+            if any(key in config for key in legacy_keys):
+                for key in legacy_keys:
+                    config.pop(key, None)
+                telegram_vault.write(config)
         await service.start()
         yield
         await service.close()
@@ -161,7 +169,7 @@ def create_app(directory=None, secure_cookies=None):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.telegram.org; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if request.url.path.startswith('/api/'):
             is_image = bool(re.fullmatch(r'/api/images/[a-f0-9]{40}\.webp', request.url.path))
             if not (is_image and request.method == 'GET' and response.status_code == 200):
@@ -204,60 +212,6 @@ def create_app(directory=None, secure_cookies=None):
             telegram_vault.clear()
         return {'ok': True}
 
-    @app.post('/api/telegram-pair')
-    async def pair_telegram(request: Request):
-        try:
-            payload = await request.json()
-        except (ValueError, UnicodeDecodeError):
-            raise HTTPException(400, 'Ungültige Bot-Kennung.') from None
-        client_id = payload.get('client_id') if isinstance(payload, dict) else None
-        cart_key = payload.get('cart_key') if isinstance(payload, dict) else None
-        client = payload.get('client', 'browser') if isinstance(payload, dict) else None
-        if type(client_id) is not int or not 0 < client_id < 2**53:
-            raise HTTPException(400, 'Ungültige Bot-Kennung.')
-        if client != 'browser':
-            raise HTTPException(400, 'Ungültige Client-Kopplung.')
-        if cart_key is not None:
-            try:
-                if not isinstance(cart_key, str) or len(base64.b64decode(cart_key, validate=True)) != 32:
-                    raise ValueError()
-            except (ValueError, TypeError):
-                raise HTTPException(400, 'Ungültiger Verschlüsselungsschlüssel.') from None
-        with telegram_lock:
-            saved = telegram_vault.read()
-        owner = service.cart_owner()
-        if not saved or not saved.get('token'):
-            raise HTTPException(409, 'Bitte zuerst das Server-Bot-Token speichern.')
-        try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as telegram:
-                response = await telegram.post('https://api.telegram.org/bot' + saved['token'] + '/getMe')
-                data = response.json()
-            bot = data.get('result') if response.status_code == 200 and isinstance(data, dict) and data.get('ok') else None
-            if not isinstance(bot, dict) or not bot.get('is_bot') or not isinstance(bot.get('id'), int) or not re.fullmatch(r'[A-Za-z0-9_]{5,32}', bot.get('username') or ''):
-                raise ValueError('Ungültiger Bot')
-        except (httpx.HTTPError, ValueError, TypeError):
-            raise HTTPException(502, 'Server-Bot konnte bei Telegram nicht geprüft werden.') from None
-        if bot['id'] == client_id:
-            raise HTTPException(400, 'Bitte zwei unterschiedliche Bots verwenden.')
-        pair = {'client_id': client_id}
-        if cart_key is not None:
-            pair.update({'cart_key': cart_key, 'cart_owner': owner})
-        with telegram_lock:
-            current = telegram_vault.read() or {}
-            if current.get('token') != saved['token'] or owner != service.cart_owner():
-                raise HTTPException(409, 'Server-Bot oder Cookidoo-Konto wurde inzwischen geändert.')
-            android = current.get('android_user_pair') or {}
-            legacy_android = current.get('android_pair')
-            if android.get('client_id') == client_id or (isinstance(legacy_android, dict) and legacy_android.get('client_id') == client_id):
-                raise HTTPException(409, 'Diese Telegram-Kennung ist bereits vergeben.')
-            current = {'token': current['token'], **pair}
-            if android:
-                current['android_user_pair'] = android
-            if legacy_android:
-                current['android_pair'] = legacy_android
-            telegram_vault.write(current)
-        return {'username': bot['username'], 'id': bot['id']}
-
     @app.post('/api/telegram-android-pair')
     async def begin_telegram_android_pair(request: Request):
         try:
@@ -289,7 +243,7 @@ def create_app(directory=None, secure_cookies=None):
             current = telegram_vault.read() or {}
             if current.get('token') != token or service.cart_owner() != owner:
                 raise HTTPException(409, 'Server-Bot oder Cookidoo-Konto wurde inzwischen geändert.')
-            if current.get('client_id') == client_id or bot['id'] == client_id:
+            if bot['id'] == client_id:
                 raise HTTPException(409, 'Diese Telegram-Kennung ist bereits vergeben.')
             challenge = secrets.token_hex(32)
             telegram_pending.clear()
@@ -319,8 +273,7 @@ def create_app(directory=None, secure_cookies=None):
                     or not isinstance(token_hash, str)
                     or not re.fullmatch(r'[a-f0-9]{64}', token_hash)
                     or not secrets.compare_digest(hashlib.sha256(str(current.get('token', '')).encode()).hexdigest(), token_hash)
-                    or pending.get('cart_owner') != service.cart_owner()
-                    or current.get('client_id') == client_id):
+                    or pending.get('cart_owner') != service.cart_owner()):
                 raise HTTPException(409, 'Telegram-Kopplung abgelaufen oder ungültig.')
             current['android_user_pair'] = {key: pending[key] for key in ('client_id', 'cart_key', 'cart_owner')}
             current.pop('android_pair', None)

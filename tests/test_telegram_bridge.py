@@ -4,34 +4,19 @@ from scripts.telegram_bridge import pairing_request, reply_for, same_pair
 
 
 class TelegramBridgeTests(unittest.TestCase):
-    def test_repairing_android_does_not_interrupt_browser_responses(self):
-        raw = {'token': 'fixture', 'client_id': 111, 'cart_key': 'browser-fixture',
-               'android_pair': {'client_id': 333, 'cart_key': 'android-fixture'}}
+    def test_legacy_bots_are_never_authorized(self):
+        raw = {'token': 'fixture', 'client_id': 111, 'cart_key': 'old',
+               'android_pair': {'client_id': 222},
+               'android_user_pair': {'client_id': 333, 'cart_key': 'user', 'cart_owner': 'owner'}}
         before = bridge_config(raw)
-        changed = bridge_config({**raw, 'android_pair': {'client_id': 333, 'cart_key': 'new-fixture'}})
-        self.assertEqual(set(before['clients']), {'111', '333'})
-        self.assertNotIn('browser-fixture', str(before))
-        self.assertTrue(same_pair(before, changed, 111))
-        self.assertFalse(same_pair(before, changed, 333))
-        self.assertFalse(same_pair(before, changed, 444))
-
-    def test_only_fresh_private_ping_from_paired_bot_receives_reply(self):
+        self.assertEqual(set(before['clients']), {'333'})
+        self.assertNotIn('user', str(before))
+        self.assertFalse(same_pair(before, bridge_config({**raw, 'android_user_pair': {**raw['android_user_pair'], 'cart_key': 'new'}}), 333))
         nonce = 'a' * 32
-        message = {'from': {'id': 123, 'is_bot': True}, 'chat': {'id': 123, 'type': 'private'},
-                   'date': 1000, 'text': 'rezeptgarten-ping ' + nonce}
-        self.assertEqual(reply_for({'message': message}, 123, 1000), 'rezeptgarten-pong ' + nonce)
-        cart = {**message, 'text': 'rezeptgarten-cart ' + nonce}
-        self.assertEqual(reply_for({'message': cart}, 123, 1000), 'rezeptgarten-cart ' + nonce)
-        compressed = {**message, 'text': 'rezeptgarten-cartz ' + nonce}
-        self.assertEqual(reply_for({'message': compressed}, 123, 1000), 'rezeptgarten-cartz ' + nonce)
-        week = {**message, 'text': 'rezeptgarten-weekz ' + nonce + ' 2026-01-05'}
-        self.assertEqual(reply_for({'message': week}, 123, 1000), 'rezeptgarten-weekz ' + nonce + ' 2026-01-05')
-        self.assertIsNone(reply_for({'message': {**week, 'text': 'rezeptgarten-weekz ' + nonce + ' 2026-01-06'}}, 123, 1000))
-        self.assertIsNone(reply_for({'message': message}, 456, 1000))
-        self.assertIsNone(reply_for({'message': message}, 123, 1121))
-        for key, value in [('text', 'rezeptgarten-pong ' + nonce), ('chat', {'id': 123, 'type': 'group'}),
-                           ('from', {'id': 123, 'is_bot': False})]:
-            self.assertIsNone(reply_for({'message': {**message, key: value}}, 123, 1000))
+        message = {'from': {'id': 333, 'is_bot': False}, 'chat': {'id': 333, 'type': 'private'}, 'date': 1000, 'text': 'rezeptgarten-cart ' + nonce}
+        self.assertEqual(reply_for({'message': message}, 333, 1000), 'rezeptgarten-cart ' + nonce)
+        self.assertIsNone(reply_for({'message': {**message, 'from': {'id': 333, 'is_bot': True}}}, 333, 1000))
+        self.assertIsNone(reply_for({'message': message}, 333, 1121))
 
     def test_user_pairing_requires_fresh_private_user_message(self):
         challenge = 'a' * 64
@@ -42,8 +27,7 @@ class TelegramBridgeTests(unittest.TestCase):
         self.assertIsNone(pairing_request({'message': {**message, 'from': {'id': 123, 'is_bot': True}}}, 1000))
         self.assertIsNone(pairing_request({'message': {**message, 'chat': {'id': 123, 'type': 'group'}}}, 1000))
         user = {**message, 'text': 'rezeptgarten-ping ' + 'b' * 32}
-        self.assertIsNone(reply_for({'message': user}, 123, 1000))
-        self.assertIsNotNone(reply_for({'message': user}, 123, 1000, is_bot=False))
+        self.assertIsNotNone(reply_for({'message': user}, 123, 1000))
 
 
 if __name__ == '__main__':

@@ -38,19 +38,13 @@ class TelegramWeekTests(unittest.TestCase):
             android_key = os.urandom(32)
             Vault(directory, 'telegram-server-bot.enc').write({
                 'client_id': 111, 'cart_key': base64.b64encode(key).decode(), 'cart_owner': owner,
-                'android_pair': {'client_id': 333, 'cart_key': base64.b64encode(android_key).decode(), 'cart_owner': owner},
+                'android_user_pair': {'client_id': 333, 'cart_key': base64.b64encode(android_key).decode(), 'cart_owner': owner},
             })
             week = {'today':'2026-01-05','days':[{'date':f'2026-01-{i:02}','recipes':[]} for i in range(5,12)], 'shelf':[]}
             week['days'][0]['recipes'] = [{'name':'Testgericht'}]
             app.state.sync.calendar_week = AsyncMock(return_value=week)
             with TestClient(app, client=('127.0.0.1', 1234)) as client:
                 nonce = 'a' * 32
-                response = client.get('/api/telegram-week', params={'day':'2026-01-05','nonce':nonce,'compressed':'true'})
-                self.assertEqual(response.status_code, 200)
-                self.assertNotIn('Testgericht', response.text)
-                packed = base64.b64decode(response.json()['data'])
-                decoded = AESGCM(key).decrypt(packed[:12], packed[12:], nonce.encode())
-                self.assertEqual(json.loads(zlib.decompress(decoded))['days'][0]['recipes'], ['Testgericht'])
                 params = {'day': '2026-01-05', 'nonce': nonce, 'client_id': 333}
                 response = client.get('/api/telegram-week', params=params)
                 self.assertEqual(response.status_code, 200)

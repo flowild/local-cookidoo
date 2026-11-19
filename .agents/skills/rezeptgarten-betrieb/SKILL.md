@@ -9,27 +9,17 @@ Die bereitgestellte App-Version steht in `app/version.py` und kann über
 `/api/health` geprüft werden. Versionsänderungen nach Prüfung und Deployment
 mit den zugehörigen Änderungen committen und nach `origin/main` pushen.
 
-Der Telegram-Nachrichtentest verwendet den systemd-Dienst `rezeptgarten-telegram`
-auf dem Proxmox-Host. Er liest die verschlüsselte Bot-Konfiguration über `pct exec`
-aus LXC 103, verarbeitet ausschließlich frische private Anfragen
-zugeordneter Bots und speichert seinen Telegram-Offset unter
-`/var/lib/rezeptgarten-telegram`. Die Bots brauchen Bot-zu-Bot-Freigabe und einen
-eigenen Update-Kanal ohne parallele Webhooks oder weitere Verbraucher. Der Dienst
-arbeitet auf dem Host als root, weil `pct exec` den Containerzugriff voraussetzt;
-er verarbeitet ausschließlich Testanfragen sowie lesende Einkaufswagen- und Wochenanfragen. Der
-Container liest den zum Zeitpunkt der Kopplung zugeordneten Wagen in einer SQLite-
-Lesetransaktion und verschlüsselt ihn vor der Weitergabe an den Host mit AES-256-GCM.
-Keine Tokens, Schlüssel oder Nachrichten protokollieren.
-Wochenanfragen verwenden die nur über Loopback erreichbare verschlüsselte App-API;
-die App nutzt den bestehenden Cookidoo-Client und prüft das gekoppelte Konto.
-Die Bridge wählt die Kopplung nach Absender-ID und Typ. Für Android bestätigt
-ein privater Dialog eine kurzlebige Kennung der zuvor im Heimnetz gestarteten
-Benutzerkopplung. Vor jeder Antwort prüft die Bridge die Kopplung erneut.
-Bridge-Änderungen auch auf dem Host unter
-`/opt/rezeptgarten-telegram/telegram_bridge.py` bereitstellen und den
-vorhandenen Dienst neu starten. Der Browser nutzt denselben Dienst weiterhin
-über seine Bot-Kopplung. Ein alter Android-Bot-Kopplungsplatz bleibt bis zur
-neuen Benutzerkopplung lesbar und wird bei dieser entfernt.
+Der Dienst `rezeptgarten-telegram` auf dem Proxmox-Host liest das verschlüsselte
+Server-Bot-Token über `pct exec` aus LXC 103 und verarbeitet ausschließlich frische
+private Anfragen des bestätigten Android-Telegram-Benutzerkontos. Eine kurzlebige
+Kennung bestätigt die im Heimnetz gestartete Kopplung. Vor jeder Antwort wird die
+Kopplung erneut geprüft. Einkaufswagen und Woche werden kontogebunden im Container
+gelesen und vor der Weitergabe mit AES-256-GCM verschlüsselt. Der Telegram-Offset
+liegt unter `/var/lib/rezeptgarten-telegram`. Keine Tokens, Schlüssel oder Nachrichten
+protokollieren. Bridge-Änderungen auf dem Host unter
+`/opt/rezeptgarten-telegram/telegram_bridge.py` bereitstellen und den Dienst neu
+starten. Der Server entfernt beim Start alte Bot-Kopplungen und behält eine bereits
+bestätigte Android-Benutzerkopplung.
 
 Die bestehende private Instanz läuft unter `https://192.168.184.30` im unprivilegierten
 LXC 103 `cookidoo-manager`, Zeitzone `Europe/Berlin`. Backend: `/opt/cookidoo-manager/source`,
