@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **0.18.0, Build 14** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Rezeptgarten **0.18.1, Build 15** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -119,8 +119,9 @@ Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
 7. **Prüfen und veröffentlichen.** Mit isolierten Daten zunächst Anmeldung,
    Kopplung und den bestehenden Web-Zugriff mit isolierten Daten prüfen.
    Automatisierte Tests decken Netzwechsel, nicht erreichbaren Heimnetzserver,
-   Kontowechsel, unvollständige und veränderte Antworten ab. Eine Geräteabnahme
-   mit ADB wurde vom Nutzer abgelehnt. Dann
+   Kontowechsel, unvollständige und veränderte Antworten ab. Der Nutzer lehnte
+   das Anschließen eines physischen Android-Geräts ab. Ein isolierter Emulator
+   prüft den Start und die Einrichtung ohne persönliche Zugangsdaten. Dann
    die kompatible Bridge auf dem Proxmox-Host und die signierte APK im Testkanal
    bereitstellen. Vor der regulären Freigabe Web-Kopplung, Testdownload und
    Upgrade einer vorhandenen Android-Installation abnehmen.
@@ -241,7 +242,16 @@ Signatur entspricht dem bisherigen Testkanal. Analyse, 17 Flutter-Tests,
 132 Backendtests auf dem Server, Paketdaten, ARM64-Architektur, Update-Manifest
 und SHA-256 des HTTPS-Downloads wurden geprüft. Server und Telegram-Bridge sind
 bereitgestellt. Eine Anmeldung und ein Netzwechsel auf einem Android-Gerät wurden
-auf Nutzerwunsch nicht durchgeführt.
+auf Nutzerwunsch nicht durchgeführt. Ein anschließender Emulatorversuch zeigte
+einen Absturz beim Start, weil ein Android-Systemdienst zu früh initialisiert
+wurde. Build 15 von 0.18.1 korrigiert diesen Fehler. Ein separater x86-Emulator-
+Build desselben App-Stands startet, zeigt die WLAN-Berechtigung und fordert
+fehlende Telegram-Zugangsdaten an. Mit synthetischen Werten erreicht TDLib den
+Telefonnummer-Schritt. Im virtuellen Fremd-WLAN bleiben Listen, Rezepte und
+Vorrat gesperrt. Die ARM64-APK selbst konnte im x86-Emulator wegen einer nicht
+unterstützten ARM-Instruktion der Emulatorübersetzung nicht vollständig gestartet
+werden. Eine echte Telegram-Anmeldung und ein Test auf einem physischen Gerät
+wurden nicht durchgeführt.
 
 ## Offene Arbeiten vor der regulären Freigabe
 

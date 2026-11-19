@@ -12,7 +12,7 @@ class MainActivity : FlutterActivity() {
     private var pendingExport: Export? = null
     private val exportRequestCode = 2173
     private val apkUpdater = ApkUpdater(this)
-    private val wifiStatus = WifiStatus(this)
+    private val wifiStatus by lazy { WifiStatus(this) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

@@ -15,6 +15,9 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Start und beim Einkaufswagen gilt die 2,5-Sekunden-Frist für den
   Erreichbarkeitscheck. Schreibvorgänge folgen der gemeinsamen
   Bestätigungs- und Konfliktbehandlung.
+- Android-Systemdienste erst nach dem Anhängen der Activity initialisieren.
+  Den App-Start bei Änderungen am nativen Einstieg zusätzlich auf einer
+  isolierten Android-Laufzeit prüfen, sofern eine verfügbar ist.
 - Die APK enthält weder Bot-zu-Bot-Kommunikation noch Gemini oder eine
   Google-API-Schlüsselverwaltung. Die browserseitigen Integrationen gehören
   zur Web-App. Änderungen an den gemeinsamen APIs mit dem Betriebs- und
