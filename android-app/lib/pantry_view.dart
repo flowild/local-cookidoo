@@ -11,11 +11,13 @@ class PantryView extends StatefulWidget {
     required this.api,
     required this.collapsed,
     this.refreshCount = 0,
+    this.onSync,
   });
 
   final RezeptgartenApi api;
   final Set<int> collapsed;
   final int refreshCount;
+  final Future<void> Function()? onSync;
 
   @override
   State<PantryView> createState() => _PantryViewState();
@@ -304,7 +306,11 @@ class _PantryViewState extends State<PantryView> {
               .where((category) => itemsByCategory.containsKey(category['id']))
               .toList();
     return RefreshIndicator(
-      onRefresh: () => _writing ? Future<void>.value() : _load(),
+      onRefresh: () async {
+        if (_writing) return;
+        await widget.onSync?.call();
+        if (mounted) await _load();
+      },
       child: ReorderableListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),

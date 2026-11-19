@@ -57,6 +57,7 @@ class WeekView extends StatefulWidget {
     required this.cartCountChanged,
     this.statusChanged,
     this.refreshCount = 0,
+    this.onSync,
   });
 
   final RezeptgartenApi api;
@@ -64,6 +65,7 @@ class WeekView extends StatefulWidget {
   final ValueChanged<int> cartCountChanged;
   final ValueChanged<Json>? statusChanged;
   final int refreshCount;
+  final Future<void> Function()? onSync;
 
   @override
   State<WeekView> createState() => _WeekViewState();
@@ -927,7 +929,11 @@ class _WeekViewState extends State<WeekView> {
   Widget build(BuildContext context) {
     final monday = _monday;
     return RefreshIndicator(
-      onRefresh: () => _busy || _loading ? Future<void>.value() : _load(),
+      onRefresh: () async {
+        if (_busy || _loading) return;
+        await widget.onSync?.call();
+        if (mounted) await _load();
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {

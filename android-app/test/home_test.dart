@@ -6,6 +6,30 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/main.dart';
 
 void main() {
+  testWidgets('starts a sync on opening and on pull to refresh', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _SyncTestApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pump();
+    expect(api.syncs, 1);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    final refresh = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator).first,
+    );
+    final pending = refresh.onRefresh();
+    await tester.pump();
+    expect(api.syncs, 2);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
+    await pending;
+  });
+
   testWidgets('week action opens a cart with a persistent checkbox', (
     tester,
   ) async {
@@ -75,6 +99,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.cartItem, isNull);
   });
+}
+
+class _SyncTestApi extends _TestApi {
+  int syncs = 0;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path.startsWith('/api/calendar/badges?')) return {'items': <Json>[]};
+    if (path == '/api/status') {
+      return {
+        'connected': true,
+        'sync': {'running': false},
+        'cart_recipe_count': 0,
+      };
+    }
+    return super.get(path, timeout: timeout);
+  }
+
+  @override
+  Future<dynamic> write(String method, String path, [Json? body]) async {
+    if (method == 'POST' && path == '/api/sync') {
+      syncs++;
+      return {'started': true};
+    }
+    return super.write(method, path, body);
+  }
 }
 
 class _TestApi extends RezeptgartenApi {

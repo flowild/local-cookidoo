@@ -45,8 +45,14 @@ werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 „Meine Woche“ auf Android verwendet die serverseitige Warteschlange und die
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
-Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo und
-Synchronisierung. Dunkelmodus und Akzentfarbe
+Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo.
+Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
+Heimnetz und beim Herunterziehen einer Ansicht. Die App zeigt laufenden Abgleich
+und Fehler an. Außerhalb des Heimnetzes aktualisiert Herunterziehen die lesende
+Telegram-Ansicht; ein Cookidoo-Abgleich wird dort nicht ausgelöst. Der frühere
+zeitgesteuerte Sammlungsabgleich ist serverweit entfernt, bestehende Intervalle
+haben keine Wirkung. Die separate Warteschlange für Wochenänderungen bleibt
+aktiv. Dunkelmodus und Akzentfarbe
 werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
 Android nutzt bei verbundenem WLAN `ThomasWlan` und erreichbarem Server den
 lokalen HTTPS-Zugang. Andernfalls stehen nach Telegram-Benutzeranmeldung und
@@ -128,7 +134,7 @@ Wochenrezepte öffnen intern; fehlen sie in der lokalen Sammlung, lädt die App 
 Details bei Bedarf aus Cookidoo.
 Nicht zugeordnete Cookidoo-Katalogrezepte aus angesehenen Wochen werden nach einer
 erneuten Prüfung in der eigenen Cookidoo-Liste „Rezeptgarten – Wochenrezepte ohne
-Liste“ gesammelt; danach wird die lokale Sammlung synchronisiert. Eigene Kreationen
+Liste“ gesammelt; der nächste angestoßene Abgleich aktualisiert die lokale Sammlung. Eigene Kreationen
 bleiben in „Meine Kreationen“.
 
 Persönliche Notizen von Katalogrezepten werden direkt aus Cookidoo geladen und dort

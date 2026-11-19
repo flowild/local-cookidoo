@@ -306,20 +306,31 @@ class _TelegramViewState extends State<TelegramView> {
   @override
   Widget build(BuildContext context) => FutureBuilder<Json>(
     future: snapshot,
-    builder: (context, result) => ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (widget.notice != null) Text(widget.notice!),
-        if (result.connectionState != ConnectionState.done)
-          const Center(child: CircularProgressIndicator())
-        else if (result.hasError) ...[
-          const Text('Telegram-Daten konnten nicht geladen werden.'),
-          TextButton(onPressed: _refresh, child: const Text('Erneut laden')),
-        ] else if (widget.cart)
-          _cart(result.requireData)
-        else
-          _week(result.requireData),
-      ],
+    builder: (context, result) => RefreshIndicator(
+      onRefresh: () async {
+        _refresh();
+        try {
+          await snapshot;
+        } on Exception {
+          /* The view shows the error. */
+        }
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (widget.notice != null) Text(widget.notice!),
+          if (result.connectionState != ConnectionState.done)
+            const Center(child: CircularProgressIndicator())
+          else if (result.hasError) ...[
+            const Text('Telegram-Daten konnten nicht geladen werden.'),
+            TextButton(onPressed: _refresh, child: const Text('Erneut laden')),
+          ] else if (widget.cart)
+            _cart(result.requireData)
+          else
+            _week(result.requireData),
+        ],
+      ),
     ),
   );
 }

@@ -15,6 +15,11 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Start und beim Einkaufswagen gilt die 2,5-Sekunden-Frist für den
   Erreichbarkeitscheck. Schreibvorgänge folgen der gemeinsamen
   Bestätigungs- und Konfliktbehandlung.
+- Bei Öffnen und Rückkehr in die Android-App startet im Heimnetz ein
+  Sammlungsabgleich; Herunterziehen einer Ansicht startet ihn ebenfalls
+  und lädt nach Abschluss die Ansicht neu. Im Telegram-Modus lädt die
+  Geste nur die verschlüsselte Momentaufnahme neu. Es gibt keinen
+  zeitgesteuerten Sammlungsabgleich und keine Intervall-Einstellung.
 - Android-Systemdienste erst nach dem Anhängen der Activity initialisieren.
   Den App-Start bei Änderungen am nativen Einstieg zusätzlich auf einer
   isolierten Android-Laufzeit prüfen, sofern eine verfügbar ist.

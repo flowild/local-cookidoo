@@ -89,10 +89,7 @@ try:
         expect(page.locator('#google-key-form')).to_be_visible()
         expect(page.locator('[data-telegram-form="server"]')).to_be_visible()
         expect(page.locator('[data-telegram-form="client"]')).to_have_count(0)
-        page.locator('#sync-hours').select_option('24')
-        expect(page.locator('#toast')).to_contain_text('gespeichert')
-        status = page.request.get('http://127.0.0.1:8901/api/status').json()
-        assert status['sync_hours'] == 24, status
+        expect(page.locator('#sync-hours')).to_have_count(0)
         page.locator('[data-action="install-help"]').click()
         expect(page.locator('#install-dialog')).to_be_visible()
         expect(page.locator('#certificate-link')).to_be_visible()

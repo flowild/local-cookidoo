@@ -115,7 +115,6 @@ class SyncService:
         self.lock = asyncio.Lock()
         self.cart_transferring = False
         self.task = None
-        self.scheduler = None
         self.calendar_scheduler = None
         self.session = None
         self.client = None
@@ -141,12 +140,11 @@ class SyncService:
             logger.warning('Cannot restore Cookidoo session: %s', type(error).__name__)
             self.state['message'] = 'Bitte verbinde dein Cookidoo-Konto erneut.'
             self.client = None
-        self.scheduler = asyncio.create_task(self.schedule())
         self.recover_calendar_queue()
         self.calendar_scheduler = asyncio.create_task(self.schedule_calendar_moves())
 
     async def close(self):
-        for task in (self.scheduler, self.calendar_scheduler, self.task):
+        for task in (self.calendar_scheduler, self.task):
             if task and not task.done():
                 task.cancel()
                 try:
@@ -663,7 +661,6 @@ class SyncService:
         """Save unfiled catalogue recipes from a viewed week in a Cookidoo list."""
         if self.lock.locked() or self.state['running']:
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
-        should_sync = False
         async with self.lock:
             if not self.client:
                 raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
@@ -708,20 +705,13 @@ class SyncService:
                 if not isinstance(created.id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', created.id):
                     raise ValueError('Die Erstellung der Cookidoo-Liste konnte nicht bestätigt werden. Bitte prüfe deine Listen in Cookidoo.')
                 target = {'source_id': created.id, 'name': candidate}
-                should_sync = True
             self.database.set('week_unfiled_collection', {'owner': owner, 'id': target['source_id']})
             if missing:
                 updated = await self.client.add_recipes_to_custom_collection(target['source_id'], missing)
                 confirmed = {str(recipe.id) for chapter in (updated.chapters or []) for recipe in (chapter.recipes or [])}
                 if not set(missing).issubset(confirmed):
                     raise ValueError('Die Cookidoo-Liste wurde geändert, aber die Rezepte konnten nicht bestätigt werden. Bitte prüfe die Liste in Cookidoo.')
-                should_sync = True
-            elif candidates:
-                # Refresh the local snapshot if Cookidoo already has these recipes in a list.
-                should_sync = True
-        if should_sync:
-            self.begin()
-        return {'added': len(missing), 'sync_started': should_sync}
+        return {'added': len(missing), 'sync_started': False}
 
     async def load_recipe_tips(self, recipe_id):
         source_id = recipe_id.removeprefix('creation:')
@@ -950,16 +940,6 @@ class SyncService:
                     logger.warning('Calendar verification failed: %s', type(error).__name__)
                     verified = False
                 return {'date': day.isoformat(), 'verified': verified}
-
-    async def schedule(self):
-        while True:
-            await asyncio.sleep(60)
-            hours = self.database.get('sync_hours', 6)
-            if not hours or not self.client or self.state['running']:
-                continue
-            last = self.database.get('last_attempt')
-            if not last or datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(hours=hours):
-                self.begin()
 
     def begin(self, manual=False):
         if self.state['running']:

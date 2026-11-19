@@ -166,11 +166,8 @@ void main() {
       expect(api.account?['email'], 'test@example.invalid');
       expect(api.account?.containsKey('password'), isFalse);
 
-      await tester.tap(find.text('Alle 6 Stunden'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Nur manuell').last);
-      await tester.pumpAndSettle();
-      expect(api.hours, 0);
+      expect(find.text('Synchronisierung'), findsNothing);
+      expect(find.text('Automatischer Abgleich'), findsNothing);
 
       await tester.tap(find.text('Sammlung als JSON exportieren'));
       await tester.pumpAndSettle();
@@ -188,14 +185,12 @@ class _SettingsApi extends RezeptgartenApi {
   _SettingsApi() : super(client: HttpClient());
 
   Json? account;
-  int hours = 6;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async => switch (path) {
     '/api/status' => {
       'account': account,
       'connected': account != null,
-      'sync_hours': hours,
       'telegram_server_bot_set': true,
       'google_api_key_set': true,
     },
@@ -217,8 +212,6 @@ class _SettingsApi extends RezeptgartenApi {
       case ('POST', '/api/connect'):
         expect(body?['password'], 'fixture-password');
         account = {'email': body?['email'], 'region': body?['region']};
-      case ('POST', '/api/settings'):
-        hours = body?['sync_hours'] as int;
       default:
         throw StateError('Unexpected write: $method $path');
     }

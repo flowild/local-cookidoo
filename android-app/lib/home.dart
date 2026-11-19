@@ -35,7 +35,8 @@ class RezeptgartenHome extends StatefulWidget {
   State<RezeptgartenHome> createState() => _RezeptgartenHomeState();
 }
 
-class _RezeptgartenHomeState extends State<RezeptgartenHome> {
+class _RezeptgartenHomeState extends State<RezeptgartenHome>
+    with WidgetsBindingObserver {
   static const shortRead = Duration(milliseconds: 2500);
   static const areas = [
     'Übersicht',
@@ -60,6 +61,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   bool syncPending = false;
   bool? connected;
   bool syncRunning = false;
+  bool startupSyncAttempted = false;
+  bool wasBackgrounded = false;
   Timer? syncPoll;
   int viewRefresh = 0;
   final pantryCollapsed = <int>{};
@@ -74,7 +77,21 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.connection?.addListener(_connectionChanged);
+    if (_local) unawaited(_startupSync());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      wasBackgrounded = true;
+    } else if (state == AppLifecycleState.resumed && wasBackgrounded) {
+      wasBackgrounded = false;
+      startupSyncAttempted = false;
+      if (widget.connection == null) unawaited(_startupSync());
+    }
   }
 
   void _connectionChanged() {
@@ -85,6 +102,25 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
       viewRefresh++;
       data = _load();
     });
+    if (_local) unawaited(_startupSync());
+  }
+
+  Future<void> _startupSync() async {
+    if (startupSyncAttempted || !_local) return;
+    startupSyncAttempted = true;
+    try {
+      final status = await api.get('/api/status', timeout: shortRead) as Json;
+      if (!mounted) return;
+      if (!_local) {
+        startupSyncAttempted = false;
+        return;
+      }
+      _adoptStatus(status);
+      if (status['connected'] == true) await _beginSync(notify: false);
+    } on Exception {
+      startupSyncAttempted = false;
+      // Normal view loading reports connection errors.
+    }
   }
 
   Future<void> _networkPermission() async {
@@ -154,14 +190,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
           appearance: widget.appearance,
           telegram: widget.telegram,
           connection: widget.connection,
+          onSync: _syncFromPull,
         ),
       ),
     );
     if (mounted && !busy) await _refresh();
   }
 
-  Future<void> _beginSync() async {
-    if (syncPending || syncRunning || busy) return;
+  Future<void> _beginSync({bool notify = true}) async {
+    if (!_local || syncPending || syncRunning || busy) return;
     setState(() => syncPending = true);
     String notice;
     try {
@@ -178,7 +215,26 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
     }
     if (!mounted) return;
     setState(() => syncPending = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
+    if (notify || !syncRunning) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(notice)));
+    }
+  }
+
+  Future<void> _pullRefresh() async {
+    await _syncFromPull();
+    if (mounted) await _refresh();
+  }
+
+  Future<void> _syncFromPull() async {
+    await _beginSync();
+    final deadline = DateTime.now().add(const Duration(minutes: 10));
+    while (mounted &&
+        _local &&
+        (syncPending || syncRunning) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
   }
 
   void _monitorSync() {
@@ -187,7 +243,19 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
       try {
         final result = await api.get('/api/status', timeout: shortRead) as Json;
         if (!mounted) return;
+        final wasRunning = syncRunning;
         _adoptStatus(result);
+        final last = result['last_result'];
+        if (wasRunning &&
+            !syncRunning &&
+            last is Json &&
+            last['phase'] == 'error') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(text(last['message'], 'Abgleich fehlgeschlagen.')),
+            ),
+          );
+        }
         if (!syncRunning && ModalRoute.of(context)?.isCurrent == true) {
           await _refresh();
         }
@@ -276,6 +344,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.connection?.removeListener(_connectionChanged);
     syncPoll?.cancel();
     recipeSearch.dispose();
@@ -858,16 +927,19 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                     1 => RecipeCollections(
                       api: api,
                       openRecipe: _recipe,
+                      onSync: _syncFromPull,
                       refreshCount: viewRefresh,
                     ),
                     2 => RecipeBrowser(
                       api: api,
                       openRecipe: _recipe,
+                      onSync: _syncFromPull,
                       searchFocus: recipeSearch,
                       refreshCount: viewRefresh,
                     ),
                     3 => WeekView(
                       api: api,
+                      onSync: _syncFromPull,
                       refreshCount: viewRefresh,
                       openRecipe: (recipe, calendar) =>
                           _recipe(recipe, calendar: calendar),
@@ -880,11 +952,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome> {
                     ),
                     5 => PantryView(
                       api: api,
+                      onSync: _syncFromPull,
                       collapsed: pantryCollapsed,
                       refreshCount: viewRefresh,
                     ),
                     _ => RefreshIndicator(
-                      onRefresh: _refresh,
+                      onRefresh: _pullRefresh,
                       child: ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),

@@ -22,6 +22,7 @@ class RecipeBrowser extends StatefulWidget {
     this.collection,
     this.refreshCount = 0,
     this.searchFocus,
+    this.onSync,
   });
 
   final RezeptgartenApi api;
@@ -29,6 +30,7 @@ class RecipeBrowser extends StatefulWidget {
   final Json? collection;
   final int refreshCount;
   final FocusNode? searchFocus;
+  final Future<void> Function()? onSync;
 
   @override
   State<RecipeBrowser> createState() => _RecipeBrowserState();
@@ -278,7 +280,10 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
 
   @override
   Widget build(BuildContext context) => RefreshIndicator(
-    onRefresh: _fetch,
+    onRefresh: () async {
+      await widget.onSync?.call();
+      if (mounted) await _fetch();
+    },
     child: CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
@@ -724,10 +729,12 @@ class RecipeCollections extends StatefulWidget {
     required this.api,
     required this.openRecipe,
     this.refreshCount = 0,
+    this.onSync,
   });
   final RezeptgartenApi api;
   final OpenRecipe openRecipe;
   final int refreshCount;
+  final Future<void> Function()? onSync;
 
   @override
   State<RecipeCollections> createState() => _RecipeCollectionsState();
@@ -783,6 +790,7 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
               api: widget.api,
               openRecipe: widget.openRecipe,
               collection: list,
+              onSync: widget.onSync,
             ),
           ),
         ),
@@ -823,7 +831,10 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
       final result = snapshot.data;
       final lists = result is Json ? objects(result['items']) : <Json>[];
       return RefreshIndicator(
-        onRefresh: _reload,
+        onRefresh: () async {
+          await widget.onSync?.call();
+          if (mounted) await _reload();
+        },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),

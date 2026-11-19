@@ -325,10 +325,10 @@ class AppTests(unittest.TestCase):
         payload = {'day':'2026-01-05'}
         self.assertEqual(self.client.post('/api/calendar/save-unfiled', json=payload).status_code, 403)
         response = self.client.post('/api/calendar/save-unfiled', json=payload, headers=ORIGIN)
-        self.assertEqual(response.json(), {'added':1, 'sync_started':True})
+        self.assertEqual(response.json(), {'added':1, 'sync_started':False})
         service.client.add_recipes_to_custom_collection.assert_awaited_once_with('new-list', ['r-unfiled'])
         self.assertTrue(self.app.state.database.get('week_unfiled_collection')['id'] == 'new-list')
-        service.begin.assert_called_once()
+        service.begin.assert_not_called()
 
     def test_unfiled_week_recipe_does_not_duplicate_existing_cookidoo_membership(self):
         from unittest.mock import Mock
@@ -340,7 +340,7 @@ class AppTests(unittest.TestCase):
         service.collections = AsyncMock(return_value=[{'kind':'custom', 'source_id':'original', 'name':'Existing', 'members':[{'id':'r-unfiled'}]}, {'kind':'custom', 'source_id':'archive', 'name':'Archive', 'members':[]}])
         service.begin = Mock(return_value=True)
         response = self.client.post('/api/calendar/save-unfiled', json={'day':'2026-01-05'}, headers=ORIGIN)
-        self.assertEqual(response.json(), {'added':0, 'sync_started':True})
+        self.assertEqual(response.json(), {'added':0, 'sync_started':False})
         service.client.add_custom_collection.assert_not_awaited()
         service.client.add_recipes_to_custom_collection.assert_not_awaited()
 
@@ -353,7 +353,7 @@ class AppTests(unittest.TestCase):
         service.collections = AsyncMock(return_value=[])
         service.begin = Mock(return_value=True)
         response = self.client.post('/api/calendar/save-unfiled', json={'day':'2026-01-05'}, headers=ORIGIN)
-        self.assertEqual(response.json(), {'added':0, 'sync_started':True})
+        self.assertEqual(response.json(), {'added':0, 'sync_started':False})
         service.client.add_custom_collection.assert_awaited_once()
         service.client.add_recipes_to_custom_collection.assert_not_awaited()
 
@@ -1344,6 +1344,18 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.service.close()
         self.tmp.cleanup()
+
+    async def test_old_interval_does_not_schedule_a_collection_sync(self):
+        self.db.set('sync_hours', 1)
+        created = []
+        create_task = asyncio.create_task
+        def record(coro):
+            created.append(coro.cr_code.co_name)
+            return create_task(coro)
+        with patch('app.sync.asyncio.create_task', side_effect=record):
+            await self.service.start()
+        self.assertEqual(created, ['schedule_calendar_moves'])
+        self.assertFalse(self.service.state['running'])
 
     async def test_cookidoo_actions_use_selected_version_and_pantry(self):
         category = self.db.pantry()['categories'][0]['id']

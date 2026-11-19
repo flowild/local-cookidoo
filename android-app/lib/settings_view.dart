@@ -10,12 +10,6 @@ import 'telegram_setup.dart';
 import 'connection.dart';
 
 const _regions = {'de': 'Deutschland', 'at': 'Österreich', 'ch': 'Schweiz'};
-const _intervals = {
-  0: 'Nur manuell',
-  1: 'Jede Stunde',
-  6: 'Alle 6 Stunden',
-  24: 'Einmal täglich',
-};
 
 class SettingsView extends StatefulWidget {
   const SettingsView({
@@ -24,11 +18,13 @@ class SettingsView extends StatefulWidget {
     required this.appearance,
     this.telegram,
     this.connection,
+    this.onSync,
   });
   final RezeptgartenApi api;
   final AppearanceController appearance;
   final TelegramService? telegram;
   final ConnectionController? connection;
+  final Future<void> Function()? onSync;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -286,16 +282,6 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _sync() => _perform(() async {
-    if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
-    final response = await widget.api.write('POST', '/api/sync') as Json;
-    _message(
-      response['started'] == true
-          ? 'Synchronisierung gestartet.'
-          : 'Die Synchronisierung läuft bereits.',
-    );
-  }, refresh: true);
-
   Future<void> _export() => _perform(() async {
     if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
     final bytes = await widget.api.exportCollection();
@@ -380,13 +366,8 @@ class _SettingsViewState extends State<SettingsView> {
   List<Widget> _serverOptions(Json status) {
     final account = status['account'] as Json?;
     final sync = status['sync'] as Json?;
-    final stats = status['stats'] as Json?;
-    final last = status['last_result'] as Json?;
     final connected = status['connected'] == true;
     final running = sync?['running'] == true;
-    final interval = status['sync_hours'];
-    final done = sync?['done'];
-    final total = sync?['total'];
     return [
       _card('Dein Cookidoo-Konto', [
         if (connected) ...[
@@ -406,52 +387,6 @@ class _SettingsViewState extends State<SettingsView> {
             child: const Text('Verbindung trennen'),
           ),
       ]),
-      _card('Synchronisierung', [
-        InputDecorator(
-          decoration: const InputDecoration(
-            labelText: 'Automatischer Abgleich',
-          ),
-          child: DropdownButton<int>(
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            value: _intervals.containsKey(interval) ? interval as int : 6,
-            onChanged: _busy
-                ? null
-                : (hours) {
-                    if (hours != null) {
-                      unawaited(
-                        _write('POST', '/api/settings', {
-                          'sync_hours': hours,
-                        }, 'Synchronisierungsintervall gespeichert.'),
-                      );
-                    }
-                  },
-            items: [
-              for (final entry in _intervals.entries)
-                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-            ],
-          ),
-        ),
-        if (stats?['last_sync'] case final String value)
-          Text('Letzter erfolgreicher Abgleich: ${formatSyncDate(value)}'),
-        if (running) ...[
-          Text(text(sync?['message'], 'Synchronisierung läuft …')),
-          LinearProgressIndicator(
-            value: done is num && total is num && total > 0
-                ? (done / total).clamp(0, 1).toDouble()
-                : null,
-          ),
-        ] else if (last?['phase'] == 'error')
-          Text(
-            text(last?['message']),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        FilledButton.icon(
-          onPressed: _busy || !connected || running ? null : _sync,
-          icon: const Icon(Icons.sync),
-          label: const Text('Jetzt synchronisieren'),
-        ),
-      ]),
       _card('Deine Sammlung', [
         FilledButton.icon(
           onPressed: _busy ? null : _export,
@@ -466,81 +401,89 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Einstellungen')),
     body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _appearance(),
-          if (_loading || _busy) const LinearProgressIndicator(),
-          if (_error != null) ...[
-            Text(_error!),
-            TextButton(
-              onPressed: _busy ? null : () => _load(showLoading: true),
-              child: const Text('Erneut laden'),
-            ),
-          ],
-          if (_status case final Json status) ..._serverOptions(status),
-          if (widget.connection case final ConnectionController connection)
-            _card('Heimnetz', [
-              const Text(
-                'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
-              ),
+      child: RefreshIndicator(
+        onRefresh: () async {
+          if (_busy || !_local) return;
+          await widget.onSync?.call();
+          if (mounted) await _load();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            _appearance(),
+            if (_loading || _busy) const LinearProgressIndicator(),
+            if (_error != null) ...[
+              Text(_error!),
               TextButton(
-                onPressed: connection.requestPermission,
-                child: const Text('WLAN-Erkennung einrichten'),
+                onPressed: _busy ? null : () => _load(showLoading: true),
+                child: const Text('Erneut laden'),
               ),
-            ]),
-          if (widget.telegram case final TelegramService telegram)
-            _card('Telegram', [
-              ListenableBuilder(
-                listenable: telegram,
-                builder: (context, _) => Text(
-                  telegram.paired
-                      ? 'Mit Rezeptgarten verbunden'
-                      : 'Noch nicht verbunden',
+            ],
+            if (_status case final Json status) ..._serverOptions(status),
+            if (widget.connection case final ConnectionController connection)
+              _card('Heimnetz', [
+                const Text(
+                  'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
                 ),
-              ),
-              TextButton(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => TelegramSetup(
-                    telegram: telegram,
-                    api: widget.api,
-                    connection: widget.connection,
+                TextButton(
+                  onPressed: connection.requestPermission,
+                  child: const Text('WLAN-Erkennung einrichten'),
+                ),
+              ]),
+            if (widget.telegram case final TelegramService telegram)
+              _card('Telegram', [
+                ListenableBuilder(
+                  listenable: telegram,
+                  builder: (context, _) => Text(
+                    telegram.paired
+                        ? 'Mit Rezeptgarten verbunden'
+                        : 'Noch nicht verbunden',
                   ),
                 ),
-                child: const Text('Telegram einrichten'),
+                TextButton(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => TelegramSetup(
+                      telegram: telegram,
+                      api: widget.api,
+                      connection: widget.connection,
+                    ),
+                  ),
+                  child: const Text('Telegram einrichten'),
+                ),
+              ]),
+            _card('Rezeptgarten für Android', [
+              if (_version != null) Text('Installierte Version $_version'),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _checkingUpdate
+                      ? 'Suche nach Updates …'
+                      : _updateStatus ?? 'Updatestatus unbekannt.',
+                ),
               ),
+              OutlinedButton.icon(
+                onPressed: _checkingUpdate || _downloadingUpdate || !_local
+                    ? null
+                    : _updateAvailable
+                    ? _installUpdate
+                    : _checkUpdate,
+                icon: Icon(_updateAvailable ? Icons.download : Icons.refresh),
+                label: Text(
+                  _updateAvailable
+                      ? 'APK herunterladen und installieren'
+                      : 'Nach Updates suchen',
+                ),
+              ),
+              if (_downloadingUpdate) ...[
+                const LinearProgressIndicator(),
+                const Text('APK wird heruntergeladen und geprüft …'),
+              ],
+              if (_updateMessage != null) Text(_updateMessage!),
             ]),
-          _card('Rezeptgarten für Android', [
-            if (_version != null) Text('Installierte Version $_version'),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                _checkingUpdate
-                    ? 'Suche nach Updates …'
-                    : _updateStatus ?? 'Updatestatus unbekannt.',
-              ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _checkingUpdate || _downloadingUpdate || !_local
-                  ? null
-                  : _updateAvailable
-                  ? _installUpdate
-                  : _checkUpdate,
-              icon: Icon(_updateAvailable ? Icons.download : Icons.refresh),
-              label: Text(
-                _updateAvailable
-                    ? 'APK herunterladen und installieren'
-                    : 'Nach Updates suchen',
-              ),
-            ),
-            if (_downloadingUpdate) ...[
-              const LinearProgressIndicator(),
-              const Text('APK wird heruntergeladen und geprüft …'),
-            ],
-            if (_updateMessage != null) Text(_updateMessage!),
-          ]),
-        ],
+          ],
+        ),
       ),
     ),
   );
