@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,66 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/main.dart';
 
 void main() {
+  testWidgets('main navigation fits a narrow screen with larger text', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _TestApi();
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+      child: RezeptgartenApp(api: api),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a late older status cannot hide a newly started sync', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _StaleStatusApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pump();
+    expect(api.syncs, 1);
+    api.stale.complete({
+      'connected': true,
+      'sync': {'running': false},
+      'cart_recipe_count': 0,
+    });
+    await tester.pump();
+    expect(find.byTooltip('Synchronisierung läuft'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.byTooltip('Synchronisieren'), findsOneWidget);
+  });
+
+  testWidgets('retries a failed sync status read until the sync completes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _SyncTestApi()..keepRunning = true;
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pump();
+    expect(api.syncs, 1);
+    api.statusFailures = 1;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.byTooltip('Synchronisierung läuft'), findsOneWidget);
+    expect(find.textContaining('wird erneut geprüft'), findsOneWidget);
+    api.keepRunning = false;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.byTooltip('Synchronisieren'), findsOneWidget);
+  });
+
   testWidgets('starts a sync on opening and on pull to refresh', (
     tester,
   ) async {
@@ -101,16 +162,33 @@ void main() {
   });
 }
 
+class _StaleStatusApi extends _SyncTestApi {
+  int statusReads = 0;
+  final stale = Completer<Json>();
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) {
+    if (path == '/api/status' && ++statusReads == 2) return stale.future;
+    return super.get(path, timeout: timeout);
+  }
+}
+
 class _SyncTestApi extends _TestApi {
   int syncs = 0;
+  int statusFailures = 0;
+  bool keepRunning = false;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
     if (path.startsWith('/api/calendar/badges?')) return {'items': <Json>[]};
     if (path == '/api/status') {
+      if (statusFailures > 0) {
+        statusFailures--;
+        throw const ApiException('Server vorübergehend nicht erreichbar.');
+      }
       return {
         'connected': true,
-        'sync': {'running': false},
+        'sync': {'running': keepRunning && syncs > 0},
         'cart_recipe_count': 0,
       };
     }

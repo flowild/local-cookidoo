@@ -14,11 +14,13 @@ class RecipeDetail extends StatefulWidget {
     required this.api,
     required this.preview,
     required this.calendar,
+    this.onSync,
   });
 
   final RezeptgartenApi api;
   final Json preview;
   final bool calendar;
+  final Future<void> Function()? onSync;
 
   @override
   State<RecipeDetail> createState() => _RecipeDetailState();
@@ -230,6 +232,20 @@ class _RecipeDetailState extends State<RecipeDetail> {
     if (await _flushNote() && mounted && !_working) await _load(id);
   }
 
+  Future<void> _refresh() async {
+    if (_working || _leaving) return;
+    setState(() => _working = true);
+    try {
+      if (!await _flushNote() || !mounted) return;
+      await widget.onSync?.call();
+      if (mounted) await _load(_id);
+    } on Exception catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _action(Future<void> Function() run) async {
     if (_working) return;
     setState(() => _working = true);
@@ -377,7 +393,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         child: TextField(
           controller: _note,
           focusNode: _noteFocus,
-          readOnly: _original == null,
+          readOnly: _original == null || _working,
           maxLength: 5000,
           minLines: 1,
           maxLines: 8,
@@ -407,158 +423,163 @@ class _RecipeDetailState extends State<RecipeDetail> {
     final versions = objects(recipe['versions']);
     final showVersions =
         versions.length > 1 && versions.any((version) => version['id'] == _id);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        RecipeCard(api: widget.api, recipe: recipe, detail: true),
-        if (lists.isNotEmpty)
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          RecipeCard(api: widget.api, recipe: recipe, detail: true),
+          if (lists.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final list in lists) Chip(label: Text(text(list['name']))),
+              ],
+            ),
+          Text(
+            text(recipe['name'], 'Rezept'),
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          if (showVersions)
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Rezeptversion'),
+              child: DropdownButton<String>(
+                value: _id,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                onChanged: _working ? null : _switchVersion,
+                items: [
+                  for (final (index, version) in versions.indexed)
+                    DropdownMenuItem(
+                      value: text(version['id']),
+                      child: Text(
+                        '${version['origin_recipe_id'] == null ? 'Cookidoo-Original' : 'Meine Kreation $index'}'
+                        '${version['servings'] == null ? '' : ' · ${version['servings']} Portionen'}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Wrap(
             spacing: 8,
             children: [
-              for (final list in lists) Chip(label: Text(text(list['name']))),
+              if (recipe['total_seconds'] case final num seconds)
+                Chip(label: Text('${(seconds / 60).round()} Min. gesamt')),
+              if (recipe['active_seconds'] case final num seconds)
+                Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
+              if (recipe['servings'] != null)
+                Chip(label: Text('${recipe['servings']} Portionen')),
+              if (recipe['difficulty'] != null)
+                Chip(
+                  label: Text(switch (text(recipe['difficulty'])
+                      .toLowerCase()) {
+                    'easy' => 'Einfach',
+                    'medium' => 'Mittel',
+                    'advanced' || 'hard' => 'Anspruchsvoll',
+                    _ => text(recipe['difficulty']),
+                  }),
+                ),
             ],
           ),
-        Text(
-          text(recipe['name'], 'Rezept'),
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        if (showVersions)
-          InputDecorator(
-            decoration: const InputDecoration(labelText: 'Rezeptversion'),
-            child: DropdownButton<String>(
-              value: _id,
-              isExpanded: true,
-              underline: const SizedBox.shrink(),
-              onChanged: _working ? null : _switchVersion,
-              items: [
-                for (final (index, version) in versions.indexed)
-                  DropdownMenuItem(
-                    value: text(version['id']),
-                    child: Text(
-                      '${version['origin_recipe_id'] == null ? 'Cookidoo-Original' : 'Meine Kreation $index'}'
-                      '${version['servings'] == null ? '' : ' · ${version['servings']} Portionen'}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
+          _noteEditor(),
+          _ingredients(recipe),
+          _preparation(recipe),
+          if (_tips case final List<String> tips when tips.isNotEmpty)
+            ExpansionTile(
+              key: ValueKey('tips-$_id'),
+              title: const Text('Tipps'),
+              children: [for (final tip in tips) ListTile(title: Text(tip))],
             ),
-          ),
-        Wrap(
-          spacing: 8,
-          children: [
-            if (recipe['total_seconds'] case final num seconds)
-              Chip(label: Text('${(seconds / 60).round()} Min. gesamt')),
-            if (recipe['active_seconds'] case final num seconds)
-              Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
-            if (recipe['servings'] != null)
-              Chip(label: Text('${recipe['servings']} Portionen')),
-            if (recipe['difficulty'] != null)
-              Chip(
-                label: Text(switch (text(recipe['difficulty']).toLowerCase()) {
-                  'easy' => 'Einfach',
-                  'medium' => 'Mittel',
-                  'advanced' || 'hard' => 'Anspruchsvoll',
-                  _ => text(recipe['difficulty']),
-                }),
+          if (_tipsError != null)
+            TextButton(
+              onPressed: _working ? null : () => _action(_loadTips),
+              child: const Text('Tipps erneut laden'),
+            ),
+          if (!_calendarRecipe) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Zu lokalen Listen hinzufügen',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (_listError != null)
+              TextButton(
+                onPressed: _working ? null : () => _action(_loadLists),
+                child: const Text('Listen erneut laden'),
+              )
+            else if (!_working && _localLists.isEmpty)
+              const Text(
+                'Erstelle zuerst eine lokale Rezeptliste unter „Listen“.',
+              ),
+            for (final list in _localLists)
+              CheckboxListTile(
+                value: memberships.contains(list['id']),
+                title: Text(text(list['name'])),
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: _working
+                    ? null
+                    : (present) => _action(() async {
+                        final listId = Uri.encodeComponent(text(list['id']));
+                        final recipeId = Uri.encodeComponent(_id);
+                        await widget.api.write(
+                          'PUT',
+                          '/api/local-collections/$listId/recipes/$recipeId',
+                          {'present': present},
+                        );
+                        final refreshed =
+                            await widget.api.get(_recipePath) as Json;
+                        if (mounted) setState(() => _recipe = refreshed);
+                      }),
               ),
           ],
-        ),
-        _noteEditor(),
-        _ingredients(recipe),
-        _preparation(recipe),
-        if (_tips case final List<String> tips when tips.isNotEmpty)
-          ExpansionTile(
-            key: ValueKey('tips-$_id'),
-            title: const Text('Tipps'),
-            children: [for (final tip in tips) ListTile(title: Text(tip))],
-          ),
-        if (_tipsError != null)
-          TextButton(
-            onPressed: _working ? null : () => _action(_loadTips),
-            child: const Text('Tipps erneut laden'),
-          ),
-        if (!_calendarRecipe) ...[
           const SizedBox(height: 12),
-          Text(
-            'Zu lokalen Listen hinzufügen',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          if (_listError != null)
-            TextButton(
-              onPressed: _working ? null : () => _action(_loadLists),
-              child: const Text('Listen erneut laden'),
-            )
-          else if (!_working && _localLists.isEmpty)
-            const Text(
-              'Erstelle zuerst eine lokale Rezeptliste unter „Listen“.',
-            ),
-          for (final list in _localLists)
-            CheckboxListTile(
-              value: memberships.contains(list['id']),
-              title: Text(text(list['name'])),
-              controlAffinity: ListTileControlAffinity.leading,
-              onChanged: _working
-                  ? null
-                  : (present) => _action(() async {
-                      final listId = Uri.encodeComponent(text(list['id']));
-                      final recipeId = Uri.encodeComponent(_id);
-                      await widget.api.write(
-                        'PUT',
-                        '/api/local-collections/$listId/recipes/$recipeId',
-                        {'present': present},
-                      );
-                      final refreshed =
-                          await widget.api.get(_recipePath) as Json;
-                      if (mounted) setState(() => _recipe = refreshed);
-                    }),
-            ),
-        ],
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _working
-              ? null
-              : () => _action(() async {
-                  final result = await widget.api.write(
-                    'POST',
-                    '$_recipePath/plan-today${_calendarRecipe ? '?calendar=true' : ''}',
-                  ) as Json;
-                  if (mounted) {
-                    _message(
-                      result['verified'] == true ? 'Für heute eingeplant.' : 'Die Planung konnte nicht bestätigt werden. Bitte prüfe den Kalender in Cookidoo.',
-                    );
-                  }
-                }),
-          child: const Text('Heute kochen'),
-        ),
-        FilledButton(
-          onPressed: _working
-              ? null
-              : () => _action(() async {
-                  final result = await widget.api.write(
-                    'POST',
-                    '/api/cart/recipes',
-                    {'recipe_id': _id, 'calendar': _calendarRecipe},
-                  ) as Json;
-                  if (mounted) {
-                    _message(
-                      result['added'] == false
-                          ? 'Rezept bereits im Einkaufswagen.'
-                          : 'Rezept im Einkaufswagen.',
-                    );
-                  }
-                }),
-          child: const Text('Zum Einkaufswagen hinzufügen'),
-        ),
-        if (recipe['source_url'] case final String url)
-          OutlinedButton(
+          FilledButton(
             onPressed: _working
                 ? null
                 : () => _action(() async {
-                    await _links.invokeMethod<void>('openCookidoo', url);
+                    final result = await widget.api.write(
+                      'POST',
+                      '$_recipePath/plan-today${_calendarRecipe ? '?calendar=true' : ''}',
+                    ) as Json;
+                    if (mounted) {
+                      _message(
+                        result['verified'] == true ? 'Für heute eingeplant.' : 'Die Planung konnte nicht bestätigt werden. Bitte prüfe den Kalender in Cookidoo.',
+                      );
+                    }
                   }),
-            child: const Text('In Cookidoo öffnen'),
+            child: const Text('Heute kochen'),
           ),
-      ],
+          FilledButton(
+            onPressed: _working
+                ? null
+                : () => _action(() async {
+                    final result = await widget.api.write(
+                      'POST',
+                      '/api/cart/recipes',
+                      {'recipe_id': _id, 'calendar': _calendarRecipe},
+                    ) as Json;
+                    if (mounted) {
+                      _message(
+                        result['added'] == false
+                            ? 'Rezept bereits im Einkaufswagen.'
+                            : 'Rezept im Einkaufswagen.',
+                      );
+                    }
+                  }),
+            child: const Text('Zum Einkaufswagen hinzufügen'),
+          ),
+          if (recipe['source_url'] case final String url)
+            OutlinedButton(
+              onPressed: _working
+                  ? null
+                  : () => _action(() async {
+                      await _links.invokeMethod<void>('openCookidoo', url);
+                    }),
+              child: const Text('In Cookidoo öffnen'),
+            ),
+        ],
+      ),
     );
   }
 

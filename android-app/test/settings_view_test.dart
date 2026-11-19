@@ -10,6 +10,28 @@ import 'package:rezeptgarten/main.dart';
 import 'package:rezeptgarten/settings_view.dart';
 
 void main() {
+  testWidgets('settings remain usable on a narrow screen with larger text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.5)),
+        child: child!,
+      ),
+      home: SettingsView(api: _SettingsApi(), appearance: AppearanceController()),
+    ));
+    await tester.pumpAndSettle();
+    final button = find.text('Nach Updates suchen');
+    await tester.scrollUntilVisible(button, 200);
+    await tester.pumpAndSettle();
+    expect(button, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('hands an APK update to Android without opening a browser', (
     tester,
   ) async {

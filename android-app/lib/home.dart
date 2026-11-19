@@ -61,6 +61,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   bool syncPending = false;
   bool? connected;
   bool syncRunning = false;
+  bool syncPollFailed = false;
+  int syncGeneration = 0;
   bool startupSyncAttempted = false;
   bool wasBackgrounded = false;
   Timer? syncPoll;
@@ -97,7 +99,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   void _connectionChanged() {
     if (!mounted) return;
     setState(() {
-      if (!_local && area != 3 && area != 4) area = 3;
+      final mode = widget.connection?.mode;
+      if ((mode == ConnectionMode.telegram || mode == ConnectionMode.offline) &&
+          area != 3 &&
+          area != 4) {
+        area = 3;
+      }
       serverCartCount = null;
       viewRefresh++;
       data = _load();
@@ -170,9 +177,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     };
   }
 
-  void _adoptStatus(Json status) {
+  void _adoptStatus(Json status, {bool authoritative = false}) {
     final online = status['connected'] as bool?;
-    final running = status['sync'] is Json && status['sync']['running'] == true;
+    final reportedRunning =
+        status['sync'] is Json && status['sync']['running'] == true;
+    // Views can complete an older status request after a new sync has begun.
+    // Only the monitor's fresh request may conclude a known running sync.
+    final running = syncRunning && !authoritative ? true : reportedRunning;
     if (connected != online || syncRunning != running) {
       setState(() {
         connected = online;
@@ -199,7 +210,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   Future<void> _beginSync({bool notify = true}) async {
     if (!_local || syncPending || syncRunning || busy) return;
-    setState(() => syncPending = true);
+    setState(() {
+      syncPending = true;
+      syncGeneration++;
+    });
     String notice;
     try {
       final result = await api.write('POST', '/api/sync') as Json;
@@ -207,7 +221,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           ? 'Synchronisierung gestartet.'
           : 'Die Synchronisierung läuft bereits.';
       if (mounted) {
-        setState(() => syncRunning = true);
+        setState(() {
+          syncRunning = true;
+          syncPollFailed = false;
+        });
         _monitorSync();
       }
     } on Exception catch (error) {
@@ -239,12 +256,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   void _monitorSync() {
     syncPoll?.cancel();
+    final generation = syncGeneration;
     syncPoll = Timer(const Duration(seconds: 3), () async {
       try {
         final result = await api.get('/api/status', timeout: shortRead) as Json;
-        if (!mounted) return;
+        if (!mounted || generation != syncGeneration) return;
+        syncPollFailed = false;
         final wasRunning = syncRunning;
-        _adoptStatus(result);
+        _adoptStatus(result, authoritative: true);
         final last = result['last_result'];
         if (wasRunning &&
             !syncRunning &&
@@ -260,11 +279,25 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           await _refresh();
         }
       } on Exception {
-        if (mounted) {
-          setState(() {
-            syncRunning = false;
-            connected = null;
-          });
+        if (mounted && generation == syncGeneration) {
+          if (_local && syncRunning) {
+            if (!syncPollFailed) {
+              syncPollFailed = true;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Der Abgleichstatus ist gerade nicht erreichbar und wird erneut geprüft.',
+                  ),
+                ),
+              );
+            }
+            _monitorSync();
+          } else {
+            setState(() {
+              syncRunning = false;
+              connected = null;
+            });
+          }
         }
       }
     });
@@ -356,8 +389,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (recipe['id'] is! String) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            RecipeDetail(api: api, preview: recipe, calendar: calendar),
+        builder: (_) => RecipeDetail(
+          api: api,
+          preview: recipe,
+          calendar: calendar,
+          onSync: _syncFromPull,
+        ),
       ),
     );
     if (mounted && area != 1 && area != 2 && area != 3) await _refresh();

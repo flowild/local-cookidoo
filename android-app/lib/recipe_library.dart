@@ -140,6 +140,7 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
           query: _query,
           filters: _filters,
           openRecipe: widget.openRecipe,
+          onSync: widget.onSync,
         ),
       ),
     );
@@ -575,12 +576,14 @@ class _Candidates extends StatefulWidget {
     required this.query,
     required this.filters,
     required this.openRecipe,
+    this.onSync,
   });
   final RezeptgartenApi api;
   final String collection;
   final String query;
   final _Filters filters;
   final OpenRecipe openRecipe;
+  final Future<void> Function()? onSync;
 
   @override
   State<_Candidates> createState() => _CandidatesState();
@@ -662,62 +665,70 @@ class _CandidatesState extends State<_Candidates> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Weitere Rezepte hinzufügen')),
     body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            enabled: !_adding,
-            maxLength: 200,
-            decoration: const InputDecoration(
-              labelText: 'Rezepte suchen',
-              counterText: '',
+      child: RefreshIndicator(
+        onRefresh: () async {
+          if (_adding) return;
+          await widget.onSync?.call();
+          if (mounted) await _load();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextField(
+              enabled: !_adding,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                labelText: 'Rezepte suchen',
+                counterText: '',
+              ),
+              onChanged: (value) {
+                _query = value.trim();
+                _timer?.cancel();
+                _request++;
+                setState(() {
+                  recipes.clear();
+                  _loading = true;
+                  _error = null;
+                });
+                _timer = Timer(const Duration(milliseconds: 300), _load);
+              },
             ),
-            onChanged: (value) {
-              _query = value.trim();
-              _timer?.cancel();
-              _request++;
-              setState(() {
-                recipes.clear();
-                _loading = true;
-                _error = null;
-              });
-              _timer = Timer(const Duration(milliseconds: 300), _load);
-            },
-          ),
-          if (_error != null) ...[
-            Text(_error!),
-            TextButton(
-              onPressed: () => _load(append: recipes.isNotEmpty),
-              child: const Text('Erneut laden'),
-            ),
+            if (_error != null) ...[
+              Text(_error!),
+              TextButton(
+                onPressed: () => _load(append: recipes.isNotEmpty),
+                child: const Text('Erneut laden'),
+              ),
+            ],
+            if (_loading || _adding) const LinearProgressIndicator(),
+            if (!_loading && _error == null && recipes.isEmpty)
+              const Text('Keine weiteren Rezepte gefunden.'),
+            for (final recipe in recipes)
+              ListTile(
+                title: Opacity(
+                  opacity: recipe['matches'] == false ? 0.48 : 1,
+                  child: Text(text(recipe['name'])),
+                ),
+                onTap: _adding
+                    ? null
+                    : () async {
+                        await widget.openRecipe(recipe);
+                        if (mounted) await _load();
+                      },
+                trailing: IconButton(
+                  tooltip: '${text(recipe['name'])} zur Liste hinzufügen',
+                  icon: const Icon(Icons.add),
+                  onPressed: _adding || _loading ? null : () => _add(recipe),
+                ),
+              ),
+            if (!_loading && _error == null && recipes.length < _total)
+              OutlinedButton(
+                onPressed: () => _load(append: true),
+                child: const Text('Weitere Rezepte anzeigen'),
+              ),
           ],
-          if (_loading || _adding) const LinearProgressIndicator(),
-          if (!_loading && _error == null && recipes.isEmpty)
-            const Text('Keine weiteren Rezepte gefunden.'),
-          for (final recipe in recipes)
-            ListTile(
-              title: Opacity(
-                opacity: recipe['matches'] == false ? 0.48 : 1,
-                child: Text(text(recipe['name'])),
-              ),
-              onTap: _adding
-                  ? null
-                  : () async {
-                      await widget.openRecipe(recipe);
-                      if (mounted) await _load();
-                    },
-              trailing: IconButton(
-                tooltip: '${text(recipe['name'])} zur Liste hinzufügen',
-                icon: const Icon(Icons.add),
-                onPressed: _adding || _loading ? null : () => _add(recipe),
-              ),
-            ),
-          if (!_loading && _error == null && recipes.length < _total)
-            OutlinedButton(
-              onPressed: () => _load(append: true),
-              child: const Text('Weitere Rezepte anzeigen'),
-            ),
-        ],
+        ),
       ),
     ),
   );

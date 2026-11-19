@@ -44,7 +44,77 @@ class FakeTelegram extends TelegramService {
   Future<Map<String, bool>> loadChecks() async => {};
 }
 
+class SwitchableConnection extends ConnectionController {
+  SwitchableConnection(super.api, super.telegram);
+
+  void transition(ConnectionMode value) {
+    mode = value;
+    notifyListeners();
+  }
+}
+
+class NavigationApi extends FakeApi {
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == '/api/status')
+      return {'connected': false, 'cart_recipe_count': 0};
+    if (path == '/api/collections') return <Json>[];
+    if (path == '/api/calendar/week') return {'days': <Json>[]};
+    throw StateError('Unexpected request: $path');
+  }
+}
+
 void main() {
+  testWidgets('keeps the selected page during a temporary network check', (
+    tester,
+  ) async {
+    final api = NavigationApi();
+    final telegram = FakeTelegram()..step = TelegramStep.ready;
+    final connection = SwitchableConnection(api, telegram)
+      ..mode = ConnectionMode.local;
+    final appearance = AppearanceController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RezeptgartenHome(
+          api: api,
+          appearance: appearance,
+          telegram: telegram,
+          connection: connection,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Listen').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    connection.transition(ConnectionMode.checking);
+    await tester.pump();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    connection.transition(ConnectionMode.local);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    connection.transition(ConnectionMode.telegram);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    appearance.dispose();
+    connection.dispose();
+    telegram.dispose();
+    await api.close();
+  });
+
   testWidgets('disables unavailable navigation in Telegram mode', (
     tester,
   ) async {

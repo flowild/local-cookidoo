@@ -48,7 +48,9 @@ Rückgängig sind über diese Ansicht erreichbar.
 Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo.
 Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
 Heimnetz und beim Herunterziehen einer Ansicht. Die App zeigt laufenden Abgleich
-und Fehler an. Außerhalb des Heimnetzes aktualisiert Herunterziehen die lesende
+und Fehler an; vorübergehende Fehler beim Statusabruf werden erneut geprüft und
+ältere Statusantworten beenden keinen neu gestarteten Abgleich. Beim Aktualisieren
+von Rezeptdetails bleibt ein ungeklärter Notizentwurf erhalten. Außerhalb des Heimnetzes aktualisiert Herunterziehen die lesende
 Telegram-Ansicht; ein Cookidoo-Abgleich wird dort nicht ausgelöst. Der frühere
 zeitgesteuerte Sammlungsabgleich ist serverweit entfernt, bestehende Intervalle
 haben keine Wirkung. Die separate Warteschlange für Wochenänderungen bleibt

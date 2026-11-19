@@ -4,8 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/recipe_library.dart';
+import 'package:rezeptgarten/recipe_card.dart';
 
 void main() {
+  testWidgets('recipe cards display advanced difficulty in German', (tester) async {
+    final api = _LibraryApi();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: RecipeCard(
+      api: api,
+      recipe: const {'id': 'r1', 'name': 'Reis', 'difficulty': 'advanced'},
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('Anspruchsvoll'), findsOneWidget);
+  });
   testWidgets('search and multiple ingredient filters use the collection API', (
     tester,
   ) async {
@@ -61,10 +71,17 @@ void main() {
     tester,
   ) async {
     final api = _LibraryApi();
+    var syncs = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: RecipeCollections(api: api, openRecipe: (_) async {}),
+          body: RecipeCollections(
+            api: api,
+            openRecipe: (_) async {},
+            onSync: () async {
+              syncs++;
+            },
+          ),
         ),
       ),
     );
@@ -81,6 +98,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rezepte hinzufügen'));
     await tester.pumpAndSettle();
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pumpAndSettle();
+    expect(syncs, 1);
     expect(api.lastRecipeQuery['exclude_collection'], ['local:meals']);
     await tester.tap(find.byTooltip('Reis zur Liste hinzufügen'));
     await tester.pumpAndSettle();
@@ -119,7 +141,12 @@ class _LibraryApi extends RezeptgartenApi {
         final candidate = lastRecipeQuery.containsKey('exclude_collection');
         final items = [
           if (candidate != present)
-            {'id': 'r1', 'name': 'Reis', 'matches': true},
+            {
+              'id': 'r1',
+              'name': 'Reis',
+              'matches': true,
+              'difficulty': 'advanced',
+            },
           if (!candidate) {'id': 'r2', 'name': 'Gemüsesuppe', 'matches': false},
         ];
         return {

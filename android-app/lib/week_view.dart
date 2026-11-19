@@ -84,6 +84,7 @@ class _WeekViewState extends State<WeekView> {
   bool _openingRecipe = false;
   int _request = 0;
   int _visibleDay = 0;
+  bool _dayChanged = false;
   Timer? _poll;
   Timer? _undoExpiry;
   ({String name, String id})? _undo;
@@ -127,7 +128,7 @@ class _WeekViewState extends State<WeekView> {
   Future<void> _restoreDay() async {
     try {
       final saved = await _preferences.invokeMethod<int>('weekDay');
-      if (mounted && saved != null && saved >= 0 && saved < 7) {
+      if (mounted && !_dayChanged && saved != null && saved >= 0 && saved < 7) {
         _visibleDay = saved;
         _restorePage();
       }
@@ -148,6 +149,7 @@ class _WeekViewState extends State<WeekView> {
 
   Future<void> _selectDay(int index) async {
     if (_visibleDay == index) return;
+    _dayChanged = true;
     _visibleDay = index;
     try {
       await _preferences.invokeMethod<void>('setWeekDay', index);
@@ -521,12 +523,20 @@ class _WeekViewState extends State<WeekView> {
         {'day': monday},
       ) as Json;
       if (!mounted) return;
-      _message(
-        text(
-          response['message'],
-          'Die Wochenrezepte wurden für den Einkaufswagen übernommen.',
-        ),
-      );
+      final added = response['added'];
+      if (response['status'] == 'empty') {
+        _message('In dieser Woche sind ab heute keine Rezepte eingeplant.');
+      } else if (response['status'] == 'ok' && added is int && added >= 0) {
+        _message(
+          added == 0
+              ? 'Die Rezepte dieser Woche stehen bereits im Einkaufswagen.'
+              : '$added ${added == 1 ? 'Rezept wurde' : 'Rezepte wurden'} zum Einkaufswagen hinzugefügt.',
+        );
+      } else {
+        throw const ApiException(
+          'Das Ergebnis konnte nicht bestätigt werden. Bitte prüfe den Einkaufswagen.',
+        );
+      }
       final status = await _status();
       if (mounted) _cartCount(status);
     });

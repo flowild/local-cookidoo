@@ -7,6 +7,34 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/recipe_detail.dart';
 
 void main() {
+  testWidgets('refresh saves a draft before syncing and reloading', (
+    tester,
+  ) async {
+    final api = _DetailApi();
+    var syncs = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'creation:r1', 'name': 'Reisgericht'},
+          calendar: false,
+          onSync: () async {
+            syncs++;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Mein neuer Text');
+    final refresh = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator),
+    );
+    await refresh.onRefresh();
+    await tester.pumpAndSettle();
+    expect(syncs, 1);
+    expect(api.writes.single['text'], 'Mein neuer Text');
+  });
+
   testWidgets(
     'shows structured recipe details and preserves a conflicting draft',
     (tester) async {
@@ -15,12 +43,16 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final api = _DetailApi();
+      var syncs = 0;
       await tester.pumpWidget(
         MaterialApp(
           home: RecipeDetail(
             api: api,
             preview: const {'id': 'creation:r1', 'name': 'Reisgericht'},
             calendar: false,
+            onSync: () async {
+              syncs++;
+            },
           ),
         ),
       );
@@ -60,6 +92,13 @@ void main() {
         find.textContaining('Dein Text bleibt im Feld erhalten.'),
         findsOneWidget,
       );
+      final refresh = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      await refresh.onRefresh();
+      await tester.pumpAndSettle();
+      expect(syncs, 0);
+      expect(tester.widget<TextField>(field).controller!.text, 'Mein Entwurf');
     },
   );
 }

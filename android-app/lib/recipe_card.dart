@@ -128,7 +128,7 @@ class _RecipeCardState extends State<RecipeCard> {
                           .last) {
                         'easy' => 'Einfach',
                         'medium' => 'Mittel',
-                        'hard' => 'Schwierig',
+                        'advanced' || 'hard' => 'Anspruchsvoll',
                         _ => text(recipe['difficulty']),
                       }),
                   ],
