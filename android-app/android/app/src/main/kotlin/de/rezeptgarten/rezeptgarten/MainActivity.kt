@@ -28,6 +28,16 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "weekDay" -> result.success(preferences.getInt("weekDay", 0))
+                    "debugMode" -> result.success(preferences.getBoolean("debugMode", false))
+                    "setDebugMode" -> {
+                        val enabled = call.arguments as? Boolean
+                        if (enabled == null) {
+                            result.error("invalid_debug_mode", "Der Debug-Modus ist ungültig.", null)
+                        } else {
+                            preferences.edit().putBoolean("debugMode", enabled).apply()
+                            result.success(null)
+                        }
+                    }
                     "appearance" -> result.success(
                         mapOf("dark" to preferences.getBoolean("dark", false),
                               "accent" to preferences.getLong("accent", 0xff234d3cL))

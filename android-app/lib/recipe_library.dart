@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'recipe_card.dart';
 
 typedef OpenRecipe = Future<void> Function(Json recipe);
@@ -39,6 +40,7 @@ class RecipeBrowser extends StatefulWidget {
 class _RecipeBrowserState extends State<RecipeBrowser> {
   static const _pageSize = 48;
   final _recipes = <Json>[];
+  final _searchField = TextEditingController();
   Timer? _searchTimer;
   int _request = 0;
   String _query = '';
@@ -48,6 +50,7 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
   int _matched = 0;
   bool _loading = true;
   bool _deleting = false;
+  bool _appendFailed = false;
   String? _error;
 
   String? get _collection => widget.collection?['id'] as String?;
@@ -68,36 +71,41 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
   @override
   void dispose() {
     _searchTimer?.cancel();
+    _searchField.dispose();
     super.dispose();
   }
 
   Future<void> _fetch({bool append = false}) async {
+    _searchTimer?.cancel();
     final request = ++_request;
     final collection = _collection;
     setState(() {
       _loading = true;
       _error = null;
-      if (!append) _recipes.clear();
+      _appendFailed = false;
     });
     try {
       final result = await _recipePage(widget.api, {
         'collection': ?collection,
-        if (collection != null) 'show_all': 'true',
         'q': _query,
         'sort': _sort,
-        'offset': '${_recipes.length}',
+        'offset': '${append ? _recipes.length : 0}',
         'limit': '$_pageSize',
         ..._filters.parameters,
       });
       if (!mounted || request != _request) return;
       setState(() {
+        if (!append) _recipes.clear();
         _recipes.addAll(objects(result['items']));
         _total = result['total'] as int;
         _matched = result['match_total'] as int;
       });
     } on Exception catch (error) {
       if (mounted && request == _request) {
-        setState(() => _error = error.toString());
+        setState(() {
+          _appendFailed = append;
+          _error = error.toString();
+        });
       }
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
@@ -105,12 +113,13 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
   }
 
   void _search(String value) {
+    final query = value.trim();
+    if (query == _query) return;
     _searchTimer?.cancel();
     // Invalidate requests immediately, including a page that is still loading.
     _request++;
-    _query = value.trim();
     setState(() {
-      _recipes.clear();
+      _query = query;
       _loading = true;
       _error = null;
     });
@@ -118,14 +127,22 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
   }
 
   Future<void> _chooseFilters() async {
-    final filters = await showDialog<_Filters>(
-      context: context,
-      builder: (_) => _FilterDialog(
-        api: widget.api,
-        collection: _collection,
-        initial: _filters,
-      ),
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    Widget editor(BuildContext _) => _FilterDialog(
+      api: widget.api,
+      collection: _collection,
+      initial: _filters,
+      asSheet: compact,
     );
+    final filters = compact
+        ? await showModalBottomSheet<_Filters>(
+            context: context,
+            builder: editor,
+            isScrollControlled: true,
+            useSafeArea: true,
+            showDragHandle: true,
+          )
+        : await showDialog<_Filters>(context: context, builder: editor);
     if (filters == null || !mounted) return;
     _filters = filters;
     await _fetch();
@@ -189,51 +206,115 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
     if (mounted) await _fetch();
   }
 
+  Future<void> _chooseSort() async {
+    final sort = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: AppSpacing.panel,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Sortieren', style: Theme.of(sheet).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.related),
+              for (final option in _sorts.entries)
+                ListTile(
+                  title: Text(option.value),
+                  selected: option.key == _sort,
+                  trailing: option.key == _sort
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.pop(sheet, option.key),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (sort == null || !mounted || sort == _sort) return;
+    _sort = sort;
+    await _fetch();
+  }
+
+  Widget _searchInput() => TextField(
+    controller: _searchField,
+    focusNode: widget.searchFocus,
+    maxLength: 200,
+    onChanged: _search,
+    onSubmitted: (_) {
+      if (_searchTimer?.isActive == true || _error != null) {
+        unawaited(_fetch());
+      }
+    },
+    textInputAction: TextInputAction.search,
+    decoration: InputDecoration(
+      labelText: 'Titel oder Zutaten suchen',
+      prefixIcon: const Icon(Icons.search),
+      counterText: '',
+      suffixIcon: _query.isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Suche leeren',
+              onPressed: () {
+                _searchField.clear();
+                _search('');
+              },
+              icon: const Icon(Icons.close),
+            ),
+    ),
+  );
+
   Widget _controls() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: AppSpacing.item,
     children: [
       Text(
         text(widget.collection?['name'], 'Alle Rezepte'),
         style: Theme.of(context).textTheme.headlineMedium,
       ),
-      const SizedBox(height: 12),
-      TextField(
-        focusNode: widget.searchFocus,
-        maxLength: 200,
-        onChanged: _search,
-        onSubmitted: (_) {
-          _searchTimer?.cancel();
-          unawaited(_fetch());
-        },
-        textInputAction: TextInputAction.search,
-        decoration: const InputDecoration(
-          labelText: 'Titel oder Zutaten suchen',
-          prefixIcon: Icon(Icons.search),
-          counterText: '',
-        ),
-      ),
-      Wrap(
-        spacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          DropdownButton<String>(
-            value: _sort,
-            onChanged: (sort) {
-              if (sort == null || sort == _sort) return;
-              _sort = sort;
-              unawaited(_fetch());
-            },
-            items: [
-              for (final entry in _sorts.entries)
-                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-            ],
+      if (_collection == null)
+        Card(
+          child: Padding(
+            padding: AppSpacing.compactPanel,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.related,
+              children: [
+                _searchInput(),
+                Wrap(
+                  spacing: AppSpacing.related,
+                  runSpacing: AppSpacing.related,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _chooseSort,
+                      icon: const Icon(Icons.sort),
+                      label: Text(_sorts[_sort]!),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _chooseFilters,
+                      icon: const Icon(Icons.filter_list),
+                      label: Text(
+                        _filters.active ? 'Filter bearbeiten' : 'Filtern',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: _chooseFilters,
-            icon: const Icon(Icons.filter_list),
-            label: Text(_filters.active ? 'Filter bearbeiten' : 'Filtern'),
-          ),
-          if (_local) ...[
+        )
+      else
+        _searchInput(),
+      if (_local)
+        Wrap(
+          spacing: AppSpacing.related,
+          runSpacing: AppSpacing.related,
+          children: [
             OutlinedButton.icon(
               onPressed: _deleting ? null : _addRecipes,
               icon: const Icon(Icons.add),
@@ -245,11 +326,11 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
               label: const Text('Liste löschen'),
             ),
           ],
-        ],
-      ),
+        ),
       if (_filters.active)
         Wrap(
-          spacing: 8,
+          spacing: AppSpacing.related,
+          runSpacing: AppSpacing.related,
           children: [
             for (final ingredient in _filters.ingredients)
               Chip(label: Text(ingredient)),
@@ -262,17 +343,14 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
       if (_error != null) ...[
         Text(_error!),
         OutlinedButton(
-          onPressed: () => _fetch(append: _recipes.isNotEmpty),
+          onPressed: () => _fetch(append: _appendFailed),
           child: const Text('Erneut laden'),
         ),
       ] else if (!_loading || _recipes.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            _collection != null && (_filters.active || _query.isNotEmpty)
-                ? '$_matched von $_total Rezepten passen zum Filter'
-                : '$_total ${_total == 1 ? 'Rezept' : 'Rezepte'}',
-          ),
+        Text(
+          _collection != null && (_filters.active || _query.isNotEmpty)
+              ? '$_matched von $_total Rezepten passen zum Filter'
+              : '$_total ${_total == 1 ? 'Rezept' : 'Rezepte'}',
         ),
       if (_recipes.isEmpty && !_loading && _error == null)
         const Text('Keine passenden Rezepte gefunden.'),
@@ -289,17 +367,22 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          padding: AppSpacing.page,
           sliver: SliverMainAxisGroup(
             slivers: [
-              SliverToBoxAdapter(child: _controls()),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.section),
+                  child: _controls(),
+                ),
+              ),
+              if (_loading)
+                const SliverToBoxAdapter(child: LinearProgressIndicator()),
               _RecipeGrid(
                 api: widget.api,
                 recipes: _recipes,
                 openRecipe: _open,
               ),
-              if (_loading)
-                const SliverToBoxAdapter(child: LinearProgressIndicator()),
               if (!_loading && _error == null && _recipes.length < _total)
                 SliverToBoxAdapter(
                   child: OutlinedButton(
@@ -336,8 +419,14 @@ class _RecipeGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
     builder: (context, constraints) {
-      const gap = 12.0;
-      final columns = (constraints.crossAxisExtent / 182).floor().clamp(1, 5);
+      const gap = AppSpacing.item;
+      final compact =
+          MediaQuery.sizeOf(context).width < 600 &&
+          MediaQuery.textScalerOf(context).scale(1) <= 1.25;
+      final minimum = compact ? 144 : 182;
+      final columns = ((constraints.crossAxisExtent + gap) / (minimum + gap))
+          .floor()
+          .clamp(1, 5);
       final width =
           (constraints.crossAxisExtent - (columns - 1) * gap) / columns;
       return SliverList.builder(
@@ -348,9 +437,9 @@ class _RecipeGrid extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: gap),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: gap,
               children: [
-                for (final (position, recipe) in row.indexed) ...[
-                  if (position != 0) const SizedBox(width: gap),
+                for (final recipe in row)
                   SizedBox(
                     key: ValueKey(recipe['id']),
                     width: width,
@@ -363,7 +452,6 @@ class _RecipeGrid extends StatelessWidget {
                       ),
                     ),
                   ),
-                ],
               ],
             ),
           );
@@ -393,10 +481,12 @@ class _FilterDialog extends StatefulWidget {
     required this.api,
     required this.collection,
     required this.initial,
+    required this.asSheet,
   });
   final RezeptgartenApi api;
   final String? collection;
   final _Filters initial;
+  final bool asSheet;
 
   @override
   State<_FilterDialog> createState() => _FilterDialogState();
@@ -468,13 +558,14 @@ class _FilterDialogState extends State<_FilterDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Rezepte filtern'),
-    scrollable: true,
-    content: Form(
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const title = Text('Rezepte filtern');
+    final form = Form(
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        spacing: AppSpacing.item,
         children: [
           FutureBuilder<Json?>(
             future: _options,
@@ -530,16 +621,18 @@ class _FilterDialogState extends State<_FilterDialog> {
               );
             },
           ),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final name in ingredients)
-                InputChip(
-                  label: Text(name),
-                  onDeleted: () => setState(() => ingredients.remove(name)),
-                ),
-            ],
-          ),
+          if (ingredients.isNotEmpty)
+            Wrap(
+              spacing: AppSpacing.related,
+              runSpacing: AppSpacing.related,
+              children: [
+                for (final name in ingredients)
+                  InputChip(
+                    label: Text(name),
+                    onDeleted: () => setState(() => ingredients.remove(name)),
+                  ),
+              ],
+            ),
           TextFormField(
             controller: _servings,
             keyboardType: TextInputType.number,
@@ -558,15 +651,55 @@ class _FilterDialogState extends State<_FilterDialog> {
           ),
         ],
       ),
-    ),
-    actions: [
+    );
+    final actions = [
       TextButton(
         onPressed: () => Navigator.pop(context, const _Filters()),
         child: const Text('Zurücksetzen'),
       ),
       FilledButton(onPressed: _apply, child: const Text('Anwenden')),
-    ],
-  );
+    ];
+    if (!widget.asSheet) {
+      return AlertDialog(
+        title: title,
+        scrollable: true,
+        content: form,
+        actions: actions,
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.section,
+            0,
+            AppSpacing.section,
+            AppSpacing.section,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            spacing: AppSpacing.section,
+            children: [
+              DefaultTextStyle(
+                style: theme.textTheme.titleLarge!,
+                child: title,
+              ),
+              form,
+              OverflowBar(
+                spacing: AppSpacing.related,
+                overflowSpacing: AppSpacing.related,
+                alignment: MainAxisAlignment.end,
+                children: actions,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Candidates extends StatefulWidget {
@@ -673,7 +806,7 @@ class _CandidatesState extends State<_Candidates> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.page,
           children: [
             TextField(
               enabled: !_adding,
@@ -694,6 +827,7 @@ class _CandidatesState extends State<_Candidates> {
                 _timer = Timer(const Duration(milliseconds: 300), _load);
               },
             ),
+            const SizedBox(height: AppSpacing.section),
             if (_error != null) ...[
               Text(_error!),
               TextButton(
@@ -754,6 +888,7 @@ class RecipeCollections extends StatefulWidget {
 class _RecipeCollectionsState extends State<RecipeCollections> {
   late Future<dynamic> _lists = widget.api.get('/api/collections');
   bool _creating = false;
+  String _query = '';
 
   Future<void> _reload() async {
     final lists = widget.api.get('/api/collections');
@@ -810,37 +945,13 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
     if (mounted) await _reload();
   }
 
-  Widget _group(String title, Iterable<Json> lists, String empty) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        if (lists.isEmpty) Text(empty),
-        for (final list in lists)
-          Card(
-            child: ListTile(
-              title: Text(text(list['name'])),
-              subtitle: Text('${list['recipe_count'] ?? 0} Rezepte'),
-              leading: Icon(
-                list['kind'] == 'local'
-                    ? Icons.list_alt
-                    : Icons.layers_outlined,
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(list),
-            ),
-          ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) => FutureBuilder<dynamic>(
     future: _lists,
     builder: (context, snapshot) {
       final result = snapshot.data;
-      final lists = result is Json ? objects(result['items']) : <Json>[];
+      final lists = objects(result is Json ? result['items'] : null)
+          .where((list) => text(list['name']).toLowerCase().contains(_query));
       return RefreshIndicator(
         onRefresh: () async {
           await widget.onSync?.call();
@@ -848,41 +959,139 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          padding: AppSpacing.page,
           children: [
-            Text(
-              'Deine Rezeptlisten',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.section,
+              children: [
+                Text(
+                  'Deine Rezeptlisten',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                TextField(
+                  onChanged: (value) =>
+                      setState(() => _query = value.trim().toLowerCase()),
+                  decoration: const InputDecoration(
+                    labelText: 'Listen suchen',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: _creating ? null : _create,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Neue Liste'),
+                  ),
+                ),
+                if (_creating ||
+                    snapshot.connectionState != ConnectionState.done)
+                  const LinearProgressIndicator(),
+                if (snapshot.hasError) ...[
+                  Text(snapshot.error.toString()),
+                  TextButton(
+                    onPressed: _reload,
+                    child: const Text('Erneut laden'),
+                  ),
+                ] else if (snapshot.hasData) ...[
+                  if (lists.isEmpty)
+                    const Text('Keine passenden Listen gefunden.'),
+                  for (final list in lists)
+                    _CollectionPreview(
+                      key: ValueKey(list['id']),
+                      api: widget.api,
+                      list: list,
+                      refreshCount: widget.refreshCount,
+                      onOpen: () => _open(list),
+                      onRecipe: widget.openRecipe,
+                    ),
+                ],
+              ],
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                onPressed: _creating ? null : _create,
-                icon: const Icon(Icons.add),
-                label: const Text('Neue Liste'),
-              ),
-            ),
-            if (_creating || snapshot.connectionState != ConnectionState.done)
-              const LinearProgressIndicator(),
-            if (snapshot.hasError) ...[
-              Text(snapshot.error.toString()),
-              TextButton(onPressed: _reload, child: const Text('Erneut laden')),
-            ] else if (snapshot.hasData) ...[
-              _group(
-                'Meine lokalen Listen',
-                lists.where((list) => list['kind'] == 'local'),
-                'Noch keine lokalen Listen vorhanden.',
-              ),
-              _group(
-                'Aus Cookidoo',
-                lists.where((list) => list['kind'] != 'local'),
-                'Noch keine Cookidoo-Sammlungen vorhanden.',
-              ),
-            ],
           ],
         ),
       );
     },
+  );
+}
+
+class _CollectionPreview extends StatefulWidget {
+  const _CollectionPreview({
+    super.key,
+    required this.api,
+    required this.list,
+    required this.refreshCount,
+    required this.onOpen,
+    required this.onRecipe,
+  });
+
+  final RezeptgartenApi api;
+  final Json list;
+  final int refreshCount;
+  final VoidCallback onOpen;
+  final OpenRecipe onRecipe;
+
+  @override
+  State<_CollectionPreview> createState() => _CollectionPreviewState();
+}
+
+class _CollectionPreviewState extends State<_CollectionPreview> {
+  Future<Json>? _items;
+
+  void _load() {
+    setState(() {
+      _items = _recipePage(widget.api, {
+        'collection': text(widget.list['id']),
+        'limit': '12',
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(_CollectionPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_items != null &&
+        (oldWidget.refreshCount != widget.refreshCount ||
+            oldWidget.list['recipe_count'] != widget.list['recipe_count'])) {
+      _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    title: Text(text(widget.list['name'])),
+    onExpansionChanged: (expanded) {
+      if (expanded && _items == null) _load();
+    },
+    children: [
+      FutureBuilder<Json>(
+        future: _items,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return TextButton(
+              onPressed: _load,
+              child: const Text('Erneut laden'),
+            );
+          }
+          if (!snapshot.hasData) return const LinearProgressIndicator();
+          final recipes = objects(snapshot.requireData['items']);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (recipes.isEmpty)
+                const ListTile(title: Text('Keine Rezepte in dieser Liste.')),
+              for (final recipe in recipes)
+                ListTile(
+                  title: Text(text(recipe['name'])),
+                  onTap: () => widget.onRecipe(recipe),
+                ),
+            ],
+          );
+        },
+      ),
+      TextButton(onPressed: widget.onOpen, child: const Text('Liste öffnen')),
+    ],
   );
 }
 

@@ -24,11 +24,23 @@ class ApiException implements Exception {
 class RezeptgartenApi {
   RezeptgartenApi({Uri? server, HttpClient? client})
     : server = server ?? Uri.https('192.168.184.30'),
-      _client = client == null ? _localClient() : Future.value(client);
+      _providedClient = client;
 
   final Uri server;
-  final Future<HttpClient> _client;
+  final HttpClient? _providedClient;
+  late final Future<HttpClient> _client = _providedClient == null
+      ? _localClient()
+      : Future.value(_providedClient);
+  bool get usesTestData => false;
   bool Function()? localAllowed;
+  static final _photoName = RegExp(r'^[a-f0-9]{40}\.webp$');
+  static final _maxAge = RegExp(r'(?:^|,)\s*max-age=(\d+)');
+  static const _photoBudget = 12 * 1024 * 1024;
+  static const _photoTimeout = Duration(seconds: 10);
+  final _photos = <String, ({Uint8List bytes, DateTime expires})>{};
+  final _photoRequests = <String, Future<Uint8List?>>{};
+  int _photoBytes = 0;
+  int _photoGeneration = 0;
 
   static Future<HttpClient> _localClient() async {
     final certificate = await rootBundle.load('assets/rezeptgarten-ca.pem');
@@ -162,24 +174,77 @@ class RezeptgartenApi {
     }
   }
 
-  Future<Uint8List?> image(Object? filename, {bool full = false}) async {
+  Future<Uint8List?> image(Object? filename, {bool full = false}) {
     if (filename is! String ||
-        !RegExp(r'^[a-f0-9]{40}\.webp$').hasMatch(filename)) {
-      return null;
+        !_photoName.hasMatch(filename) ||
+        localAllowed?.call() == false) {
+      return Future.value();
     }
+    final path = '/api/images/$filename${full ? '' : '?size=thumb'}';
+    final entry = _photos.remove(path);
+    if (entry != null) {
+      if (entry.expires.isAfter(DateTime.now())) {
+        _photos[path] = entry;
+        return Future.value(entry.bytes);
+      }
+      _photoBytes -= entry.bytes.lengthInBytes;
+    }
+    return _photoRequests.putIfAbsent(path, () {
+      final generation = _photoGeneration;
+      return _loadPhoto(path, generation).whenComplete(() {
+        if (generation == _photoGeneration) _photoRequests.remove(path);
+      });
+    });
+  }
+
+  Future<Uint8List?> _loadPhoto(String path, int generation) async {
     try {
-      final response = await _request(
-        'GET',
-        '/api/images/$filename${full ? '' : '?size=thumb'}',
-      );
+      final response = await _request('GET', path, timeout: _photoTimeout);
+      final stream = response.timeout(_photoTimeout);
       if (response.statusCode != 200) {
-        await response.drain<void>();
+        await stream.drain<void>();
         return null;
       }
-      return await _bytes(response);
+      final bytes = await _bytes(stream);
+      if (generation != _photoGeneration || localAllowed?.call() == false) {
+        return null;
+      }
+      final control = response.headers.value(HttpHeaders.cacheControlHeader);
+      final lifetime = int.tryParse(
+        _maxAge.firstMatch(control ?? '')?.group(1) ?? '',
+      );
+      if (control != null &&
+          !control.contains('no-store') &&
+          !control.contains('no-cache') &&
+          lifetime != null &&
+          lifetime > 0 &&
+          bytes.isNotEmpty &&
+          bytes.lengthInBytes <= _photoBudget) {
+        while (_photoBytes + bytes.lengthInBytes > _photoBudget) {
+          _photoBytes -= _photos
+              .remove(_photos.keys.first)!
+              .bytes
+              .lengthInBytes;
+        }
+        _photos[path] = (
+          bytes: bytes,
+          expires: DateTime.now().add(
+            Duration(seconds: lifetime > 86400 ? 86400 : lifetime),
+          ),
+        );
+        _photoBytes += bytes.lengthInBytes;
+      }
+      return bytes;
     } on Exception {
       return null;
     }
+  }
+
+  void clearImageCache() {
+    _photoGeneration++;
+    _photos.clear();
+    _photoRequests.clear();
+    _photoBytes = 0;
   }
 
   Future<Uint8List> exportCollection() async {
@@ -197,7 +262,7 @@ class RezeptgartenApi {
     }
   }
 
-  Future<Uint8List> _bytes(HttpClientResponse response) async {
+  Future<Uint8List> _bytes(Stream<List<int>> response) async {
     final bytes = BytesBuilder(copy: false);
     await for (final chunk in response) {
       bytes.add(chunk);
@@ -205,5 +270,8 @@ class RezeptgartenApi {
     return bytes.takeBytes();
   }
 
-  Future<void> close() async => (await _client).close(force: true);
+  Future<void> close() async {
+    clearImageCache();
+    (await _client).close(force: true);
+  }
 }

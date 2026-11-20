@@ -5,9 +5,68 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
+import 'package:rezeptgarten/debug_api.dart';
+import 'package:rezeptgarten/spacing.dart';
 import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  testWidgets('recipe metadata stays below the action in narrow day columns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: DebugRezeptgartenApi(),
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PageView), findsNothing);
+    final weekButton = tester.getCenter(find.text('Diese Woche'));
+    final shoppingButton = tester.getCenter(
+      find.byTooltip('In den Einkaufswagen'),
+    );
+    expect(weekButton.dy, closeTo(shoppingButton.dy, 1));
+    final monday = tester.getRect(
+      find.ancestor(
+        of: find.textContaining('Montag,'),
+        matching: find.byType(Card),
+      ),
+    );
+    final tuesday = tester.getRect(
+      find.ancestor(
+        of: find.textContaining('Dienstag,'),
+        matching: find.byType(Card),
+      ),
+    );
+    expect(tuesday.left - monday.right, closeTo(AppSpacing.item, 0.01));
+    final action = tester.getRect(
+      find.byTooltip('Linsensuppe mit Möhren in die Ablage'),
+    );
+    final duration = tester.getRect(find.text('35 Min.'));
+    final portions = tester.getRect(find.text('4 Port.'));
+    final photo = tester.getRect(
+      find
+          .ancestor(of: find.text('35 Min.'), matching: find.byType(ClipRRect))
+          .first,
+    );
+    expect(duration.top, greaterThanOrEqualTo(action.bottom));
+    expect(portions.top, greaterThanOrEqualTo(action.bottom));
+    expect(duration.right, lessThan(photo.center.dx));
+    expect(portions.left, greaterThan(photo.center.dx));
+    expect(duration.bottom, lessThan(photo.bottom));
+    expect(portions.bottom, lessThan(photo.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'reports whether week shopping was empty, already present or added',
     (tester) async {
@@ -43,7 +102,7 @@ void main() {
         ),
       ]) {
         api.shoppingResult = result;
-        await tester.tap(find.text('In den Einkaufswagen'));
+        await tester.tap(find.byTooltip('In den Einkaufswagen'));
         await tester.pumpAndSettle();
         expect(find.text(message), findsOneWidget);
         tester
@@ -114,9 +173,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.longPress(find.text('Reisgericht'));
+    final recipe = find.text('Reisgericht');
+    final resting = tester.getCenter(recipe);
+    final shortSwipe = await tester.startGesture(resting);
+    await tester.pump(const Duration(milliseconds: 270));
+    await shortSwipe.moveBy(const Offset(0, -110));
+    await tester.pump();
+    expect(find.text('Entfernen'), findsOneWidget);
+    expect(tester.getCenter(recipe).dy, lessThan(resting.dy));
+    await shortSwipe.up();
     await tester.pumpAndSettle();
-    await tester.drag(find.text('Reisgericht'), const Offset(0, 150));
+    expect(api.queued, isEmpty);
+    expect(find.text('Entfernen'), findsNothing);
+    expect(tester.getCenter(recipe), resting);
+
+    final swipe = await tester.startGesture(resting);
+    await swipe.moveBy(const Offset(0, 150));
+    await tester.pump();
+    expect(find.text('In die Ablage'), findsOneWidget);
+    expect(tester.getCenter(recipe).dy, greaterThan(resting.dy));
+    expect(api.queued, isEmpty);
+    await swipe.up();
     await tester.pumpAndSettle();
     expect(api.shelf, isTrue);
     expect(api.queued.single['source'], '2026-11-16');

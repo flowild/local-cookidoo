@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'appearance.dart';
 import 'telegram_service.dart';
 import 'telegram_setup.dart';
@@ -19,12 +20,16 @@ class SettingsView extends StatefulWidget {
     this.telegram,
     this.connection,
     this.onSync,
+    this.onDebugModeChanged,
+    this.onAccountChanged,
   });
   final RezeptgartenApi api;
   final AppearanceController appearance;
   final TelegramService? telegram;
   final ConnectionController? connection;
   final Future<void> Function()? onSync;
+  final ValueChanged<bool>? onDebugModeChanged;
+  final VoidCallback? onAccountChanged;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -264,6 +269,7 @@ class _SettingsViewState extends State<SettingsView> {
         credentials,
         'Cookidoo wurde verbunden.',
       );
+      if (mounted) widget.onAccountChanged?.call();
     }
   }
 
@@ -279,6 +285,7 @@ class _SettingsViewState extends State<SettingsView> {
         null,
         'Cookidoo-Verbindung getrennt.',
       );
+      if (mounted) widget.onAccountChanged?.call();
     }
   }
 
@@ -316,14 +323,14 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _card(String title, List<Widget> children) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
+    margin: EdgeInsets.zero,
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: AppSpacing.panel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.related,
         children: [
           Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
           ...children,
         ],
       ),
@@ -342,7 +349,8 @@ class _SettingsViewState extends State<SettingsView> {
             : (dark) => _perform(() => widget.appearance.update(dark: dark)),
       ),
       Wrap(
-        spacing: 8,
+        spacing: AppSpacing.related,
+        runSpacing: AppSpacing.related,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           OutlinedButton.icon(
@@ -369,24 +377,29 @@ class _SettingsViewState extends State<SettingsView> {
     final connected = status['connected'] == true;
     final running = sync?['running'] == true;
     return [
-      _card('Dein Cookidoo-Konto', [
-        if (connected) ...[
-          Text(text(account?['email'])),
-          Text('Verbunden mit Cookidoo ${_regions[account?['region']] ?? ''}'),
-        ] else
-          const Text(
-            'Verbinde dein Konto, um Rezeptlisten und Kollektionen zu laden.',
+      if (!widget.api.usesTestData)
+        _card('Dein Cookidoo-Konto', [
+          if (connected) ...[
+            Text(text(account?['email'])),
+            Text(
+              'Verbunden mit Cookidoo ${_regions[account?['region']] ?? ''}',
+            ),
+          ] else
+            const Text(
+              'Verbinde dein Konto, um Rezeptlisten und Kollektionen zu laden.',
+            ),
+          FilledButton(
+            onPressed: _busy || running ? null : () => _connect(account),
+            child: Text(
+              connected ? 'Konto neu verbinden' : 'Cookidoo verbinden',
+            ),
           ),
-        FilledButton(
-          onPressed: _busy || running ? null : () => _connect(account),
-          child: Text(connected ? 'Konto neu verbinden' : 'Cookidoo verbinden'),
-        ),
-        if (connected)
-          TextButton(
-            onPressed: _busy || running ? null : _disconnect,
-            child: const Text('Verbindung trennen'),
-          ),
-      ]),
+          if (connected)
+            TextButton(
+              onPressed: _busy || running ? null : _disconnect,
+              child: const Text('Verbindung trennen'),
+            ),
+        ]),
       _card('Deine Sammlung', [
         FilledButton.icon(
           onPressed: _busy ? null : _export,
@@ -409,79 +422,109 @@ class _SettingsViewState extends State<SettingsView> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.page,
           children: [
-            _appearance(),
-            if (_loading || _busy) const LinearProgressIndicator(),
-            if (_error != null) ...[
-              Text(_error!),
-              TextButton(
-                onPressed: _busy ? null : () => _load(showLoading: true),
-                child: const Text('Erneut laden'),
-              ),
-            ],
-            if (_status case final Json status) ..._serverOptions(status),
-            if (widget.connection case final ConnectionController connection)
-              _card('Heimnetz', [
-                const Text(
-                  'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
-                ),
-                TextButton(
-                  onPressed: connection.requestPermission,
-                  child: const Text('WLAN-Erkennung einrichten'),
-                ),
-              ]),
-            if (widget.telegram case final TelegramService telegram)
-              _card('Telegram', [
-                ListenableBuilder(
-                  listenable: telegram,
-                  builder: (context, _) => Text(
-                    telegram.paired
-                        ? 'Mit Rezeptgarten verbunden'
-                        : 'Noch nicht verbunden',
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => TelegramSetup(
-                      telegram: telegram,
-                      api: widget.api,
-                      connection: widget.connection,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.section,
+              children: [
+                if (widget.onDebugModeChanged
+                    case final ValueChanged<bool> changeMode)
+                  Card(
+                    margin: EdgeInsets.zero,
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    clipBehavior: Clip.antiAlias,
+                    child: SwitchListTile(
+                      secondary: const Icon(Icons.science_outlined),
+                      title: const Text('Debug-Modus'),
+                      subtitle: const Text(
+                        'App offline mit Beispieldaten testen',
+                      ),
+                      value: widget.api.usesTestData,
+                      onChanged: _busy || _checkingUpdate || _downloadingUpdate
+                          ? null
+                          : changeMode,
                     ),
                   ),
-                  child: const Text('Telegram einrichten'),
-                ),
-              ]),
-            _card('Rezeptgarten für Android', [
-              if (_version != null) Text('Installierte Version $_version'),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  _checkingUpdate
-                      ? 'Suche nach Updates …'
-                      : _updateStatus ?? 'Updatestatus unbekannt.',
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _checkingUpdate || _downloadingUpdate || !_local
-                    ? null
-                    : _updateAvailable
-                    ? _installUpdate
-                    : _checkUpdate,
-                icon: Icon(_updateAvailable ? Icons.download : Icons.refresh),
-                label: Text(
-                  _updateAvailable
-                      ? 'APK herunterladen und installieren'
-                      : 'Nach Updates suchen',
-                ),
-              ),
-              if (_downloadingUpdate) ...[
-                const LinearProgressIndicator(),
-                const Text('APK wird heruntergeladen und geprüft …'),
+                _appearance(),
+                if (_loading || _busy) const LinearProgressIndicator(),
+                if (_error != null) ...[
+                  Text(_error!),
+                  TextButton(
+                    onPressed: _busy ? null : () => _load(showLoading: true),
+                    child: const Text('Erneut laden'),
+                  ),
+                ],
+                if (_status case final Json status) ..._serverOptions(status),
+                if (widget.connection
+                    case final ConnectionController connection)
+                  _card('Heimnetz', [
+                    const Text(
+                      'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
+                    ),
+                    TextButton(
+                      onPressed: connection.requestPermission,
+                      child: const Text('WLAN-Erkennung einrichten'),
+                    ),
+                  ]),
+                if (widget.telegram case final TelegramService telegram)
+                  _card('Telegram', [
+                    ListenableBuilder(
+                      listenable: telegram,
+                      builder: (context, _) => Text(
+                        telegram.paired
+                            ? 'Mit Rezeptgarten verbunden'
+                            : 'Noch nicht verbunden',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => TelegramSetup(
+                          telegram: telegram,
+                          api: widget.api,
+                          connection: widget.connection,
+                        ),
+                      ),
+                      child: const Text('Telegram einrichten'),
+                    ),
+                  ]),
+                if (!widget.api.usesTestData)
+                  _card('Rezeptgarten für Android', [
+                    if (_version != null)
+                      Text('Installierte Version $_version'),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _checkingUpdate
+                            ? 'Suche nach Updates …'
+                            : _updateStatus ?? 'Updatestatus unbekannt.',
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _checkingUpdate || _downloadingUpdate || !_local
+                          ? null
+                          : _updateAvailable
+                          ? _installUpdate
+                          : _checkUpdate,
+                      icon: Icon(
+                        _updateAvailable ? Icons.download : Icons.refresh,
+                      ),
+                      label: Text(
+                        _updateAvailable
+                            ? 'APK herunterladen und installieren'
+                            : 'Nach Updates suchen',
+                      ),
+                    ),
+                    if (_downloadingUpdate) ...[
+                      const LinearProgressIndicator(),
+                      const Text('APK wird heruntergeladen und geprüft …'),
+                    ],
+                    if (_updateMessage != null) Text(_updateMessage!),
+                  ]),
               ],
-              if (_updateMessage != null) Text(_updateMessage!),
-            ]),
+            ),
           ],
         ),
       ),
@@ -539,6 +582,7 @@ class _AccountDialogState extends State<_AccountDialog> {
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        spacing: AppSpacing.item,
         children: [
           TextFormField(
             controller: _email,

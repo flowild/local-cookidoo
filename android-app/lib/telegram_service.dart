@@ -96,7 +96,9 @@ class TelegramService extends ChangeNotifier {
           _botChat = data['chat_id'] as int;
         }
       }
+      if (_disposed) return;
       await TdPlugin.initialize();
+      if (_disposed) return;
       final logResult = TdPlugin.instance.tdExecute(
         jsonEncode({
           '@type': 'setLogStream',
@@ -297,6 +299,7 @@ class TelegramService extends ChangeNotifier {
   bool get paired => _cartKey != null && _botId != null && _botChat != null;
 
   Future<Map<String, bool>> loadChecks() async {
+    await _checkWrites.catchError((Object _) {});
     final raw = await _storage.read(key: 'telegram_cart_checks');
     if (raw == null) return {};
     try {

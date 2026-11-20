@@ -1,8 +1,7 @@
 # Android-App: Stand der Fehlerprüfung
 
-Stand: 19. November 2026. Die umfassende Prüfung ist **pausiert und noch nicht
-abgeschlossen**. Dieses Dokument beschreibt den Arbeitsstand im lokalen
-Arbeitsverzeichnis; es ist kein Bericht über eine bereits veröffentlichte Version.
+Stand: 20. November 2026. Die Android-Prüfung wurde fortgesetzt. Dieses Dokument
+hält die geprüften Abläufe, die lokalen Korrekturen und die ausstehende Abnahme fest.
 
 ## Bisher untersucht und bearbeitet
 
@@ -36,48 +35,194 @@ Arbeitsverzeichnis; es ist kein Bericht über eine bereits veröffentlichte Vers
 - **Bildschirmgrößen:** Isolierte Widgettests für Einstellungen und Hauptnavigation
   auf einem 320 Pixel breiten Bildschirm mit größerer Schrift bestanden.
 
-Die gezielten Tests wurden während der Arbeit mehrfach für die jeweils betroffenen
-Dateien ausgeführt. **Die vollständige Flutter-Testreihe und die Flutter-Analyse
-wurden nach den letzten Änderungen noch nicht gemeinsam erneut ausgeführt.** Die
-einzelnen grünen Tests belegen nicht die vollständige Funktionsprüfung.
+## Fortsetzung am 20. November 2026
+
+- **Telegram-Einkaufswagen:** Frühe Änderungen konnten gespeicherte Häkchen anderer
+  Artikel überschreiben. Die App lädt sie vor den ersten Änderungen und bietet nach
+  einem Lesefehler einen erneuten Versuch an. Beim Wiederöffnen wartet der Lesezugriff
+  auf noch ausstehende Schreibvorgänge.
+- **Telegram-Woche:** Die Navigation behandelt Tage als Kalenderdaten. Beim
+  Zurückblättern über die Berliner Umstellung auf Sommerzeit bleibt der Montag
+  erhalten.
+- **Telegram-Anmeldung:** Wenn der Dialog während einer Anfrage geschlossen wird,
+  greift die Antwort auf kein bereits freigegebenes Eingabefeld mehr zu.
+- **WLAN-Erkennung:** Beim Wechsel von ungefährer zu genauer Standortfreigabe
+  fordert die App beide Standortberechtigungen gemeinsam erneut an. Das ermöglicht
+  den dafür vorgesehenen Android-Systemdialog.
+- **Flutter:** Die Analyse lief nach einer Korrektur im Verbindungstest ohne
+  Befund durch. Alle 32 Tests bestanden gemeinsam in WSL mit `Europe/Berlin`.
+  Der erste Lauf erreichte das sechsminütige Zeitlimit des Buildskripts. Der
+  vollständige Wiederholungslauf verwendete eine lokale Skriptkopie ohne dieses
+  Zeitlimit.
+- **Backend:** 128 Tests bestanden unter Windows. Die beiden dort übersprungenen
+  Linux-Tests des APK-Publishers bestanden separat in WSL.
+
+Mit isolierten Daten geprüft sind die Verbindungsauswahl, Abgleich und Wiederholung
+nach Statusfehlern, lokale Listen, Suche mit Zutatenfiltern, Rezept- und
+Notizdetails, Wochenwechsel, Wischen samt Rückgängig, Einkaufsübernahme, lokale
+Häkchen, ungeklärte Transfers, Vorrat und Kategorie-Löschung. Widgettests prüfen
+Konto, JSON-Export und APK-Update bis zu ihren jeweiligen Schnittstellen.
+Telegram-Tests prüfen verschlüsselte Antwortteile, Wochenwechsel, Häkchen und den
+Anmeldedialog.
+
+Im isolierten Emulator mit Android 35 startete die separate x86_64-Prüf-APK.
+Nach vorbereiteter ungefährer Standortfreigabe bot Android den Wechsel zu genauer
+Freigabe an und bestätigte anschließend beide Berechtigungen. Rezeptgarten zeigte
+danach die Telegram-Einrichtung. Die ARM64-APK ließ sich im Emulator installieren;
+der Start über die ARM-Übersetzung erreichte dort keine bedienbare App-Oberfläche.
+
+## Debug-Modus
+
+Version `1.2.0` ergänzt in den Android-Einstellungen den Schalter „Debug-Modus“.
+Die normalen Ansichten lassen sich mit lokalen Beispieldaten bedienen. Änderungen
+an Testdaten gelten für die laufende App-Sitzung. Android merkt sich die Auswahl
+des Modus für den nächsten Start. Die Flutter-Analyse war ohne Befund. Alle 34
+Flutter-Tests bestanden, darunter der Wechsel bei unerreichbarem Server und ein
+Test für isolierte Notizen, Wochenänderungen und den JSON-Export der Beispieldaten.
+Die signierte ARM64-APK für Testbuild **19** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.2.0-build19.apk`.
+Das Veröffentlichungsskript hat Signatur, Paket-ID, Architektur und Version geprüft.
+Im Android-35-Emulator wurde Testbuild 19 mit x86_64 im Flugmodus geprüft. Der
+Schalter ließ sich ohne WLAN- oder Telegram-Einrichtung einschalten. Die Woche
+übernahm zwei weitere Beispielrezepte in den Einkaufswagen. Nach einem vollständigen
+App-Neustart blieb der Debug-Modus aktiv und der Wagen enthielt wieder die
+ursprünglichen Beispieldaten. Das Ausschalten wurde gespeichert. Der Emulator
+zeigte beim Kaltstart zeitweise einen Android-Wartehinweis.
+
+## Material 3 Expressive
+
+Version `1.3.0` aktualisiert die Android-Oberfläche. Das gemeinsame Expressive-Theme
+gilt in den Hauptansichten sowie in Detailseiten, Einstellungen und Dialogen.
+Die Navigation passt sich der Fensterbreite an. Die Wochenansicht gruppiert die
+Datumsschalter und verwendet eine kontrastierende Rollenfarbe für den heutigen Tag.
+Die Analyse war ohne Befund, alle 35 Flutter-Tests und 130 Backend- und
+Publisher-Tests bestanden. Flutter-Tests prüfen unter anderem die Navigation beim
+Wechsel zwischen kompaktem und breitem Fenster sowie die gesperrten Ziele im
+Telegram-Modus. Auf schmalen Rezeptkarten misst die Bildfläche den Platz für
+Zeit und Portionen, damit die Aktion in der oberen Ecke frei bleibt.
+
+Die signierte ARM64-APK für Testbuild **21** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.0-build21.apk`.
+Signatur, Paket-ID, Architektur und Versionsangaben wurden geprüft.
+Der Android-35-Emulator zeigte Testbuild 21 im Flugmodus auf Handybreite im
+Hellmodus sowie mit erweiterter Seitenleiste im Dunkelmodus. In den breiten
+Wochenansichten blieben Zeit- und Portionsschild unter der Kartenaktion sichtbar.
+
+Version `1.3.1` vereinheitlicht die Abstände in den Android-Ansichten und Dialogen.
+Der Wochenplan zeigt sieben gleichmäßig getrennte Spalten, sobald die verfügbare
+Breite für ihre Bedienelemente ausreicht. Der Flutter-Analyselauf war ohne Befund,
+alle 35 Flutter-Tests bestanden. Die Windows-Testsuite meldete 128 erfolgreiche
+Tests und zwei übersprungene Tests.
+
+Die signierte ARM64-APK für Testbuild **22** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.1-build22.apk`.
+Paket-ID, Version und Architektur wurden geprüft. Die Signatur entspricht Build 21.
+Im Android-35-Emulator im Flugmodus wurden die Einstellungen und die Woche auf
+Handybreite sowie die sieben gleichmäßig getrennten Spalten auf Tabletbreite
+geprüft.
+
+Version `1.3.2` richtet die Wochenaktionen auf einer Höhe aus und verwendet das
+Abstandsraster auch bei umgebrochenen Einkaufsaktionen, Telegram-Abschnitten und
+dem Übergang zur Vorratsliste. Der Wochen-Widgettest misst die gemeinsame Höhe
+der Bedienelemente und den 12-dp-Abstand zwischen zwei Tagesspalten. Die Analyse
+und alle 35 Flutter-Tests bestanden. Die signierte ARM64-APK für Testbuild **23**
+liegt lokal unter `android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.2-build23.apk`.
+Paket-ID, Version, Architektur und die unveränderte Signatur wurden geprüft.
+
+Version `1.3.3` trennt Zeit und Portionen in den unteren Bildecken und
+verkleinert die sichtbaren oberen Aktionen. Die Wischvorschau zeigt beim
+Bewegen der Kachel das Ziel. Ein Widgettest prüft die Positionen in schmalen
+Spalten sowie Vorschau, Rückkehr unterhalb der Wischschwelle und Ausführung
+erst beim Loslassen. Die Flutter-Analyse war ohne Befund und alle 35 Tests
+bestanden. Die signierte ARM64-APK für Testbuild **24** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.3-build24.apk`.
+Paket-ID, Version, Architektur und die unveränderte Signatur wurden geprüft.
+Im Android-35-Emulator im Flugmodus waren die Badges auf Handybreite und in
+den schmalen Tablet-Spalten getrennt sichtbar. Eine Touch-Aufnahme vor dem
+Loslassen bestätigte die verschobene Kachel mit „In die Ablage“.
+
+Version `1.3.4` erhält den Zustand häufig genutzter Tabs, zeigt beim Nachladen
+eines geöffneten Einkaufswagens den bisherigen Stand und begrenzt breite
+Rezeptdetails auf eine 720-dp-Lesespalte. Bildabrufe werden gebündelt und
+freigegebene Bilder wiederverwendet. Alle 37 Flutter-Tests bestanden. Die neuen
+Tests prüfen unter anderem Sucherhalt ohne weiteren Abruf, korrektes Leeren des
+Wagenzählers und die Wiederverwendung von Bilddaten.
+Die signierte ARM64-APK für Testbuild **25** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.4-build25.apk`.
+Paket-ID, Version, Architektur und die unveränderte Signatur wurden geprüft.
+Der Android-35-Emulator zeigte die mittige Detailspalte im Querformat und die
+kompakte Kopfzeile im schmalen Format. Bei rund 332 dp brach „Übersicht“ in der
+Navigation um. Der sehr langsame Start in der x86-Umgebung löste Androids
+Wartehinweis aus. Danach ließen sich Ansichten und Rezeptdetails bedienen.
+
+Version `1.3.5` verwendet „Start“ im schmalen Navigationslayout und zeigt
+Rezeptfilter auf Handys als Bottom Sheet. Bei normaler Schrift stehen bei
+332 dp zwei Rezeptkarten nebeneinander. Vorhandene Treffer bleiben beim
+Nachladen sichtbar. Alle 39 Flutter-Tests bestanden, darunter die kompakte
+Navigation, die Filtereingaben und ein Suchabruf mit verzögerter Antwort.
+Die signierte ARM64-APK für Testbuild **26** liegt lokal unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.5-build26.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
+Der Android-35-Emulator zeigte bei rund 332 dp die sechs einzeiligen
+Navigationsbeschriftungen, zwei Rezeptspalten und das Filterblatt von unten.
+Bei 150 Prozent Systemschrift wechselte die Liste auf eine Spalte und die
+Navigation auf Symbole. Der Kaltstart im x86-Emulator blieb langsam.
+
+Version `1.3.6` ordnet offene Zutaten zuerst im Android-Einkaufswagen an,
+macht die Zutatenzeile vollständig antippbar und baut lange Einkaufslisten
+schrittweise beim Scrollen auf. Im Vorrat sind die Kategorieaktionen gebündelt
+und Zutaten durch Antippen bearbeitbar.
+Alle 40 Flutter-Tests bestanden. Ein Test baut eine Einkaufsliste mit
+100 Einträgen auf und prüft das Nachladen beim Scrollen. Die signierte ARM64-APK
+für Testbuild **27** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.6-build27.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
+Im isolierten Android-35-Emulator waren bei 332 dp die Zutaten vor den
+Rezeptkarten sichtbar. Das Eingabeblatt samt Aktion blieb über geöffneter
+Bildschirmtastatur sichtbar. Android meldete Zeitlimits beim Start und bei
+der Zurück-Taste. Der Vorratsablauf wurde im Flutter-Widgettest geprüft.
+
+Version `1.3.7` reserviert gleich hohe Titel- und Schwierigkeitsbereiche für
+gleich breite Android-Rezeptkarten. Titel ab der dritten Zeile werden mit
+Auslassungszeichen gekürzt. Der Layouttest prüft kurze und lange Titel sowie
+unterschiedliche Bildbadges bei 150 Prozent Schriftgröße. Alle 41 Flutter-Tests
+bestanden. Die signierte ARM64-APK für Testbuild **28** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.3.7-build28.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
+
+Version `1.3.8` entfernt die dauerhaft eingeblendeten Bedienhinweise zu
+Wischgesten in der Android-Woche und Häkchen im Einkaufswagen. Alle 41
+Flutter-Tests bestanden.
+
+Version `1.4.0` überarbeitet Übersicht, Listen, Rezeptsammlung, Woche und
+Einkaufswagen. Die Einkaufsliste hält während der Häkchenbestätigung ihre
+Position. Zusatzartikel erhalten einen Warenbereich aus der Serverantwort.
+Ein Aufwärtswisch erfordert 140 dp. Eine Kachel wird nach 250 ms markiert.
+Alle 41 Flutter-Tests bestanden. Der Backendlauf meldete 128 erfolgreiche
+und zwei übersprungene Tests. Die Android-Tests prüfen die stabile Position
+beim Abhaken, das Sortierblatt und die Wischvorschau vor der Ausführung.
+Die signierte ARM64-APK für Testbuild **30** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.4.0-build30.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
 
 ## Noch ausstehend
 
-1. Die Prüfung aller Android-Funktionen anhand von `FLUTTER-PORTIERUNG.md` und
-   `AGENTS.md` fortsetzen und ausdrücklich noch nicht geprüfte Abläufe und
-   Fehlerfälle erfassen. Das betrifft insbesondere Listen, Suche und Filter,
-   Notizen und Konflikte, Wochenplanung und Rückgängig, Einkaufswagen und
-   ungeklärte Übertragungen, Vorrat, Konto und Export, Telegram-Anmeldung und
-   Kopplung sowie den nativen Update- und Installationsablauf.
-2. Die neuen und geänderten Tests gemeinsam ausführen, Flutter-Analyse und die
-   vollständige Flutter-Testreihe durchführen und etwaige Fehler beheben. Wo
-   gemeinsame Server-APIs betroffen sind, passende isolierte Backendtests
-   ergänzen oder ausführen.
-3. Eine isolierte Android-Laufzeit prüfen, soweit verfügbar. Der Nutzer möchte
-   **kein physisches Android-Gerät anschließen**. Eine virtuelle Testumgebung
-   wurde vorbereitet; der Download ihrer Abhängigkeiten wurde beim Pausieren
-   abgebrochen und ist nicht vollständig. Ohne geeigneten Emulator bleiben
-   insbesondere Android-Berechtigungen, Telegram/TDLib, Dateiauswahl und der
-   tatsächliche Android-Installer nur eingeschränkt geprüft. Keine persönlichen
-   Konten oder produktiven Daten als Testdaten verwenden.
-4. Änderungen und Ergebnisse vollständig überprüfen; `AGENTS.md`, die betroffenen
-   Projektskills und gegebenenfalls die Portierungsdokumentation aktualisieren.
-   Erst danach den Android-Testbuild mit steigender Buildnummer bauen, den
-   bestehenden Serverstand und Testkanal bereitstellen und die Downloads prüfen.
-5. Nach erfolgreicher Prüfung und Bereitstellung alle weiteren Änderungen
-   committen und ohne Force-Push nach `origin/main` übertragen.
+1. Telegram-Anmeldung und Kopplung, Android-Dateiauswahl und den In-App-Installer
+   mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
+   ist in `FLUTTER-PORTIERUNG.md` beschrieben.
+2. Die lokale Version `1.4.0` und den Android-Testkanal auf LXC 103 bereitstellen
+   und HTTPS-Download samt Manifest prüfen. Beim Prüflauf war der LXC vom
+   aktuellen WLAN aus weder über HTTPS noch über SSH erreichbar.
+
+Auf Nutzerwunsch wird Version `1.4.0` vor der LXC-Bereitstellung in
+`origin/main` gesichert.
 
 ## Aktueller technischer Stand
 
 - Zuletzt veröffentlichter Android-Testbuild: **1.1.0, Build 17**.
-- Der pausierte Arbeitsstand wird auf ausdrücklichen Wunsch in Git gesichert;
-  er ist **nicht bereitgestellt**. `app/version.py` enthält für diesen Stand
-  bereits `1.1.1` und die Service-Worker-Cacheversion `v136`; die bereitgestellte
-  Version bleibt davon unberührt.
-- `android-app/test/api_test.dart` enthält die neuen isolierten API-Tests.
-- Die teilweise vorbereitete virtuelle Testumgebung und die detaillierte lokale
-  Prüfliste liegen unter `.local/` und sind nicht Bestandteil von Git. Der laufende
-  Download wurde gestoppt; ein erfolgreicher Abschluss darf nicht angenommen werden.
-- Die frühere Testdatei `FLUTTER-PORTIERUNG.md` enthält historische und noch offene
-  Abnahmepunkte; sie ist bei der Fortsetzung gegen die aktuellen Anforderungen
-  und den tatsächlichen Stand abzugleichen.
+- Der pausierte Arbeitsstand (`1.1.1`, Service-Worker-Cache `v136`) ist in Commit
+  `9723187` gesichert. Version `1.1.2`, Android-Testbuild **18**, wurde lokal
+  gebaut und geprüft. Der Debug-Modus ist in `1.2.0` enthalten.
+- Die virtuelle Testumgebung und die lokale Prüfliste liegen unter `.local/`.
+  Für die Sichtprüfungen kam der isolierte x86_64-Emulator mit Android 35 zum
+  Einsatz.

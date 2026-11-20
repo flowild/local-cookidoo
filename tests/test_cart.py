@@ -151,6 +151,10 @@ class CartTests(unittest.TestCase):
         stored = self.db.cart(self.app.state.sync.cart_owner())[0]['data']['ingredients']
         self.assertNotIn('category', stored[0])
         self.assertEqual(len(stored), 5)
+        created = self.client.post('/api/cart/items', json={'name': 'Apfel'}, headers=ORIGIN)
+        self.assertEqual(created.status_code, 200)
+        additional = next(item for item in self.cart() if item['kind'] == 'additional')
+        self.assertEqual(additional['data']['category'], 'Obst')
 
     def test_water_hidden_in_ingredients_and_suggestions_preserves_positions(self):
         ingredients = ['500 g Wasser', {'name':'Kokoswasser','description':'100 g Kokoswasser'}, {'name':'heißes Wasser','description':'200 g heißes Wasser'}, {'name':'Zwiebel','description':'1 Zwiebel'}]

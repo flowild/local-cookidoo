@@ -5,6 +5,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rezeptgarten/api.dart';
 
 void main() {
+  test('photo reads share a request and reuse private cache bytes', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final api = RezeptgartenApi(
+      server: Uri.parse('http://127.0.0.1:${server.port}'),
+      client: HttpClient(),
+    );
+    final filename = '${'a' * 40}.webp';
+    var reads = 0;
+    server.listen((request) async {
+      reads++;
+      request.response.headers.set(
+        'Cache-Control',
+        request.uri.hasQuery ? 'private, max-age=300' : 'no-store',
+      );
+      request.response.add([1, 2, 3]);
+      await request.response.close();
+    });
+    addTearDown(() async {
+      await api.close();
+      await server.close(force: true);
+    });
+
+    final first = api.image(filename);
+    expect(identical(api.image(filename), first), isTrue);
+    final bytes = await first;
+    expect(bytes, [1, 2, 3]);
+    expect(identical(await api.image(filename), bytes), isTrue);
+    expect(reads, 1);
+    api.localAllowed = () => false;
+    expect(await api.image(filename), isNull);
+    api.localAllowed = () => true;
+    api.clearImageCache();
+    expect(await api.image(filename), [1, 2, 3]);
+    expect(reads, 2);
+    await api.image(filename, full: true);
+    await api.image(filename, full: true);
+    expect(reads, 4);
+  });
+
   test(
     'read timeout includes a server that stalls the response body',
     () async {

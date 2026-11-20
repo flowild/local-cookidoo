@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'ingredient_icon.dart';
 import 'recipe_card.dart';
 
@@ -274,7 +275,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
     return value is List ? value : [];
   }
 
-  Widget _ingredients(Json recipe) {
+  Widget? _ingredients(Json recipe) {
     final hidden = _list(recipe['hidden_ingredient_positions']).toSet();
     final availability = recipe['ingredient_availability'];
     final rows = <Widget>[];
@@ -324,7 +325,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.related),
               IngredientIcon(name.isEmpty ? label : name),
             ],
           ),
@@ -333,7 +334,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
       );
     }
     return rows.isEmpty
-        ? const SizedBox.shrink()
+        ? null
         : ExpansionTile(
             key: ValueKey('ingredients-$_id'),
             title: const Text('Zutaten'),
@@ -342,7 +343,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
           );
   }
 
-  Widget _preparation(Json recipe) {
+  Widget? _preparation(Json recipe) {
     final raw = _list(recipe['instructions_json']);
     final groups = raw.any((item) => item is Json && item['steps'] is List)
         ? objects(raw)
@@ -367,7 +368,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
       }
     }
     return rows.isEmpty
-        ? const SizedBox.shrink()
+        ? null
         : ExpansionTile(
             key: ValueKey('preparation-$_id'),
             title: const Text('Zubereitung'),
@@ -377,6 +378,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
 
   Widget _noteEditor() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
+    spacing: AppSpacing.related,
     children: [
       Focus(
         onKeyEvent: (_, event) {
@@ -423,82 +425,87 @@ class _RecipeDetailState extends State<RecipeDetail> {
     final versions = objects(recipe['versions']);
     final showVersions =
         versions.length > 1 && versions.any((version) => version['id'] == _id);
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [
-          RecipeCard(api: widget.api, recipe: recipe, detail: true),
-          if (lists.isNotEmpty)
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final list in lists) Chip(label: Text(text(list['name']))),
-              ],
-            ),
-          Text(
-            text(recipe['name'], 'Rezept'),
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          if (showVersions)
-            InputDecorator(
-              decoration: const InputDecoration(labelText: 'Rezeptversion'),
-              child: DropdownButton<String>(
-                value: _id,
-                isExpanded: true,
-                underline: const SizedBox.shrink(),
-                onChanged: _working ? null : _switchVersion,
-                items: [
-                  for (final (index, version) in versions.indexed)
-                    DropdownMenuItem(
-                      value: text(version['id']),
-                      child: Text(
-                        '${version['origin_recipe_id'] == null ? 'Cookidoo-Original' : 'Meine Kreation $index'}'
-                        '${version['servings'] == null ? '' : ' · ${version['servings']} Portionen'}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Wrap(
-            spacing: 8,
-            children: [
-              if (recipe['total_seconds'] case final num seconds)
-                Chip(label: Text('${(seconds / 60).round()} Min. gesamt')),
-              if (recipe['active_seconds'] case final num seconds)
-                Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
-              if (recipe['servings'] != null)
-                Chip(label: Text('${recipe['servings']} Portionen')),
-              if (recipe['difficulty'] != null)
-                Chip(
-                  label: Text(switch (text(recipe['difficulty'])
-                      .toLowerCase()) {
-                    'easy' => 'Einfach',
-                    'medium' => 'Mittel',
-                    'advanced' || 'hard' => 'Anspruchsvoll',
-                    _ => text(recipe['difficulty']),
-                  }),
+    final sections = <Widget>[
+      RecipeCard(api: widget.api, recipe: recipe, detail: true),
+      if (lists.isNotEmpty)
+        Wrap(
+          spacing: AppSpacing.related,
+          runSpacing: AppSpacing.related,
+          children: [
+            for (final list in lists) Chip(label: Text(text(list['name']))),
+          ],
+        ),
+      Text(
+        text(recipe['name'], 'Rezept'),
+        style: Theme.of(context).textTheme.headlineMedium,
+      ),
+      if (showVersions)
+        InputDecorator(
+          decoration: const InputDecoration(labelText: 'Rezeptversion'),
+          child: DropdownButton<String>(
+            value: _id,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            onChanged: _working ? null : _switchVersion,
+            items: [
+              for (final (index, version) in versions.indexed)
+                DropdownMenuItem(
+                  value: text(version['id']),
+                  child: Text(
+                    '${version['origin_recipe_id'] == null ? 'Cookidoo-Original' : 'Meine Kreation $index'}'
+                    '${version['servings'] == null ? '' : ' · ${version['servings']} Portionen'}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
           ),
-          _noteEditor(),
-          _ingredients(recipe),
-          _preparation(recipe),
-          if (_tips case final List<String> tips when tips.isNotEmpty)
-            ExpansionTile(
-              key: ValueKey('tips-$_id'),
-              title: const Text('Tipps'),
-              children: [for (final tip in tips) ListTile(title: Text(tip))],
-            ),
-          if (_tipsError != null)
-            TextButton(
-              onPressed: _working ? null : () => _action(_loadTips),
-              child: const Text('Tipps erneut laden'),
-            ),
-          if (!_calendarRecipe) ...[
-            const SizedBox(height: 12),
+        ),
+      if ([
+        'total_seconds',
+        'active_seconds',
+        'servings',
+        'difficulty',
+      ].any((field) => recipe[field] != null))
+        Wrap(
+          spacing: AppSpacing.related,
+          runSpacing: AppSpacing.related,
+          children: [
+            if (recipe['total_seconds'] case final num seconds)
+              Chip(label: Text('${(seconds / 60).round()} Min. gesamt')),
+            if (recipe['active_seconds'] case final num seconds)
+              Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
+            if (recipe['servings'] != null)
+              Chip(label: Text('${recipe['servings']} Portionen')),
+            if (recipe['difficulty'] != null)
+              Chip(
+                label: Text(switch (text(recipe['difficulty']).toLowerCase()) {
+                  'easy' => 'Einfach',
+                  'medium' => 'Mittel',
+                  'advanced' || 'hard' => 'Anspruchsvoll',
+                  _ => text(recipe['difficulty']),
+                }),
+              ),
+          ],
+        ),
+      _noteEditor(),
+      if (_ingredients(recipe) case final Widget ingredients) ingredients,
+      if (_preparation(recipe) case final Widget preparation) preparation,
+      if (_tips case final List<String> tips when tips.isNotEmpty)
+        ExpansionTile(
+          key: ValueKey('tips-$_id'),
+          title: const Text('Tipps'),
+          children: [for (final tip in tips) ListTile(title: Text(tip))],
+        ),
+      if (_tipsError != null)
+        TextButton(
+          onPressed: _working ? null : () => _action(_loadTips),
+          child: const Text('Tipps erneut laden'),
+        ),
+      if (!_calendarRecipe)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.related,
+          children: [
             Text(
               'Zu lokalen Listen hinzufügen',
               style: Theme.of(context).textTheme.titleMedium,
@@ -533,7 +540,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
                       }),
               ),
           ],
-          const SizedBox(height: 12),
+        ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.related,
+        children: [
           FilledButton(
             onPressed: _working
                 ? null
@@ -579,6 +590,22 @@ class _RecipeDetailState extends State<RecipeDetail> {
               child: const Text('In Cookidoo öffnen'),
             ),
         ],
+      ),
+    ];
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppSpacing.page,
+            itemCount: sections.length,
+            itemBuilder: (_, index) => sections[index],
+            separatorBuilder: (_, _) =>
+                const SizedBox(height: AppSpacing.section),
+          ),
+        ),
       ),
     );
   }

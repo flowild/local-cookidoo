@@ -56,8 +56,9 @@ class SwitchableConnection extends ConnectionController {
 class NavigationApi extends FakeApi {
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
-    if (path == '/api/status')
+    if (path == '/api/status') {
       return {'connected': false, 'cart_recipe_count': 0};
+    }
     if (path == '/api/collections') return <Json>[];
     if (path == '/api/calendar/week') return {'days': <Json>[]};
     throw StateError('Unexpected request: $path');
@@ -68,6 +69,10 @@ void main() {
   testWidgets('keeps the selected page during a temporary network check', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 915);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     final api = NavigationApi();
     final telegram = FakeTelegram()..step = TelegramStep.ready;
     final connection = SwitchableConnection(api, telegram)
@@ -102,12 +107,22 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       1,
     );
+    tester.view.physicalSize = const Size(840, 600);
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(
+      tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
+      1,
+    );
     connection.transition(ConnectionMode.telegram);
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
       3,
     );
+    final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
+    expect(rail.destinations[2].disabled, isTrue);
+    expect(rail.destinations[4].disabled, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
     appearance.dispose();
     connection.dispose();
@@ -118,6 +133,10 @@ void main() {
   testWidgets('disables unavailable navigation in Telegram mode', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 915);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     final api = FakeApi();
     final telegram = FakeTelegram()..step = TelegramStep.ready;
     final connection = ConnectionController(api, telegram)

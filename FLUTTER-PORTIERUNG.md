@@ -1,12 +1,12 @@
 # Rezeptgarten als native Android-App
 
-Ziel ist eine signierte, native Flutter-APK mit dem vollständigen Funktionsumfang, dem Erscheinungsbild und der Bedienung der Rezeptgarten-Web-App. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
+Ziel ist eine signierte native Flutter-APK mit dem Funktionsumfang der Rezeptgarten-Web-App und einer Android-Oberfläche in Material 3 Expressive. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
 Rezeptgarten **1.1.0, Build 17** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
-- Die Android-App entsteht mit nativen Flutter-Widgets in [android-app/](android-app/). Die mobile Web-App ist die Vorlage für Design und Verhalten. Die Web-App bleibt parallel erreichbar und als Chrome-PWA installierbar.
+- Die Android-App entsteht mit Flutter-Widgets in [android-app/](android-app/). Die mobile Web-App ist die Vorlage für Inhalte, Gesten und fachliche Abläufe. Die Web-App bleibt parallel erreichbar und als Chrome-PWA installierbar.
 - Beide Clients verwenden dieselben Rezeptgarten-APIs und denselben Datenbestand im bestehenden Proxmox-LXC 103. SQLite, Bilder, Konten, Cookidoo-Zugangsdaten, Synchronisierung und Kalender-Warteschlange bleiben auf dem Server. Der bestehende Cookidoo-Client und sein Lock werden weiterhin gemeinsam genutzt.
 - Ein zentraler API-Client verbindet Flutter mit `https://192.168.184.30`. Für diesen Endpunkt vertraut er dem öffentlichen Rezeptgarten-CA-Zertifikat und prüft Zertifikatskette und Host. Schreibanfragen setzen den passenden `Origin` für die bestehende Same-Origin-Prüfung. Der Zugang im Heimnetz bleibt ohne Passwort.
 - Beim Start und beim Öffnen des Einkaufswagens wartet die App höchstens 2,5 Sekunden auf die Erreichbarkeit des Heimnetzservers. Schreibanfragen erhalten dieses Zeitlimit nicht. Bei unklaren Schreibergebnissen prüft die App den Serverstand, bevor sie eine Wiederholung anbietet.
@@ -22,13 +22,23 @@ Rezeptgarten **1.1.0, Build 17** ist der zuletzt veröffentlichte Testbuild auf 
 | Mein Einkaufswagen | Kontobezogene Rezeptkarten, Zusatzartikel und bearbeitbare Häkchen. Kompakte Zeilen mit Mengen, Rezeptnamen und Zutatensymbolen. Sortierung nach offenen und abgehakten Einträgen und Gruppierung nach Warenbereichen. Vorratsabgleich und ausgeblendetes Wasser wie im Web. Einträge entfernen oder Wagen leeren. Ausdrücklicher Cookidoo-Transfer mit bestätigten und ungeklärten Ergebnissen sowie manueller Klärung. |
 | Mein Vorrat | Alphabetische Zutaten, Rezeptvorschläge und einklappbare Kategorien. Kategorien anlegen, sortieren und nach Bestätigung löschen. Vorratseinträge hinzufügen, bearbeiten und entfernen. Dieselben Zutaten-Aliasse, Symbole und Regeln zum Ausblenden von Wasser. |
 | Einstellungen | Cookidoo-Konto verbinden und trennen, JSON-Export, Dunkelmodus und Akzentfarbe. Der Sammlungsabgleich startet beim Öffnen der App und durch Herunterziehen einer Ansicht; ein Zeitplan existiert nicht. Der Installationsbereich zeigt die installierte Version, prüft den eigenen Aktualisierungskanal, lädt die APK und öffnet den Android-Installer. |
+| Debug-Modus | In den Einstellungen auch offline einschaltbar. Die sechs Hauptbereiche verwenden Beispieldaten; Teständerungen bleiben für die laufende App-Sitzung im Speicher. Beim nächsten Start bleibt der Modus ausgewählt und beginnt mit frischen Beispieldaten. |
 
 Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. Die Tabelle beschreibt das Ziel für alle Bereiche. Vor der Freigabe werden auch seit Projektstart hinzugekommene Webfunktionen anhand des dann aktuellen Webstands abgeglichen. Die fachlichen Details zu Kalender, Notizen, Einkaufswagen, Telegram und Datenhaltung stehen in [AGENTS.md](AGENTS.md).
 
 ## Design und Bedienung
 
-- Farben, Schriftgrößen, Abstände, Karten, Dialoge, Statusanzeigen, Rezeptbilder und Symbole aus der Web-App übernehmen. Die vorhandenen Zutaten- und Platzhaltersymbole werden mit der APK ausgeliefert. Dunkelmodus und benutzerdefinierte Akzentfarben gelten auch für Dialoge, Navigation und Rückmeldungen.
-- Auf schmalen Displays die mobile Anordnung abbilden. Auf breiteren Android-Displays dient die breite Webansicht als Vorlage. Android-Systemleisten und große Systemeinstellungen für Schriftgröße bei der Anordnung berücksichtigen.
+- Material 3 Expressive definiert Rollenfarben, Titel, Karten, Dialoge und Bedienelemente. Dunkelmodus und benutzerdefinierte Akzentfarben gelten auch für Dialoge, Navigation und Rückmeldungen. Zutaten- und Platzhaltersymbole bleiben in der APK verfügbar.
+- Auf schmalen Displays stehen sechs Ziele unten. Ab 600 logischen Pixeln steht die Navigation links und zeigt ab 1200 Pixeln die Bezeichnungen neben den Symbolen. Android-Systemleisten und große Schrift bei der Anordnung berücksichtigen.
+- Die Wochenansicht verbindet die Datumsschalter zu einer Gruppe und hebt den heutigen Tag hervor. Die Hauptansichten verwenden die vom Flutter-Paket mitgelieferte Expressive-Feder und überspringen diese Bewegung, wenn Android Animationen reduziert.
+- Das gemeinsame Abstandsraster setzt 16 dp für Seitenränder und Abschnitte, 12 dp zwischen Karten und Formulareingaben sowie 8 dp innerhalb zusammengehöriger Gruppen ein. Die Woche zeigt sieben Spalten, sobald genügend Platz für Karten und Zwischenräume vorhanden ist.
+- Rezeptkarten zeigen Zeit und Portionen in getrennten unteren Bildecken. Die oberen Ecken enthalten, soweit vorhanden, Notizsymbol und Kartenaktion. Beim Drücken vergrößert sich das Bild leicht. Beim Wischen zeigt die markierte Wochenkachel die geplante Aktion und bewegt sich mit dem Finger. Bei reduzierter Bewegung bleibt der Aktionshinweis sichtbar.
+- Besucht man Listen, Rezepte, Woche und Vorrat erneut, bleiben Suche und Scrollposition im Tab erhalten. Auf schmalen Geräten weicht das Logo zusätzlichen Platz für Titel und Aktionen. Breite Rezeptdetails haben eine mittige Lesespalte mit maximal 720 dp.
+- Auf schmalen Displays heißt „Übersicht“ in der Android-Navigation „Start“. Bei zu wenig Platz für die aktuelle Schriftgröße sind die Symbole sichtbar und ihre Beschriftungen für Bildschirmleser verfügbar. Die Rezeptbibliothek zeigt bei normaler Schrift ab 332 dp zwei Spalten. Auf Handys öffnen die Rezeptfilter in einem Bottom Sheet.
+- Im Einkaufswagen sind die Zutaten vor den Rezepten sichtbar und zeilenweise antippbar. Ein Eingabeblatt erfasst zusätzliche Artikel. Im Vorrat bleibt „Zutat hinzufügen“ direkt sichtbar und das Menü bündelt die gemeinsamen Kategorieaktionen.
+- Gleich breite Rezeptkarten bleiben unabhängig von der Titellänge gleich hoch. Sie zeigen bis zu zwei Titelzeilen mit Auslassungszeichen. Die Rezeptdetails zeigen den vollständigen Namen.
+- In der Übersicht sitzt das Wechsel-Symbol am Zufallsrezept. Pillen führen zu Listen und Rezepten. Aufklappbare Listen haben eine eigene Suche. In „Alle Rezepte“ bilden Suche, Sortierung und Filter einen gemeinsamen Bereich.
+- In „Meine Woche“ sitzt das Einkaufssymbol neben den Datumsschaltern. Nach 250 ms Halten ist eine Kachel ausgewählt. Aufwärts sind 140 dp, abwärts 90 dp erforderlich. Ablagerezepte und Platzhalter verwenden kompakte Kacheln.
 - Vergleichsaufnahmen von APK und PWA mit demselben isolierten Testdatenstand erstellen. Normalzustände, leere Ansichten, lange Rezeptnamen, Lade- und Fehlerzustände sowie Hell- und Dunkelmodus prüfen.
 - Wochenwechsel, langes Drücken, Wischen, Rückgängig, Einkaufs-Häkchen und Android-Zurück-Navigation auf einem echten Gerät prüfen.
 

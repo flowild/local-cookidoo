@@ -21,6 +21,54 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 
 ## Android
 
+Die Android-Oberfläche verwendet Material 3 Expressive. Das gemeinsame Flutter-
+Theme setzt Rollenfarben, betonte Titel, abgerundete Komponenten und einheitliche
+Aktionsgrößen um. Die Hauptnavigation wechselt auf breiten Fenstern zur Seitenleiste.
+Ansichtswechsel nutzen die Expressive-Feder und berücksichtigen reduzierte Bewegung.
+Die Wochenansicht gruppiert ihre Datumsschalter und hebt den heutigen Tag hervor.
+Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
+Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
+Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im
+Bild. Notiz und Kartenaktion sind kompakt und liegen in den oberen Bildecken.
+Gleich breite Android-Karten reservieren zwei Titelzeilen und eine Zeile für den
+Schwierigkeitsgrad. Längere Titel werden auf Karten mit Auslassungszeichen gekürzt.
+Beim Wischen einer markierten Wochenkachel folgt sie dem Finger und zeigt die
+vorgesehene Aktion. Kurze Wische lassen die Kachel zurückkehren. Bei reduzierter
+Bewegung bleibt die Aktionsvorschau sichtbar und die Kachel bleibt am Platz.
+Die Android-Ansichten Woche und Einkaufswagen verzichten auf dauerhaft
+sichtbare Erklärtexte für Wischgesten und Häkchen.
+Android markiert Wochenrezepte und abgelegte Platzhalter nach 250 ms. Ein
+Wisch nach oben braucht 140 dp, nach unten 90 dp. Die Wochenablage zeigt kompakte
+Kacheln nebeneinander, sobald die Breite ausreicht. Das Wochen-Einkaufssymbol
+steht rechts neben den Datumsschaltern.
+Android-Rezeptlisten sind unter ihren Titeln aufklappbar und haben eine
+Titelsuche. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
+Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
+Zusatzartikel erhalten ihren Warenbereich über denselben Serverabgleich wie
+Rezeptzutaten. Die Rezepte im Einkaufswagen erscheinen als kompakte Zeilen.
+Auf schmalen Displays bleiben die Hauptaktionen in der Kopfzeile bedienbar.
+Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Wechsel
+ihren Zustand. Kontowechsel und Wechsel vom Heimnetz setzen die Ansichten und
+den Android-Bildcache zurück. Erfolgreiche Bildantworten mit Cachefreigabe
+werden im Arbeitsspeicher wiederverwendet. Andere API-Antworten verwenden
+keinen HTTP-Cache.
+Auf schmalen Android-Displays heißt der Übersichts-Tab „Start“. Wenn für die
+Schriftgröße zu wenig Platz ist, zeigt die Navigation die sechs Symbole mit
+zugänglichen Beschriftungen. Die Rezeptbibliothek zeigt zwei Karten je Reihe,
+sobald sie lesbar nebeneinander passen. Die Filter öffnen auf Handys von unten.
+Vorhandene Treffer bleiben während einer laufenden Suche sichtbar.
+Im Android-Einkaufswagen stehen offene Zutaten und abgehakte Einträge vor den
+Rezeptkarten. Die ganze Zutatenzeile schaltet das Häkchen. Zutaten und Rezepte
+werden beim Scrollen aufgebaut. „Artikel hinzufügen“ öffnet ein Eingabeblatt.
+Im Vorrat öffnet ein Tipp auf die Zutat die Bearbeitung. Das Vorratsmenü bietet
+die Kategorieanlage sowie alle Kategorien ein- oder auszuklappen.
+
+In den Android-Einstellungen schaltet „Debug-Modus“ auf lokale Beispieldaten um.
+Die Auswahl bleibt beim Neustart gespeichert. Teständerungen an Rezeptnotizen,
+Listen, Woche, Einkaufswagen und Vorrat gelten für die laufende App-Sitzung.
+Der Modus zeigt „Testdaten“ an und verwendet keine Verbindung zu LXC, Cookidoo
+oder Telegram. Beim Ausschalten folgt die normale Verbindungsprüfung.
+
 Die native Flutter-App entsteht unter `android-app/`. Die
 [Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
@@ -50,14 +98,20 @@ Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
 Heimnetz und beim Herunterziehen einer Ansicht. Die App zeigt laufenden Abgleich
 und Fehler an; vorübergehende Fehler beim Statusabruf werden erneut geprüft und
 ältere Statusantworten beenden keinen neu gestarteten Abgleich. Beim Aktualisieren
-von Rezeptdetails bleibt ein ungeklärter Notizentwurf erhalten. Außerhalb des Heimnetzes aktualisiert Herunterziehen die lesende
-Telegram-Ansicht; ein Cookidoo-Abgleich wird dort nicht ausgelöst. Der frühere
+von Rezeptdetails bleibt ein ungeklärter Notizentwurf erhalten. Außerhalb des
+Heimnetzes aktualisiert Herunterziehen die lesende Telegram-Ansicht; ein
+Cookidoo-Abgleich wird dort nicht ausgelöst. Telegram-Wochen
+wechseln nach Kalenderdatum auch über Zeitumstellungen hinweg. Der Telegram-
+Einkaufswagen lädt gespeicherte Häkchen, bevor er Änderungen zulässt. Ein
+Lesefehler wird angezeigt und der Abruf kann wiederholt werden. Der frühere
 zeitgesteuerte Sammlungsabgleich ist serverweit entfernt, bestehende Intervalle
 haben keine Wirkung. Die separate Warteschlange für Wochenänderungen bleibt
 aktiv. Dunkelmodus und Akzentfarbe
 werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
 Android nutzt bei verbundenem WLAN `ThomasWlan` und erreichbarem Server den
-lokalen HTTPS-Zugang. Andernfalls stehen nach Telegram-Benutzeranmeldung und
+lokalen HTTPS-Zugang. Für die WLAN-Namenerkennung fordert Android beide
+Standortberechtigungen gemeinsam an, auch beim Wechsel von ungefährer zu
+genauer Freigabe. Andernfalls stehen nach Telegram-Benutzeranmeldung und
 Kopplung im Heimnetz die verschlüsselten, lesenden Ansichten „Meine Woche“ und
 „Mein Einkaufswagen“ zur Verfügung. Einkaufs-Häkchen im Telegram-Modus werden
 auf dem Gerät gespeichert. Die App fragt nach Telegram-API-ID und API-Hash, wenn
@@ -157,7 +211,7 @@ die Zubereitung eingeklappt. Vorhandene Cookidoo-Tipps stehen darunter in einem
 eigenen zunächst eingeklappten Bereich. Hinweise eigener Kreationen und Tipps von
 Katalogrezepten werden beim Synchronisieren gespeichert und für ältere Rezepte bei
 Bedarf nachgeladen.
-Rezeptkacheln in Woche und Ablage folgen dem Design der Rezeptliste und zeigen
+In der Web-App folgen Rezeptkacheln in Woche und Ablage dem Design der Rezeptliste und zeigen
 vollständig umgebrochene Namen sowie den verfügbaren Schwierigkeitsgrad.
 
 Rezeptbilder liegen lokal als WebP bis 960 Pixel; Kacheln erhalten bei Bedarf

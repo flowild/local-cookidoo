@@ -42,13 +42,24 @@ void main() {
       expect(api.item?['ingredient_id'], 11);
       expect(find.text('250 g'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Reis bearbeiten'));
+      await tester.tap(find.text('Reis'));
       await tester.pumpAndSettle();
       await tester.enterText(field('Menge (optional)'), '500 g');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
       expect(api.item?['ingredient_id'], 11);
+      expect(find.text('500 g'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Vorratsaktionen'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Alle einklappen'));
+      await tester.pumpAndSettle();
+      expect(find.text('500 g'), findsNothing);
+      await tester.tap(find.byTooltip('Vorratsaktionen'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Alle ausklappen'));
+      await tester.pumpAndSettle();
       expect(find.text('500 g'), findsOneWidget);
 
       final list = tester.widget<ReorderableListView>(

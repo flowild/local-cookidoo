@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/physics.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'appearance.dart';
 import 'ingredient_icon.dart';
 import 'pantry_view.dart';
@@ -24,12 +26,14 @@ class RezeptgartenHome extends StatefulWidget {
     required this.appearance,
     this.telegram,
     this.connection,
+    this.onDebugModeChanged,
   });
 
   final RezeptgartenApi api;
   final AppearanceController appearance;
   final TelegramService? telegram;
   final ConnectionController? connection;
+  final ValueChanged<bool>? onDebugModeChanged;
 
   @override
   State<RezeptgartenHome> createState() => _RezeptgartenHomeState();
@@ -54,6 +58,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     Icons.shopping_cart_outlined,
     Icons.kitchen_outlined,
   ];
+  static const selectedIcons = [
+    Icons.home,
+    Icons.layers,
+    Icons.menu_book,
+    Icons.calendar_today,
+    Icons.shopping_cart,
+    Icons.kitchen,
+  ];
   RezeptgartenApi get api => widget.api;
   int area = 3;
   int? serverCartCount;
@@ -67,6 +79,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   bool wasBackgrounded = false;
   Timer? syncPoll;
   int viewRefresh = 0;
+  static const _retainedAreas = {1, 2, 3, 5};
+  final _visitedAreas = {3};
+  final _areaRefreshes = List.filled(areas.length, 0);
+  int _session = 0;
+  late bool _wasLocal;
+  bool _recipesNeedRefresh = false;
   final pantryCollapsed = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
@@ -80,6 +98,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _wasLocal = _local;
     widget.connection?.addListener(_connectionChanged);
     if (_local) unawaited(_startupSync());
   }
@@ -105,11 +124,27 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           area != 4) {
         area = 3;
       }
+      if (_wasLocal != _local) {
+        _wasLocal = _local;
+        _resetSession();
+      }
       serverCartCount = null;
       viewRefresh++;
+      _areaRefreshes[area]++;
       data = _load();
     });
     if (_local) unawaited(_startupSync());
+  }
+
+  void _resetSession() {
+    _session++;
+    _visitedAreas
+      ..clear()
+      ..add(area);
+    _recipesNeedRefresh = false;
+    pantryCollapsed.clear();
+    cartItem.clear();
+    api.clearImageCache();
   }
 
   Future<void> _startupSync() async {
@@ -157,11 +192,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       ? null
       : switch (area) {
           0 => _loadOverview(),
-          4 => api.get('/api/cart', timeout: shortRead),
+          4 => _loadCart(),
           _ => null,
         };
 
   Future<Json> _loadOverview() async {
+    final session = _session;
     final responses = await Future.wait<dynamic>([
       api.get('/api/featured-recipe', timeout: shortRead),
       api.get('/api/status', timeout: shortRead),
@@ -169,12 +205,26 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     ]);
     final featured = responses[0] as Json;
     final status = responses[1] as Json;
-    if (mounted && area == 0) _adoptStatus(status);
+    if (mounted && area == 0 && session == _session) _adoptStatus(status);
     return {
       ...featured,
       'stats': status['stats'],
       'previews': (responses[2] as Json)['items'],
     };
+  }
+
+  Future<Json> _loadCart() async {
+    final session = _session;
+    final cart = await api.get('/api/cart', timeout: shortRead) as Json;
+    if (mounted && area == 4 && session == _session) {
+      final count = objects(cart['items'])
+          .where((item) => item['kind'] == 'recipe')
+          .length;
+      if (serverCartCount != count) {
+        setState(() => serverCartCount = count);
+      }
+    }
+    return cart;
   }
 
   void _adoptStatus(Json status, {bool authoritative = false}) {
@@ -202,6 +252,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           telegram: widget.telegram,
           connection: widget.connection,
           onSync: _syncFromPull,
+          onDebugModeChanged: widget.onDebugModeChanged,
+          onAccountChanged: () {
+            if (!mounted) return;
+            setState(() {
+              _resetSession();
+              serverCartCount = null;
+              data = _load();
+            });
+          },
         ),
       ),
     );
@@ -276,6 +335,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           );
         }
         if (!syncRunning && ModalRoute.of(context)?.isCurrent == true) {
+          _recipesNeedRefresh = true;
           await _refresh();
         }
       } on Exception {
@@ -305,17 +365,29 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   void _open(int index) {
     if (!_local && index != 3 && index != 4) return;
-    if (busy || (area == index && index != 3)) return;
+    if (busy || area == index) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       area = index;
+      if (!_visitedAreas.add(index) && (index != 2 || _recipesNeedRefresh)) {
+        _areaRefreshes[index]++;
+      }
+      if (index == 2) _recipesNeedRefresh = false;
       data = _load();
     });
   }
 
   Future<void> _refresh() async {
     if (busy) return;
-    if (area == 1 || area == 2 || area == 3 || area == 5) {
-      setState(() => viewRefresh++);
+    if (_retainedAreas.contains(area)) {
+      setState(() {
+        if (_local) {
+          if (area == 2) _recipesNeedRefresh = false;
+          _areaRefreshes[area]++;
+        } else {
+          viewRefresh++;
+        }
+      });
       return;
     }
     final updated = _load();
@@ -368,8 +440,61 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Future<void> _addCartItem() async {
-    final name = cartItem.text.trim();
-    if (name.isEmpty || name.length > 100) return;
+    if (busy) return;
+    final session = _session;
+    final name = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) {
+        void submit() {
+          final draft = cartItem.text.trim();
+          if (draft.isNotEmpty && draft.runes.length <= 100) {
+            Navigator.pop(context, draft);
+          }
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: AppSpacing.panel,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.item,
+                children: [
+                  Text(
+                    'Artikel hinzufügen',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  TextField(
+                    controller: cartItem,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 100,
+                    decoration: const InputDecoration(
+                      labelText: 'Artikel',
+                      counterText: '',
+                    ),
+                    onSubmitted: (_) => submit(),
+                  ),
+                  FilledButton(
+                    onPressed: submit,
+                    child: const Text('Hinzufügen'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (name == null || !mounted || session != _session || !_local) return;
     if (await _mutate('POST', '/api/cart/items', {'name': name}) && mounted) {
       cartItem.clear();
     }
@@ -400,34 +525,23 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (mounted && area != 1 && area != 2 && area != 3) await _refresh();
   }
 
-  Widget _heading(String title, [String? description]) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.headlineMedium),
-        if (description != null) Text(description),
-      ],
-    ),
-  );
+  Widget _heading(String title) =>
+      Text(title, style: Theme.of(context).textTheme.headlineMedium);
 
   Widget _section(String title, List<Widget> children) => Card(
-    margin: const EdgeInsets.only(bottom: 14),
+    margin: EdgeInsets.zero,
     child: Padding(
-      padding: const EdgeInsets.all(14),
+      padding: AppSpacing.panel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.related,
         children: [
           Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
           ...children,
         ],
       ),
     ),
   );
-
-  List<Widget> _entriesOrHint(List<Widget> entries, String hint) =>
-      entries.isEmpty ? [Text(hint)] : entries;
 
   Future<bool> _confirm(String message, String action) async =>
       await showDialog<bool>(
@@ -448,10 +562,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       ) ??
       false;
 
-  Widget _cart(Json cart) {
+  List<Widget> _cart(Json cart) {
     final items = objects(cart['items']);
     final recipes = items.where((item) => item['kind'] == 'recipe').toList();
-    serverCartCount = recipes.length;
     final editable = !busy && cart['transferring'] != true;
     const statusLabels = {
       'processing': 'Wird übertragen',
@@ -461,9 +574,11 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     };
     String entryPath(Json item) =>
         '/api/cart/${Uri.encodeComponent(text(item['id']))}';
+    String removeLabel(Json item) =>
+        '${text((item['data'] as Json)['name'])} entfernen';
 
     Widget remove(Json item) => IconButton(
-      tooltip: '${text((item['data'] as Json)['name'])} entfernen',
+      tooltip: removeLabel(item),
       onPressed: editable ? () => _mutate('DELETE', entryPath(item)) : null,
       icon: const Icon(Icons.delete_outline),
     );
@@ -479,7 +594,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       if (item['status'] == 'uncertain') ...[
         const Text('Bitte prüfe den Eintrag in Cookidoo.'),
         Wrap(
-          spacing: 8,
+          spacing: AppSpacing.related,
+          runSpacing: AppSpacing.related,
           children: [
             for (final (value, label) in [
               ('done', 'Dort vorhanden'),
@@ -513,7 +629,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           entry: item,
           row: details,
           position: null,
-          category: 'Weitere Artikel',
+          category: text(details['category'], 'Sonstiges'),
         ));
       }
       for (final (position, ingredient) in objects(
@@ -547,113 +663,186 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           : group;
     });
 
-    List<Widget> shoppingRows(bool checked) {
-      final rendered = <Widget>[];
-      String? category;
-      final grouped = <(String, bool, String), List<_CartRow>>{};
+    Widget shoppingRow(_CartRow item, bool checked) {
+      final entry = item.entry;
+      final isRecipe = item.position != null;
+      final suffix = isRecipe ? 'ingredients/${item.position}' : 'owned';
+      final canCheck = editable && entry['status'] == 'pending';
+      void toggle(bool? value) {
+        unawaited(
+          _mutate('PUT', '${entryPath(entry)}/$suffix', {'owned': value}),
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: MergeSemantics(
+                    child: InkWell(
+                      excludeFromSemantics: true,
+                      onTap: canCheck ? () => toggle(!checked) : null,
+                      borderRadius: BorderRadius.circular(AppSpacing.item),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: checked,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: canCheck ? toggle : null,
+                            ),
+                            IngredientIcon(
+                              text(item.row['name'] ?? item.row['text']),
+                              category: item.category,
+                            ),
+                            const SizedBox(width: AppSpacing.related),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    text(item.row['text'] ?? item.row['name']),
+                                  ),
+                                  if (isRecipe)
+                                    Text(
+                                      text((entry['data'] as Json)['name']),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (!isRecipe) remove(entry),
+            ],
+          ),
+          if (!isRecipe) ...status(entry),
+        ],
+      );
+    }
+
+    Widget cartPanel(String title, Widget content) {
+      final theme = Theme.of(context);
+      return DecoratedSliver(
+        decoration: ShapeDecoration(
+          color: theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow,
+          shape:
+              theme.cardTheme.shape ??
+              const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+              ),
+        ),
+        sliver: SliverPadding(
+          padding: AppSpacing.panel,
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Text(title, style: theme.textTheme.titleLarge),
+              ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: AppSpacing.related),
+              ),
+              content,
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget shoppingSection(String title, {required bool checked}) {
+      final groups = <(String, bool, String), List<_CartRow>>{};
       for (final item in rows.where(
         (item) => (item.row['owned'] == true) == checked,
       )) {
         final key = item.position != null
             ? text(item.row['key'], text(item.row['name'] ?? item.row['text']))
             : text(item.entry['id']);
-        (grouped[(item.category, item.position != null, key)] ??= []).add(item);
+        (groups[(item.category, item.position != null, key)] ??= []).add(item);
       }
-      for (final group in grouped.values) {
-        final first = group.first;
-        if (category != first.category) {
-          category = first.category;
-          rendered.add(
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                first.category,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-          );
-        }
-        if (group.length > 1) {
-          rendered.add(
-            Text(
-              text(first.row['name'] ?? first.row['text']),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          );
-        }
-        for (final item in group) {
-          final entry = item.entry;
-          final isRecipe = item.position != null;
-          final suffix = isRecipe ? 'ingredients/${item.position}' : 'owned';
-          rendered.add(
-            Row(
+
+      if (groups.isEmpty) {
+        return SliverToBoxAdapter(
+          child: _section(title, [
+            const Text('Keine offenen Einkaufszutaten.'),
+          ]),
+        );
+      }
+
+      final theme = Theme.of(context);
+      final entries = groups.values.toList(growable: false);
+      return cartPanel(
+        title,
+        SliverList.builder(
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final group = entries[index];
+            final first = group.first;
+            final startsCategory =
+                index == 0 ||
+                entries[index - 1].first.category != first.category;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Checkbox(
-                  value: checked,
-                  visualDensity: VisualDensity.compact,
-                  onChanged: !editable || entry['status'] != 'pending'
-                      ? null
-                      : (value) => _mutate(
-                          'PUT',
-                          '${entryPath(entry)}/$suffix',
-                          {'owned': value},
-                        ),
-                ),
-                IngredientIcon(
-                  text(item.row['name'] ?? item.row['text']),
-                  category: item.category,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(text(item.row['text'] ?? item.row['name'])),
-                      if (isRecipe)
-                        Text(
-                          text((entry['data'] as Json)['name']),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
+                if (startsCategory)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      top: index == 0 ? 0 : AppSpacing.related,
+                    ),
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        first.category,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
                   ),
-                ),
-                if (!isRecipe) remove(entry),
+                if (group.length > 1)
+                  Text(
+                    text(first.row['name'] ?? first.row['text']),
+                    style: theme.textTheme.titleSmall,
+                  ),
+                for (final item in group) shoppingRow(item, checked),
               ],
-            ),
-          );
-          if (!isRecipe) rendered.addAll(status(entry));
-        }
-      }
-      return rendered;
+            );
+          },
+        ),
+      );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _heading(
-          'Mein Einkaufswagen',
-          'Ein Häkchen bedeutet: bereits vorhanden.',
-        ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+    const gap = SliverToBoxAdapter(child: SizedBox(height: AppSpacing.section));
+    return [
+      SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.item,
           children: [
-            FilledButton.icon(
-              onPressed:
-                  editable && items.any((item) => item['status'] == 'pending')
-                  ? () => _mutate(
-                      'POST',
-                      '/api/cart/transfer',
-                      null,
-                      'Einkaufswagen an Cookidoo übertragen.',
-                    )
-                  : null,
-              icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('An Cookidoo übertragen'),
-            ),
-            OutlinedButton(
-              onPressed: editable && items.isNotEmpty
-                  ? () async {
+            Row(
+              spacing: AppSpacing.related,
+              children: [
+                Expanded(child: _heading('Mein Einkaufswagen')),
+                if (items.isNotEmpty)
+                  PopupMenuButton<String>(
+                    enabled: editable,
+                    tooltip: 'Einkaufswagenaktionen',
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'clear',
+                        child: Text('Einkaufswagen leeren'),
+                      ),
+                    ],
+                    onSelected: (_) async {
                       if (await _confirm(
                             'Den gesamten lokalen Einkaufswagen leeren?',
                             'Einkaufswagen leeren',
@@ -666,82 +855,85 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                           'Einkaufswagen geleert.',
                         );
                       }
-                    }
-                  : null,
-              child: const Text('Einkaufswagen leeren'),
+                    },
+                  ),
+              ],
+            ),
+            Wrap(
+              spacing: AppSpacing.related,
+              runSpacing: AppSpacing.related,
+              children: [
+                FilledButton.icon(
+                  onPressed: editable ? _addCartItem : null,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Artikel hinzufügen'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      editable &&
+                          items.any((item) => item['status'] == 'pending')
+                      ? () => _mutate(
+                          'POST',
+                          '/api/cart/transfer',
+                          null,
+                          'Einkaufswagen an Cookidoo übertragen.',
+                        )
+                      : null,
+                  icon: const Icon(Icons.shopping_cart_outlined),
+                  label: const Text('An Cookidoo übertragen'),
+                ),
+              ],
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        _section(
-          'Rezepte',
-          _entriesOrHint([
-            for (final entry in recipes)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        RecipeCard(
-                          api: api,
-                          recipe: entry['data'] as Json,
-                          onTap: () => _recipe({
-                            ...entry['data'] as Json,
-                            'id': entry['recipe_id'],
-                          }, calendar: true),
-                        ),
-                        Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          shape: const CircleBorder(),
-                          child: remove(entry),
-                        ),
-                      ],
-                    ),
-                    if ((entry['data'] as Json)['ingredients_complete'] ==
-                        false)
-                      const Text(
-                        'Zutaten fehlen. Bitte nach der Synchronisierung erneut hinzufügen.',
-                      ),
-                    ...status(entry),
-                  ],
-                ),
-              ),
-          ], 'Noch keine Rezepte im Einkaufswagen.'),
-        ),
-        _section(
-          'Zutaten',
-          _entriesOrHint(shoppingRows(false), 'Keine offenen Einkaufszutaten.'),
-        ),
-        if (rows.any((item) => item.row['owned'] == true))
-          _section('Abgehakt', shoppingRows(true)),
-        _section('Artikel hinzufügen', [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: cartItem,
-                  enabled: editable,
-                  maxLength: 100,
-                  decoration: const InputDecoration(
-                    labelText: 'Artikel',
-                    counterText: '',
-                  ),
-                  onSubmitted: editable ? (_) => _addCartItem() : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: editable ? _addCartItem : null,
-                child: const Text('Hinzufügen'),
-              ),
-            ],
-          ),
-        ]),
+      ),
+      gap,
+      shoppingSection('Zutaten', checked: false),
+      if (rows.any((item) => item.row['owned'] == true)) ...[
+        gap,
+        shoppingSection('Abgehakt', checked: true),
       ],
-    );
+      gap,
+      cartPanel(
+        'Rezepte',
+        recipes.isEmpty
+            ? const SliverToBoxAdapter(
+                child: Text('Noch keine Rezepte im Einkaufswagen.'),
+              )
+            : SliverList.separated(
+                itemCount: recipes.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.related),
+                itemBuilder: (context, index) {
+                  final entry = recipes[index];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: AppSpacing.related,
+                    children: [
+                      CompactRecipeTile(
+                        title: text(entry['data']['name'], 'Rezept'),
+                        onTap: () => _recipe({
+                          ...entry['data'] as Json,
+                          'id': entry['recipe_id'],
+                        }, calendar: true),
+                        actionLabel: removeLabel(entry),
+                        actionIcon: Icons.delete_outline,
+                        onAction: editable
+                            ? () => _mutate('DELETE', entryPath(entry))
+                            : null,
+                      ),
+                      if ((entry['data'] as Json)['ingredients_complete'] ==
+                          false)
+                        const Text(
+                          'Zutaten fehlen. Bitte nach der Synchronisierung erneut hinzufügen.',
+                        ),
+                      ...status(entry),
+                    ],
+                  );
+                },
+              ),
+      ),
+    ];
   }
 
   Widget _overview(Object? result) {
@@ -752,49 +944,56 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     final previews = objects(map['previews']);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.section,
       children: [
         _heading('Dein Rezeptgarten'),
         if ((map['recipe'] ?? map['featured']) case final Json recipe) ...[
-          RecipeCard(api: api, recipe: recipe, onTap: () => _recipe(recipe)),
-          OutlinedButton.icon(
-            onPressed: busy || map['can_shuffle'] == false
-                ? null
-                : () => _mutate('POST', '/api/featured-recipe/shuffle'),
-            icon: const Icon(Icons.shuffle),
-            label: const Text('Anderes Rezept'),
+          RecipeCard(
+            api: api,
+            recipe: recipe,
+            onTap: () => _recipe(recipe),
+            cornerAction: RecipeCornerAction(
+              tooltip: 'Anderes Rezept',
+              onPressed: busy || map['can_shuffle'] == false
+                  ? null
+                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+              icon: Icons.shuffle,
+            ),
           ),
         ] else
           const Text('Kein Zufallsrezept vorhanden.'),
-        if (stats.isNotEmpty)
-          _section('Deine Sammlung', [
+        _section('Deine Sammlung', [
+          if (stats.isNotEmpty)
             Text(
               '${stats['collections'] ?? 0} Rezeptlisten · ${stats['recipes'] ?? 0} gespeicherte Rezepte',
             ),
-            if (stats['last_sync'] case final String lastSync)
-              Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
+          if (stats['last_sync'] case final String lastSync)
+            Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
+          Wrap(
+            spacing: AppSpacing.related,
+            runSpacing: AppSpacing.related,
+            children: [
+              FilledButton.tonalIcon(
                 onPressed: () => _open(1),
-                child: const Text('Alle Listen ansehen'),
+                icon: const Icon(Icons.layers_outlined),
+                label: const Text('Alle Listen ansehen'),
               ),
-            ),
-          ]),
+              FilledButton.tonalIcon(
+                onPressed: () => _open(2),
+                icon: const Icon(Icons.menu_book),
+                label: const Text('Alle Rezepte'),
+              ),
+            ],
+          ),
+        ]),
         if (previews.isNotEmpty) ...[
           Text(
             'Ein Blick in deine Sammlung',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => _open(2),
-              child: const Text('Alle Rezepte'),
-            ),
-          ),
           LayoutBuilder(
             builder: (context, bounds) {
-              const gap = 12.0;
+              const gap = AppSpacing.item;
               final columns = (bounds.maxWidth / 180).floor().clamp(1, 4);
               final width = (bounds.maxWidth - (columns - 1) * gap) / columns;
               return Wrap(
@@ -819,208 +1018,347 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     );
   }
 
+  Widget _localArea(int index) {
+    if (index != area &&
+        (!_retainedAreas.contains(index) || !_visitedAreas.contains(index))) {
+      return const SizedBox.shrink();
+    }
+    final refreshCount = _areaRefreshes[index];
+    return switch (index) {
+      1 => RecipeCollections(
+        api: api,
+        openRecipe: _recipe,
+        onSync: _syncFromPull,
+        refreshCount: refreshCount,
+      ),
+      2 => RecipeBrowser(
+        api: api,
+        openRecipe: _recipe,
+        onSync: _syncFromPull,
+        searchFocus: recipeSearch,
+        refreshCount: refreshCount,
+      ),
+      3 => WeekView(
+        api: api,
+        active: area == 3,
+        onSync: _syncFromPull,
+        refreshCount: refreshCount,
+        openRecipe: (recipe, calendar) => _recipe(recipe, calendar: calendar),
+        statusChanged: _adoptStatus,
+        cartCountChanged: (count) {
+          if (mounted && area == 3 && serverCartCount != count) {
+            setState(() => serverCartCount = count);
+          }
+        },
+      ),
+      5 => PantryView(
+        api: api,
+        onSync: _syncFromPull,
+        collapsed: pantryCollapsed,
+        refreshCount: refreshCount,
+      ),
+      _ => _simpleArea(index),
+    };
+  }
+
+  Widget _simpleArea(int index) => FutureBuilder<dynamic>(
+    future: data,
+    builder: (context, snapshot) {
+      final waiting = snapshot.connectionState != ConnectionState.done;
+      return RefreshIndicator(
+        onRefresh: _pullRefresh,
+        child: CustomScrollView(
+          key: PageStorageKey(index),
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: AppSpacing.page,
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                  if (waiting && !snapshot.hasData)
+                    const SliverToBoxAdapter(child: LinearProgressIndicator()),
+                  if (snapshot.hasError && !waiting)
+                    SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: AppSpacing.related,
+                        children: [
+                          _heading(
+                            index == 4 ? 'Mein Einkaufswagen' : areas[index],
+                          ),
+                          Text(snapshot.error.toString()),
+                          OutlinedButton(
+                            onPressed: busy ? null : _refresh,
+                            child: const Text('Erneut laden'),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (snapshot.hasData)
+                    if (index == 4)
+                      ..._cart(snapshot.data as Json)
+                    else
+                      SliverToBoxAdapter(child: _overview(snapshot.data)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<dynamic>(
-      future: data,
-      builder: (context, snapshot) {
-        final waiting = snapshot.connectionState != ConnectionState.done;
-        final body = waiting
-            ? const Center(child: CircularProgressIndicator())
-            : snapshot.hasError
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _heading(area == 3 ? 'Meine Woche' : areas[area]),
-                  Text(snapshot.error.toString()),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      OutlinedButton(
-                        onPressed: busy ? null : _refresh,
-                        child: const Text('Erneut laden'),
-                      ),
-                    ],
-                  ),
-                ],
-              )
-            : switch (area) {
-                4 when _local => _cart(snapshot.data as Json),
-                _ => _overview(snapshot.data),
-              };
-        return Scaffold(
-          appBar: AppBar(
-            leading: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Image.asset('assets/icon.png'),
-            ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Rezeptgarten',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    final width = MediaQuery.sizeOf(context).width;
+    final useRail = width >= 600;
+    final compactToolbar = width < 360;
+    final hideNavigationLabels =
+        width < 320 || width / MediaQuery.textScalerOf(context).scale(1) < 310;
+    return Scaffold(
+      appBar: AppBar(
+        leadingWidth: compactToolbar ? 0 : 48,
+        titleSpacing: compactToolbar ? AppSpacing.section : AppSpacing.related,
+        leading: compactToolbar
+            ? null
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.item,
+                  AppSpacing.related,
+                  0,
+                  AppSpacing.related,
                 ),
-                if (widget.connection != null)
-                  Text(switch (widget.connection!.mode) {
-                    ConnectionMode.local => 'Heimnetz',
-                    ConnectionMode.telegram => 'Telegram',
-                    ConnectionMode.checking => 'Verbindung wird geprüft',
-                    ConnectionMode.offline => 'Offline',
-                  }, style: Theme.of(context).textTheme.labelSmall)
-                else if (connected != null)
-                  Text(
-                    connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall,
+                child: Image.asset(
+                  'assets/icon.png',
+                  excludeFromSemantics: true,
+                ),
+              ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Rezeptgarten',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (api.usesTestData)
+              Text(
+                compactToolbar ? 'Testdaten' : 'Debug-Modus · Testdaten',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall,
+              )
+            else if (widget.connection != null)
+              Text(
+                switch (widget.connection!.mode) {
+                  ConnectionMode.local => 'Heimnetz',
+                  ConnectionMode.telegram => 'Telegram',
+                  ConnectionMode.checking => 'Verbindung wird geprüft',
+                  ConnectionMode.offline => 'Offline',
+                },
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall,
+              )
+            else if (connected != null)
+              Text(
+                connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+          ],
+        ),
+        actions: [
+          if (widget.connection?.mode == ConnectionMode.telegram)
+            const Icon(
+              Icons.send,
+              color: Colors.blue,
+              semanticLabel: 'Telegram-Verbindung',
+            ),
+          IconButton(
+            tooltip: 'Rezepte suchen',
+            onPressed: busy || !_local
+                ? null
+                : () {
+                    _open(2);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && area == 2) recipeSearch.requestFocus();
+                    });
+                  },
+            icon: const Icon(Icons.search),
+          ),
+          IconButton(
+            tooltip: 'Einkaufswagen öffnen',
+            onPressed: busy ? null : () => _open(4),
+            icon: Badge(
+              isLabelVisible: serverCartCount != null,
+              label: Text(text(serverCartCount)),
+              child: const Icon(Icons.shopping_cart_outlined),
+            ),
+          ),
+          IconButton(
+            tooltip: syncRunning ? 'Synchronisierung läuft' : 'Synchronisieren',
+            onPressed: busy || syncPending || syncRunning || !_local
+                ? null
+                : _beginSync,
+            icon: syncPending || syncRunning
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+          ),
+          IconButton(
+            tooltip: 'Einstellungen öffnen',
+            onPressed: busy ? null : _settings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        bottom: useRail,
+        child: Row(
+          children: [
+            if (useRail)
+              NavigationRail(
+                selectedIndex: area,
+                extended: width >= 1200,
+                labelType: width >= 1200
+                    ? NavigationRailLabelType.none
+                    : NavigationRailLabelType.all,
+                useIndicator: true,
+                scrollable: true,
+                onDestinationSelected: _open,
+                destinations: [
+                  for (final (index, label) in areas.indexed)
+                    NavigationRailDestination(
+                      icon: Icon(icons[index]),
+                      selectedIcon: Icon(selectedIcons[index]),
+                      label: Text(label),
+                      disabled: !_local && index != 3 && index != 4,
+                    ),
+                ],
+              ),
+            Expanded(
+              key: const ValueKey('main-content'),
+              child: _SectionEntrance(
+                key: ValueKey(_session),
+                child: !_local
+                    ? widget.connection?.mode == ConnectionMode.telegram &&
+                              widget.telegram != null
+                          ? TelegramView(
+                              key: ValueKey('telegram-$area-$viewRefresh'),
+                              telegram: widget.telegram!,
+                              cart: area == 4,
+                              notice: widget.connection?.error,
+                            )
+                          : Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    widget.connection?.error ??
+                                        'Verbindung wird geprüft.',
+                                  ),
+                                  if (widget.connection?.hasPermission == false)
+                                    TextButton(
+                                      onPressed: _networkPermission,
+                                      child: const Text(
+                                        'WLAN-Erkennung einrichten',
+                                      ),
+                                    ),
+                                  TextButton(
+                                    onPressed: widget.connection?.refresh,
+                                    child: const Text('Erneut prüfen'),
+                                  ),
+                                ],
+                              ),
+                            )
+                    : IndexedStack(
+                        key: ValueKey(_session),
+                        index: area,
+                        children: [
+                          for (var index = 0; index < areas.length; index++)
+                            TickerMode(
+                              enabled: index == area,
+                              child: ExcludeFocus(
+                                excluding: index != area,
+                                child: PrimaryScrollController.none(
+                                  child: _localArea(index),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: area,
+              labelBehavior: hideNavigationLabels
+                  ? NavigationDestinationLabelBehavior.alwaysHide
+                  : NavigationDestinationLabelBehavior.alwaysShow,
+              onDestinationSelected: _open,
+              destinations: [
+                for (final (index, label) in areas.indexed)
+                  NavigationDestination(
+                    icon: Icon(icons[index]),
+                    selectedIcon: Icon(selectedIcons[index]),
+                    label: compactToolbar && index == 0 ? 'Start' : label,
+                    enabled: _local || index == 3 || index == 4,
                   ),
               ],
             ),
-            actions: [
-              if (widget.connection?.mode == ConnectionMode.telegram)
-                const Icon(
-                  Icons.send,
-                  color: Colors.blue,
-                  semanticLabel: 'Telegram-Verbindung',
-                ),
-              IconButton(
-                tooltip: 'Rezepte suchen',
-                onPressed: busy || !_local
-                    ? null
-                    : () {
-                        _open(2);
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted && area == 2) recipeSearch.requestFocus();
-                        });
-                      },
-                icon: const Icon(Icons.search),
-              ),
-              IconButton(
-                tooltip: 'Einkaufswagen öffnen',
-                onPressed: busy ? null : () => _open(4),
-                icon: Badge(
-                  isLabelVisible: serverCartCount != null,
-                  label: Text(text(serverCartCount)),
-                  child: const Icon(Icons.shopping_cart_outlined),
-                ),
-              ),
-              IconButton(
-                tooltip: syncRunning
-                    ? 'Synchronisierung läuft'
-                    : 'Synchronisieren',
-                onPressed: busy || syncPending || syncRunning || !_local
-                    ? null
-                    : _beginSync,
-                icon: syncPending || syncRunning
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync),
-              ),
-              IconButton(
-                tooltip: 'Einstellungen öffnen',
-                onPressed: busy ? null : _settings,
-                icon: const Icon(Icons.settings_outlined),
-              ),
-            ],
-          ),
-          body: SafeArea(
-            top: false,
-            child: !_local
-                ? widget.connection?.mode == ConnectionMode.telegram &&
-                          widget.telegram != null
-                      ? TelegramView(
-                          key: ValueKey('telegram-$area'),
-                          telegram: widget.telegram!,
-                          cart: area == 4,
-                          notice: widget.connection?.error,
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.connection?.error ??
-                                    'Verbindung wird geprüft.',
-                              ),
-                              if (widget.connection?.hasPermission == false)
-                                TextButton(
-                                  onPressed: _networkPermission,
-                                  child: const Text(
-                                    'WLAN-Erkennung einrichten',
-                                  ),
-                                ),
-                              TextButton(
-                                onPressed: widget.connection?.refresh,
-                                child: const Text('Erneut prüfen'),
-                              ),
-                            ],
-                          ),
-                        )
-                : switch (area) {
-                    1 => RecipeCollections(
-                      api: api,
-                      openRecipe: _recipe,
-                      onSync: _syncFromPull,
-                      refreshCount: viewRefresh,
-                    ),
-                    2 => RecipeBrowser(
-                      api: api,
-                      openRecipe: _recipe,
-                      onSync: _syncFromPull,
-                      searchFocus: recipeSearch,
-                      refreshCount: viewRefresh,
-                    ),
-                    3 => WeekView(
-                      api: api,
-                      onSync: _syncFromPull,
-                      refreshCount: viewRefresh,
-                      openRecipe: (recipe, calendar) =>
-                          _recipe(recipe, calendar: calendar),
-                      statusChanged: _adoptStatus,
-                      cartCountChanged: (count) {
-                        if (mounted && area == 3 && serverCartCount != count) {
-                          setState(() => serverCartCount = count);
-                        }
-                      },
-                    ),
-                    5 => PantryView(
-                      api: api,
-                      onSync: _syncFromPull,
-                      collapsed: pantryCollapsed,
-                      refreshCount: viewRefresh,
-                    ),
-                    _ => RefreshIndicator(
-                      onRefresh: _pullRefresh,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                        children: [
-                          if (busy) const LinearProgressIndicator(),
-                          body,
-                        ],
-                      ),
-                    ),
-                  },
-          ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: area,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            onDestinationSelected: _open,
-            destinations: [
-              for (final (index, label) in areas.indexed)
-                NavigationDestination(
-                  icon: Icon(icons[index]),
-                  label: label,
-                  enabled: _local || index == 3 || index == 4,
-                ),
-            ],
-          ),
-        );
-      },
     );
   }
+}
+
+class _SectionEntrance extends StatefulWidget {
+  const _SectionEntrance({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SectionEntrance> createState() => _SectionEntranceState();
+}
+
+class _SectionEntranceState extends State<_SectionEntrance>
+    with SingleTickerProviderStateMixin {
+  late final _progress = AnimationController.unbounded(vsync: this);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _progress.value = 1;
+    } else if (!_started) {
+      _progress.animateWith(
+        SpringSimulation(Springs.expressiveDefaultSpatial, 0, 1, 0),
+      );
+    }
+    _started = true;
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _progress,
+    child: widget.child,
+    builder: (context, child) => Transform.translate(
+      offset: Offset(0, 12 * (1 - _progress.value)),
+      child: child,
+    ),
+  );
 }

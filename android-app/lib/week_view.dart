@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'recipe_card.dart';
+import 'spacing.dart';
 
 const _placeholders = {
   'restaurant': ('Im Restaurant essen', '🍴'),
@@ -58,6 +59,7 @@ class WeekView extends StatefulWidget {
     this.statusChanged,
     this.refreshCount = 0,
     this.onSync,
+    this.active = true,
   });
 
   final RezeptgartenApi api;
@@ -66,6 +68,7 @@ class WeekView extends StatefulWidget {
   final ValueChanged<Json>? statusChanged;
   final int refreshCount;
   final Future<void> Function()? onSync;
+  final bool active;
 
   @override
   State<WeekView> createState() => _WeekViewState();
@@ -89,7 +92,7 @@ class _WeekViewState extends State<WeekView> {
   Timer? _undoExpiry;
   ({String name, String id})? _undo;
   String? _selected;
-  Offset _gestureDistance = Offset.zero;
+  final _gestureDistance = ValueNotifier(Offset.zero);
   Future<void>? _enrichment;
 
   String? get _monday =>
@@ -112,20 +115,26 @@ class _WeekViewState extends State<WeekView> {
   @override
   void didUpdateWidget(WeekView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.active) {
+      _selected = null;
+      _gestureDistance.value = Offset.zero;
+    }
     if (widget.refreshCount != oldWidget.refreshCount && !_busy) {
-      unawaited(_load());
+      unawaited(_load(showPrevious: true));
     }
   }
 
   @override
   void dispose() {
     _daysController.dispose();
+    _gestureDistance.dispose();
     _poll?.cancel();
     _undoExpiry?.cancel();
     super.dispose();
   }
 
   Future<void> _restoreDay() async {
+    if (widget.api.usesTestData) return;
     try {
       final saved = await _preferences.invokeMethod<int>('weekDay');
       if (mounted && !_dayChanged && saved != null && saved >= 0 && saved < 7) {
@@ -151,6 +160,7 @@ class _WeekViewState extends State<WeekView> {
     if (_visibleDay == index) return;
     _dayChanged = true;
     _visibleDay = index;
+    if (widget.api.usesTestData) return;
     try {
       await _preferences.invokeMethod<void>('setWeekDay', index);
     } on PlatformException {
@@ -226,7 +236,13 @@ class _WeekViewState extends State<WeekView> {
   }
 
   Future<void> _pollQueue() async {
-    if (_busy || _loading || _openingRecipe || _week == null) return;
+    if (!widget.active ||
+        _busy ||
+        _loading ||
+        _openingRecipe ||
+        _week == null) {
+      return;
+    }
     final request = _request;
     try {
       final status = await _status();
@@ -569,22 +585,32 @@ class _WeekViewState extends State<WeekView> {
     });
   }
 
-  void _swipe(_WeekEntry entry, Offset distance, String monday) {
+  String? _swipeTarget(_WeekEntry entry, Offset distance) {
     if (_selected != entry.identity ||
-        distance.dy.abs() < 90 ||
+        distance.dy.abs() <= 10 ||
         distance.dy.abs() <= distance.dx.abs() * 1.3) {
-      return;
+      return null;
     }
+    if (entry.source != 'shelf') return distance.dy > 0 ? 'shelf' : 'trash';
+    if (distance.dy > 0) return 'trash';
     final days = objects(_week?['days']);
-    final target = entry.source == 'shelf'
-        ? (distance.dy > 0 || days.isEmpty
-              ? 'trash'
-              : text(days[min(_visibleDay, days.length - 1)]['date']))
-        : distance.dy > 0
-        ? 'shelf'
-        : 'trash';
-    unawaited(_move(entry, target, monday));
+    return days.isEmpty
+        ? null
+        : days[min(_visibleDay, days.length - 1)]['date'] as String?;
   }
+
+  void _finishSwipe(_WeekEntry entry, String monday, {bool commit = true}) {
+    if (_selected != entry.identity) return;
+    final distance = _gestureDistance.value;
+    final target = _swipeTarget(entry, distance);
+    _gestureDistance.value = Offset.zero;
+    if (commit && target != null && _swipeArmed(distance)) {
+      unawaited(_move(entry, target, monday));
+    }
+  }
+
+  bool _swipeArmed(Offset distance) =>
+      distance.dy < 0 ? distance.dy <= -140 : distance.dy >= 90;
 
   Future<void> _openRecipe(Json recipe, bool calendar) async {
     if (_busy || _openingRecipe) return;
@@ -603,86 +629,189 @@ class _WeekViewState extends State<WeekView> {
     final selected = _selected == entry.identity;
     final shelf = entry.source == 'shelf';
     final target = shelf ? 'trash' : 'shelf';
-    final recipe = entry.placeholder
-        ? Card(
-            child: ListTile(
-              leading: Text(_placeholders[entry.type]?.$2 ?? ''),
-              title: Text(entry.name),
-              onTap: selected ? () => setState(() => _selected = null) : null,
-            ),
+    final action = RecipeCornerAction(
+      tooltip: shelf
+          ? '${entry.name} entfernen'
+          : '${entry.name} in die Ablage',
+      onPressed: enabled ? () => _move(entry, target, monday) : null,
+      icon: shelf ? Icons.delete_outline : Icons.close,
+    );
+    void open() {
+      if (_selected != null) {
+        setState(() => _selected = null);
+      } else if (!entry.placeholder) {
+        unawaited(_openRecipe(entry.data, true));
+      }
+    }
+
+    final recipe = shelf
+        ? CompactRecipeTile(
+            title: entry.name,
+            leading: entry.placeholder
+                ? Text(_placeholders[entry.type]?.$2 ?? '')
+                : null,
+            actionLabel: action.tooltip,
+            actionIcon: action.icon,
+            onAction: action.onPressed,
+            onTap: !entry.placeholder || selected ? open : null,
+          )
+        : entry.placeholder
+        ? Stack(
+            alignment: AlignmentDirectional.topEnd,
+            children: [
+              Card(
+                child: ListTile(
+                  leading: Text(_placeholders[entry.type]?.$2 ?? ''),
+                  title: Text(entry.name),
+                  contentPadding: const EdgeInsetsDirectional.only(
+                    start: AppSpacing.section,
+                    end: 48,
+                  ),
+                  onTap: selected
+                      ? () => setState(() => _selected = null)
+                      : null,
+                ),
+              ),
+              action,
+            ],
           )
         : RecipeCard(
             api: widget.api,
             recipe: entry.data,
-            onTap: () async {
-              if (_selected != null) {
-                setState(() => _selected = null);
-                return;
-              }
-              await _openRecipe(entry.data, true);
-            },
+            cornerAction: action,
+            onTap: open,
           );
-    final card = Stack(
-      alignment: Alignment.topRight,
-      children: [
-        DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: selected
-                ? Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2,
-                  )
-                : null,
-          ),
-          child: recipe,
-        ),
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          shape: const CircleBorder(),
-          child: IconButton(
-            tooltip: shelf
-                ? '${entry.name} entfernen'
-                : '${entry.name} in die Ablage',
-            onPressed: enabled ? () => _move(entry, target, monday) : null,
-            icon: Icon(shelf ? Icons.delete_outline : Icons.close),
-          ),
-        ),
-      ],
-    );
-    final gestures = GestureDetector(
-      supportedDevices: const {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.invertedStylus,
+    final colors = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    const touchDevices = {
+      PointerDeviceKind.touch,
+      PointerDeviceKind.stylus,
+      PointerDeviceKind.invertedStylus,
+    };
+    final gestures = RawGestureDetector(
+      key: ValueKey(entry.identity),
+      gestures: {
+        if (enabled)
+          LongPressGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(
+                  duration: const Duration(milliseconds: 250),
+                  supportedDevices: touchDevices,
+                ),
+                (recognizer) {
+                  recognizer.onLongPressStart = (_) {
+                    _gestureDistance.value = Offset.zero;
+                    setState(() => _selected = entry.identity);
+                  };
+                  recognizer.onLongPressMoveUpdate = (details) =>
+                      _gestureDistance.value = details.offsetFromOrigin;
+                  recognizer.onLongPressEnd = (_) =>
+                      _finishSwipe(entry, monday);
+                  recognizer.onLongPressCancel = () =>
+                      _finishSwipe(entry, monday, commit: false);
+                },
+              ),
+        if (selected && enabled)
+          VerticalDragGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<
+                VerticalDragGestureRecognizer
+              >(
+                () => VerticalDragGestureRecognizer(
+                  supportedDevices: touchDevices,
+                ),
+                (recognizer) {
+                  recognizer.dragStartBehavior = DragStartBehavior.down;
+                  recognizer.onStart = (_) =>
+                      _gestureDistance.value = Offset.zero;
+                  recognizer.onUpdate = (details) =>
+                      _gestureDistance.value += details.delta;
+                  recognizer.onEnd = (_) => _finishSwipe(entry, monday);
+                  recognizer.onCancel = () =>
+                      _finishSwipe(entry, monday, commit: false);
+                },
+              ),
       },
-      onLongPressStart: enabled
-          ? (_) {
-              _gestureDistance = Offset.zero;
-              setState(() => _selected = entry.identity);
-            }
-          : null,
-      onLongPressMoveUpdate: enabled
-          ? (details) => _gestureDistance = details.offsetFromOrigin
-          : null,
-      onLongPressEnd: enabled
-          ? (_) => _swipe(entry, _gestureDistance, monday)
-          : null,
-      onVerticalDragStart: selected && enabled
-          ? (_) => _gestureDistance = Offset.zero
-          : null,
-      onVerticalDragUpdate: selected && enabled
-          ? (details) => _gestureDistance += details.delta
-          : null,
-      onVerticalDragEnd: selected && enabled
-          ? (_) => _swipe(entry, _gestureDistance, monday)
-          : null,
-      child: card,
+      child: ValueListenableBuilder(
+        valueListenable: _gestureDistance,
+        child: recipe,
+        builder: (context, distance, child) {
+          final preview = selected && enabled
+              ? _swipeTarget(entry, distance)
+              : null;
+          final offset = preview == null || reduceMotion
+              ? 0.0
+              : (distance.dy * .35).clamp(-45.0, 45.0);
+          return AnimatedContainer(
+            duration: reduceMotion || preview != null
+                ? Duration.zero
+                : const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            transform: Matrix4.translationValues(0, offset, 0),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected ? colors.primary : colors.primary.withAlpha(0),
+                width: 2,
+              ),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                child!,
+                if (preview != null)
+                  Positioned(
+                    left: AppSpacing.related,
+                    right: AppSpacing.related,
+                    child: IgnorePointer(
+                      child: Center(child: _swipeFeedback(preview, distance)),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: _draggable(entry, monday, enabled, gestures),
+    return _draggable(entry, monday, enabled, gestures);
+  }
+
+  Widget _swipeFeedback(String target, Offset distance) {
+    final (icon, label) = switch (target) {
+      'trash' => (Icons.delete_outline, 'Entfernen'),
+      'shelf' => (Icons.move_to_inbox_outlined, 'In die Ablage'),
+      _ => (Icons.today_outlined, 'Zum angezeigten Tag'),
+    };
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final armed = _swipeArmed(distance);
+    final foreground = target == 'trash'
+        ? (armed ? colors.onError : colors.onErrorContainer)
+        : (armed ? colors.onPrimary : colors.onPrimaryContainer);
+    return Material(
+      elevation: 3,
+      borderRadius: BorderRadius.circular(12),
+      color: target == 'trash'
+          ? (armed ? colors.error : colors.errorContainer)
+          : (armed ? colors.primary : colors.primaryContainer),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.related,
+          vertical: AppSpacing.tight,
+        ),
+        child: Wrap(
+          spacing: AppSpacing.tight,
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: foreground),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelMedium?.copyWith(color: foreground),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -699,7 +828,7 @@ class _WeekViewState extends State<WeekView> {
         elevation: 4,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: AppSpacing.compactPanel,
           child: Text(entry.name),
         ),
       ),
@@ -734,31 +863,76 @@ class _WeekViewState extends State<WeekView> {
       onAcceptWithDetails: (details) =>
           _move(details.data.item, target, details.data.monday),
       builder: (context, hovering, rejected) {
+        final theme = Theme.of(context);
+        final colors = theme.colorScheme;
+        final isToday = target == _week?['today'];
+        final foreground = hovering.isNotEmpty
+            ? colors.onSecondaryContainer
+            : isToday
+            ? colors.onPrimaryContainer
+            : colors.onSurface;
         final content = [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(color: foreground),
+          ),
           if (entries.isEmpty)
             Text(
               target == 'shelf'
                   ? 'Rezepte hier ablegen, wenn der Tag noch offen ist.'
                   : 'Noch nichts geplant',
+              style: TextStyle(color: foreground),
             ),
-          for (final entry in entries) _tile(entry, monday),
+          if (target == 'shelf' && entries.isNotEmpty)
+            LayoutBuilder(
+              builder: (_, constraints) {
+                const gap = AppSpacing.related;
+                final minimum = MediaQuery.textScalerOf(context).scale(1) > 1.25
+                    ? 172
+                    : 128;
+                final columns = ((constraints.maxWidth + gap) / (minimum + gap))
+                    .floor()
+                    .clamp(1, 4);
+                final width =
+                    (constraints.maxWidth - gap * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final entry in entries)
+                      SizedBox(
+                        key: ValueKey(entry.identity),
+                        width: width,
+                        child: _tile(entry, monday),
+                      ),
+                  ],
+                );
+              },
+            )
+          else
+            for (final entry in entries) _tile(entry, monday),
         ];
         return Card(
-          margin: const EdgeInsets.fromLTRB(5, 0, 5, 12),
+          margin: EdgeInsets.zero,
           color: hovering.isNotEmpty
-              ? Theme.of(context).colorScheme.secondaryContainer
+              ? colors.secondaryContainer
+              : isToday
+              ? colors.primaryContainer
               : null,
           child: scroll
-              ? ListView(
+              ? ListView.separated(
                   primary: false,
-                  padding: const EdgeInsets.all(12),
-                  children: content,
+                  padding: AppSpacing.compactPanel,
+                  itemCount: content.length,
+                  itemBuilder: (_, index) => content[index],
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.related),
                 )
               : Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: AppSpacing.compactPanel,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: AppSpacing.related,
                     children: content,
                   ),
                 ),
@@ -774,9 +948,12 @@ class _WeekViewState extends State<WeekView> {
     final days = objects(_week?['days']);
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 700) {
+        // Leave room for both controls in each card before showing all seven columns.
+        const weekRowWidth = 7 * 124 + 6 * AppSpacing.item;
+        if (constraints.maxWidth >= weekRowWidth) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: AppSpacing.item,
             children: [
               for (final (index, day) in days.indexed)
                 Expanded(
@@ -797,11 +974,16 @@ class _WeekViewState extends State<WeekView> {
             onPageChanged: _selectDay,
             itemBuilder: (context, index) {
               final date = text(days[index]['date']);
-              return _section(
-                _dayLabel(index, date),
-                date,
-                monday,
-                scroll: true,
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.item / 2,
+                ),
+                child: _section(
+                  _dayLabel(index, date),
+                  date,
+                  monday,
+                  scroll: true,
+                ),
               );
             },
           ),
@@ -822,39 +1004,61 @@ class _WeekViewState extends State<WeekView> {
       _ => '',
     };
     final canNavigate = !_busy && !_loading;
+    final canStep = canNavigate && (_monday != null || _requestedDay != null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.related,
       children: [
         Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
+          spacing: AppSpacing.related,
           children: [
-            IconButton.outlined(
-              tooltip: 'Vorherige Woche',
-              icon: const Icon(Icons.chevron_left),
-              onPressed:
-                  canNavigate && (_monday != null || _requestedDay != null)
-                  ? () => _navigate(-1)
-                  : null,
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filledTonal(
+                    tooltip: 'Vorherige Woche',
+                    style: ButtonStyle(
+                      shape: _weekControlShape(start: true),
+                      minimumSize: const WidgetStatePropertyAll(
+                        Size.square(48),
+                      ),
+                    ),
+                    onPressed: canStep ? () => _navigate(-1) : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  const SizedBox(width: AppSpacing.connected),
+                  Flexible(
+                    child: FilledButton.tonal(
+                      style: ButtonStyle(shape: _weekControlShape()),
+                      onPressed: canNavigate ? () => _navigate(null) : null,
+                      child: const Text(
+                        'Diese Woche',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.connected),
+                  IconButton.filledTonal(
+                    tooltip: 'Nächste Woche',
+                    style: ButtonStyle(
+                      shape: _weekControlShape(end: true),
+                      minimumSize: const WidgetStatePropertyAll(
+                        Size.square(48),
+                      ),
+                    ),
+                    onPressed: canStep ? () => _navigate(1) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
             ),
-            IconButton.outlined(
-              tooltip: 'Nächste Woche',
-              icon: const Icon(Icons.chevron_right),
-              onPressed:
-                  canNavigate && (_monday != null || _requestedDay != null)
-                  ? () => _navigate(1)
-                  : null,
-            ),
-            OutlinedButton(
-              onPressed: canNavigate ? () => _navigate(null) : null,
-              child: const Text('Diese Woche'),
-            ),
-            FilledButton.icon(
+            IconButton.filled(
+              tooltip: 'In den Einkaufswagen',
+              style: IconButton.styleFrom(minimumSize: const Size.square(48)),
               onPressed: _canPlaceRecipe ? _shopping : null,
               icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('In den Einkaufswagen'),
             ),
           ],
         ),
@@ -866,11 +1070,7 @@ class _WeekViewState extends State<WeekView> {
             child: const Text('Erneut laden'),
           ),
         ],
-        if (state.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(state),
-          ),
+        if (state.isNotEmpty) Text(state),
         if (queueError && objects(_queue['items']).isNotEmpty)
           OutlinedButton(
             onPressed: _ready ? _discard : null,
@@ -880,7 +1080,7 @@ class _WeekViewState extends State<WeekView> {
           Card(
             child: Row(
               children: [
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.item),
                 Expanded(child: Text('„$name“ entfernt')),
                 TweenAnimationBuilder<double>(
                   key: ValueKey(id),
@@ -901,35 +1101,48 @@ class _WeekViewState extends State<WeekView> {
               ],
             ),
           ),
-        const SizedBox(height: 12),
       ],
     );
   }
 
+  WidgetStateProperty<OutlinedBorder> _weekControlShape({
+    bool start = false,
+    bool end = false,
+  }) => WidgetStateProperty.resolveWith((states) {
+    const outer = Radius.circular(24);
+    const inner = Radius.circular(6);
+    return states.contains(WidgetState.pressed)
+        ? const StadiumBorder()
+        : RoundedRectangleBorder(
+            borderRadius: BorderRadiusDirectional.horizontal(
+              start: start ? outer : inner,
+              end: end ? outer : inner,
+            ),
+          );
+  });
+
   Widget _placeholderList(String monday) => ExpansionTile(
-    title: const Text('Platzhalter'),
+    title: Text('Platzhalter', style: Theme.of(context).textTheme.titleLarge),
     children: [
       for (final entry in _placeholders.entries)
         _draggable(
           _WeekEntry('library', {'placeholder': entry.key}, placeholder: true),
           monday,
           _ready,
-          ListTile(
+          CompactRecipeTile(
             leading: Text(entry.value.$2),
-            title: Text(entry.value.$1),
-            trailing: IconButton(
-              tooltip: '${entry.value.$1} zur Wochenablage hinzufügen',
-              onPressed: _ready
-                  ? () => _move(
-                      _WeekEntry('library', {
-                        'placeholder': entry.key,
-                      }, placeholder: true),
-                      'shelf',
-                      monday,
-                    )
-                  : null,
-              icon: const Icon(Icons.add),
-            ),
+            title: entry.value.$1,
+            actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
+            onAction: _ready
+                ? () => _move(
+                    _WeekEntry('library', {
+                      'placeholder': entry.key,
+                    }, placeholder: true),
+                    'shelf',
+                    monday,
+                  )
+                : null,
+            actionIcon: Icons.add,
           ),
         ),
     ],
@@ -951,18 +1164,15 @@ class _WeekViewState extends State<WeekView> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          padding: AppSpacing.page,
           children: [
             _toolbar(),
             if (monday != null) ...[
-              const Padding(
-                padding: EdgeInsets.only(bottom: 10),
-                child: Text(
-                  'Kachel halten und wischen. Tag ↑ entfernen, ↓ Ablage. Ablage ↑ zum angezeigten Tag, ↓ entfernen.',
-                ),
-              ),
+              const SizedBox(height: AppSpacing.section),
               _days(monday),
+              const SizedBox(height: AppSpacing.section),
               _section('Ablage für diese Woche', 'shelf', monday),
+              const SizedBox(height: AppSpacing.section),
               _placeholderList(monday),
               _WeekLists(
                 key: ValueKey(monday),
@@ -1033,7 +1243,7 @@ class _WeekListsState extends State<_WeekLists> {
 
   @override
   Widget build(BuildContext context) => ExpansionTile(
-    title: const Text('Lokale Listen'),
+    title: Text('Lokale Listen', style: Theme.of(context).textTheme.titleLarge),
     onExpansionChanged: (expanded) {
       if (expanded && _collections == null) _load();
     },

@@ -7,16 +7,62 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/main.dart';
 
 void main() {
-  testWidgets('main navigation fits a narrow screen with larger text', (tester) async {
+  testWidgets('returning to recipes keeps the search and avoids a new load', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _RecipeSearchApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Rezepte suchen'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Reis');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Reis'), findsOneWidget);
+    final reads = api.recipeReads;
+
+    await tester.tap(find.text('Woche'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('Rezepte'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      'Reis',
+    );
+    expect(api.recipeReads, reads);
+  });
+
+  testWidgets('narrow phones use a shorter start label', (tester) async {
+    tester.view.physicalSize = const Size(332, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RezeptgartenApp(api: _TestApi()));
+    await tester.pumpAndSettle();
+    expect(find.text('Start'), findsOneWidget);
+    expect(find.text('Übersicht'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('main navigation fits a narrow screen with larger text', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final api = _TestApi();
-    await tester.pumpWidget(MediaQuery(
-      data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
-      child: RezeptgartenApp(api: api),
-    ));
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+        child: RezeptgartenApp(api: api),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -102,7 +148,7 @@ void main() {
     await tester.pumpWidget(RezeptgartenApp(api: api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('In den Einkaufswagen'));
+    await tester.tap(find.byTooltip('In den Einkaufswagen'));
     await tester.pumpAndSettle();
     expect(api.addedDay, '2026-11-16');
 
@@ -112,12 +158,28 @@ void main() {
 
     final checkbox = find.byType(Checkbox);
     expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+    await tester.ensureVisible(checkbox);
+    await tester.pumpAndSettle();
     final visibleCheckbox = checkbox.hitTestable();
     expect(visibleCheckbox, findsOneWidget);
-    await tester.tap(visibleCheckbox);
+    final ingredient = find.text('100 g Reis');
+    final ingredientPosition = tester.getCenter(ingredient);
+    final write = Completer<void>();
+    api.ingredientWrite = write.future;
+    await tester.tap(ingredient.hitTestable());
+    await tester.pump();
+    expect(tester.getCenter(ingredient), ingredientPosition);
+    write.complete();
     await tester.pumpAndSettle();
     expect(api.owned, isTrue);
     expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+    final remove = find.byTooltip('Reis mit Gemüse entfernen');
+    await tester.scrollUntilVisible(remove, 250);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    expect(api.addedDay, isNull);
+    expect(find.text('0'), findsOneWidget);
   });
 
   testWidgets('additional item supports explicit transfer and review', (
@@ -133,6 +195,8 @@ void main() {
     await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Artikel hinzufügen'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '  Küchenrolle  ');
     await tester.tap(find.text('Hinzufügen').hitTestable());
     await tester.pumpAndSettle();
@@ -160,6 +224,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.cartItem, isNull);
   });
+
+  testWidgets('large shopping lists build rows as they scroll into view', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RezeptgartenApp(api: _LargeCartApi()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Artikel 000'), findsOneWidget);
+    final last = find.text('Artikel 099');
+    expect(last, findsNothing);
+    await tester.scrollUntilVisible(last, 300);
+    expect(last, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _LargeCartApi extends _TestApi {
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == '/api/cart') {
+      return {
+        'items': [
+          for (var i = 0; i < 100; i++)
+            {
+              'id': '$i',
+              'kind': 'additional',
+              'status': 'pending',
+              'data': {'name': 'Artikel ${i.toString().padLeft(3, '0')}'},
+            },
+        ],
+      };
+    }
+    return super.get(path, timeout: timeout);
+  }
 }
 
 class _StaleStatusApi extends _SyncTestApi {
@@ -205,11 +308,25 @@ class _SyncTestApi extends _TestApi {
   }
 }
 
+class _RecipeSearchApi extends _TestApi {
+  int recipeReads = 0;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (Uri.parse(path).path == '/api/recipes') {
+      recipeReads++;
+      return {'items': <Json>[], 'total': 0, 'match_total': 0};
+    }
+    return super.get(path, timeout: timeout);
+  }
+}
+
 class _TestApi extends RezeptgartenApi {
   _TestApi() : super(client: HttpClient());
 
   String? addedDay;
   bool owned = false;
+  Future<void>? ingredientWrite;
   String? cartItem;
   String extraStatus = 'pending';
 
@@ -260,6 +377,7 @@ class _TestApi extends RezeptgartenApi {
       case ('POST', '/api/calendar/shopping'):
         addedDay = body?['day'] as String?;
       case ('PUT', '/api/cart/cart-entry/ingredients/0'):
+        await ingredientWrite;
         owned = body?['owned'] == true;
       case ('POST', '/api/cart/items'):
         cartItem = body?['name'] as String?;
@@ -270,6 +388,8 @@ class _TestApi extends RezeptgartenApi {
         extraStatus = body?['status'] as String;
       case ('DELETE', '/api/cart/cart-extra'):
         cartItem = null;
+      case ('DELETE', '/api/cart/cart-entry'):
+        addedDay = null;
       default:
         throw StateError('Unexpected API write: $method $path');
     }

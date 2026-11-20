@@ -6,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'debug_api.dart';
+import 'expressive_theme.dart';
 import 'home.dart';
 import 'telegram_service.dart';
 import 'telegram_setup.dart';
@@ -26,7 +28,86 @@ class RezeptgartenApp extends StatefulWidget {
 }
 
 class _RezeptgartenAppState extends State<RezeptgartenApp> {
+  static const _preferences = MethodChannel('de.rezeptgarten/preferences');
   final appearance = AppearanceController();
+  late final _debugApi = DebugRezeptgartenApi();
+  bool? _debugMode;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(appearance.restore());
+    if (Platform.isAndroid) {
+      unawaited(_restoreMode());
+    } else {
+      _debugMode = false;
+    }
+  }
+
+  Future<void> _restoreMode() async {
+    var enabled = false;
+    try {
+      enabled = await _preferences.invokeMethod<bool>('debugMode') ?? false;
+    } on PlatformException {
+      // The app can still open if preferences are temporarily unavailable.
+    } on MissingPluginException {
+      // Older Android activities have no stored mode.
+    }
+    if (mounted) setState(() => _debugMode = enabled);
+  }
+
+  void _switchMode(bool enabled) {
+    widget.api.clearImageCache();
+    setState(() => _debugMode = enabled);
+    unawaited(_saveMode(enabled));
+  }
+
+  Future<void> _saveMode(bool enabled) async {
+    try {
+      await _preferences.invokeMethod<void>('setDebugMode', enabled);
+    } on PlatformException {
+      // Keep the current selection for this app session.
+    } on MissingPluginException {
+      // Widget tests keep the selection in memory.
+    }
+  }
+
+  @override
+  void dispose() {
+    appearance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final debugMode = _debugMode;
+    if (debugMode == null) return const SizedBox.shrink();
+    return _RezeptgartenSession(
+      key: ValueKey(debugMode),
+      api: debugMode ? _debugApi : widget.api,
+      appearance: appearance,
+      onDebugModeChanged: _switchMode,
+    );
+  }
+}
+
+class _RezeptgartenSession extends StatefulWidget {
+  const _RezeptgartenSession({
+    super.key,
+    required this.api,
+    required this.appearance,
+    required this.onDebugModeChanged,
+  });
+
+  final RezeptgartenApi api;
+  final AppearanceController appearance;
+  final ValueChanged<bool> onDebugModeChanged;
+
+  @override
+  State<_RezeptgartenSession> createState() => _RezeptgartenSessionState();
+}
+
+class _RezeptgartenSessionState extends State<_RezeptgartenSession> {
   final telegram = TelegramService();
   final navigatorKey = GlobalKey<NavigatorState>();
   ConnectionController? connection;
@@ -36,7 +117,7 @@ class _RezeptgartenAppState extends State<RezeptgartenApp> {
   @override
   void initState() {
     super.initState();
-    unawaited(appearance.restore());
+    if (widget.api.usesTestData) return;
     telegram.addListener(_telegramChanged);
     unawaited(telegram.start());
     if (Platform.isAndroid) {
@@ -73,7 +154,7 @@ class _RezeptgartenAppState extends State<RezeptgartenApp> {
           ],
         ),
       );
-      if (approved == true) {
+      if (approved == true && mounted) {
         try {
           await current.requestPermission();
         } on PlatformException {
@@ -118,7 +199,6 @@ class _RezeptgartenAppState extends State<RezeptgartenApp> {
 
   @override
   void dispose() {
-    appearance.dispose();
     connection?.dispose();
     telegram.removeListener(_telegramChanged);
     telegram.dispose();
@@ -128,56 +208,20 @@ class _RezeptgartenAppState extends State<RezeptgartenApp> {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: appearance,
+      valueListenable: widget.appearance,
       builder: (context, current, _) => MaterialApp(
         navigatorKey: navigatorKey,
         title: 'Rezeptgarten',
         debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light, current.accent),
-        darkTheme: _theme(Brightness.dark, current.accent),
+        theme: rezeptgartenTheme(Brightness.light, current.accent),
+        darkTheme: rezeptgartenTheme(Brightness.dark, current.accent),
         themeMode: current.dark ? ThemeMode.dark : ThemeMode.light,
         home: RezeptgartenHome(
           api: widget.api,
-          appearance: appearance,
-          telegram: telegram,
+          appearance: widget.appearance,
+          telegram: widget.api.usesTestData ? null : telegram,
           connection: connection,
-        ),
-      ),
-    );
-  }
-
-  ThemeData _theme(Brightness brightness, int accent) {
-    final light = brightness == Brightness.light;
-    final selected = Color(accent);
-    final colors =
-        ColorScheme.fromSeed(
-          seedColor: selected,
-          brightness: brightness,
-        ).copyWith(
-          primary: light ? selected : null,
-          onPrimary: light
-              ? (ThemeData.estimateBrightnessForColor(selected) ==
-                        Brightness.dark
-                    ? Colors.white
-                    : Colors.black)
-              : null,
-          surface: light ? const Color(0xfff7f7f2) : null,
-          onSurface: light ? const Color(0xff253c31) : null,
-          secondaryContainer: light && accent == defaultAccent
-              ? const Color(0xffedf1e5)
-              : null,
-        );
-    return ThemeData(
-      colorScheme: colors,
-      scaffoldBackgroundColor: colors.surface,
-      cardTheme: CardThemeData(
-        elevation: 0,
-        color: light ? Colors.white : colors.surfaceContainer,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(
-            color: light ? const Color(0xffe5e7dd) : colors.outlineVariant,
-          ),
-          borderRadius: BorderRadius.circular(18),
+          onDebugModeChanged: widget.onDebugModeChanged,
         ),
       ),
     );

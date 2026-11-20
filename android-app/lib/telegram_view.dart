@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'ingredient_icon.dart';
 import 'telegram_service.dart';
 
@@ -40,14 +41,12 @@ class TelegramView extends StatefulWidget {
 class _TelegramViewState extends State<TelegramView> {
   late DateTime monday;
   late Future<Json> snapshot;
-  Map<String, bool> checks = {};
-  bool checksEdited = false;
+  late Map<String, bool> checks;
+  bool checksLoaded = false;
   bool initialWeek = true;
 
-  DateTime _monday(DateTime date) {
-    final day = DateTime(date.year, date.month, date.day);
-    return day.subtract(Duration(days: day.weekday - 1));
-  }
+  DateTime _monday(DateTime date) =>
+      DateTime.utc(date.year, date.month, date.day - date.weekday + 1);
 
   String _date(DateTime value) => value.toIso8601String().substring(0, 10);
 
@@ -56,22 +55,6 @@ class _TelegramViewState extends State<TelegramView> {
     super.initState();
     monday = _monday(DateTime.now());
     snapshot = _load();
-    widget.telegram
-        .loadChecks()
-        .then((value) {
-          if (mounted && !checksEdited) setState(() => checks = value);
-        })
-        .catchError((Object _) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Die gespeicherten Häkchen konnten nicht geladen werden.',
-                ),
-              ),
-            );
-          }
-        });
   }
 
   @override
@@ -81,6 +64,16 @@ class _TelegramViewState extends State<TelegramView> {
   }
 
   Future<Json> _load() async {
+    if (widget.cart && !checksLoaded) {
+      try {
+        checks = await widget.telegram.loadChecks();
+        checksLoaded = true;
+      } catch (_) {
+        throw const ApiException(
+          'Die gespeicherten Häkchen konnten nicht geladen werden.',
+        );
+      }
+    }
     final data = await widget.telegram.snapshot(
       widget.cart ? 'cart' : 'week',
       day: widget.cart ? null : _date(monday),
@@ -118,26 +111,25 @@ class _TelegramViewState extends State<TelegramView> {
 
   Widget _week(Json data) {
     final days = objects(data['days']);
-    Widget entries(Object? raw, {bool placeholders = false}) {
-      final items = raw is List ? raw.whereType<String>() : <String>[];
+    Widget? entries(Object? raw, {bool placeholders = false}) {
+      final items = raw is List ? raw.whereType<String>() : const <String>[];
+      if (items.isEmpty) return null;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: AppSpacing.tight,
         children: [
           for (final item in items)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Text(
-                placeholders ? _placeholderNames[item] ?? item : item,
-              ),
-            ),
+            Text(placeholders ? _placeholderNames[item] ?? item : item),
         ],
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.item,
       children: [
         Row(
+          spacing: AppSpacing.related,
           children: [
             IconButton(
               onPressed: () {
@@ -176,29 +168,36 @@ class _TelegramViewState extends State<TelegramView> {
         for (final (index, day) in days.indexed)
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: AppSpacing.compactPanel,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: AppSpacing.related,
                 children: [
                   Text(
                     '${index < _days.length ? _days[index] : ''} · ${text(day['date'])}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  entries(day['recipes']),
-                  entries(day['placeholders'], placeholders: true),
+                  if (entries(day['recipes']) case final Widget recipes)
+                    recipes,
+                  if (entries(day['placeholders'], placeholders: true)
+                      case final Widget placeholders)
+                    placeholders,
                 ],
               ),
             ),
           ),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: AppSpacing.compactPanel,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.related,
               children: [
                 Text('Ablage', style: Theme.of(context).textTheme.titleMedium),
-                entries(data['shelf']),
-                entries(data['shelf_placeholders'], placeholders: true),
+                if (entries(data['shelf']) case final Widget recipes) recipes,
+                if (entries(data['shelf_placeholders'], placeholders: true)
+                    case final Widget placeholders)
+                  placeholders,
               ],
             ),
           ),
@@ -234,11 +233,11 @@ class _TelegramViewState extends State<TelegramView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
+          spacing: AppSpacing.related,
           children: [
             const Expanded(child: Text('Mein Einkaufswagen')),
             TextButton(
               onPressed: () {
-                checksEdited = true;
                 setState(() => checks = {});
                 _saveChecks();
               },
@@ -249,7 +248,7 @@ class _TelegramViewState extends State<TelegramView> {
         for (final (index, row) in rows.indexed) ...[
           if (index == 0 || checked(row) != checked(rows[index - 1]))
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: AppSpacing.section),
               child: Text(
                 checked(row) ? 'Bereits abgehakt' : 'Noch benötigt',
                 style: Theme.of(context).textTheme.titleMedium,
@@ -259,7 +258,7 @@ class _TelegramViewState extends State<TelegramView> {
               checked(row) != checked(rows[index - 1]) ||
               text(row['category']) != text(rows[index - 1]['category']))
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: AppSpacing.related),
               child: Text(
                 text(row['category'], 'Sonstiges'),
                 style: Theme.of(context).textTheme.titleSmall,
@@ -271,7 +270,6 @@ class _TelegramViewState extends State<TelegramView> {
             controlAffinity: ListTileControlAffinity.leading,
             value: checked(row),
             onChanged: (value) {
-              checksEdited = true;
               setState(() => checks[text(row['check_id'])] = value == true);
               _saveChecks();
             },
@@ -281,15 +279,18 @@ class _TelegramViewState extends State<TelegramView> {
                   text(row['icon_name']),
                   category: text(row['category']),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.related),
                 Expanded(child: Text(text(row['text']))),
               ],
             ),
             subtitle: row['recipe'] == null ? null : Text(text(row['recipe'])),
           ),
         ],
-        if (rows.isEmpty)
+        if (rows.isEmpty) ...[
+          const SizedBox(height: AppSpacing.section),
           const Text('Der Einkaufswagen enthält keine benötigten Zutaten.'),
+        ],
+        const SizedBox(height: AppSpacing.section),
         ExpansionTile(
           title: Text('Rezepte (${recipes.length})'),
           children: [
@@ -317,13 +318,21 @@ class _TelegramViewState extends State<TelegramView> {
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: AppSpacing.page,
         children: [
-          if (widget.notice != null) Text(widget.notice!),
+          if (widget.notice != null) ...[
+            Text(widget.notice!),
+            const SizedBox(height: AppSpacing.section),
+          ],
           if (result.connectionState != ConnectionState.done)
             const Center(child: CircularProgressIndicator())
           else if (result.hasError) ...[
-            const Text('Telegram-Daten konnten nicht geladen werden.'),
+            Text(
+              widget.cart && !checksLoaded
+                  ? 'Die gespeicherten Häkchen konnten nicht geladen werden.'
+                  : 'Telegram-Daten konnten nicht geladen werden.',
+            ),
+            const SizedBox(height: AppSpacing.related),
             TextButton(onPressed: _refresh, child: const Text('Erneut laden')),
           ] else if (widget.cart)
             _cart(result.requireData)

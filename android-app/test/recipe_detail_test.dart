@@ -25,7 +25,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Mein neuer Text');
+    final field = find.byType(TextField);
+    expect(tester.getSize(find.byType(ListView)).width, 720);
+    await tester.scrollUntilVisible(
+      field,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(field, 'Mein neuer Text');
     final refresh = tester.widget<RefreshIndicator>(
       find.byType(RefreshIndicator),
     );

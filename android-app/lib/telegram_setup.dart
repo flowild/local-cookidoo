@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'spacing.dart';
+
 import 'telegram_service.dart';
 import 'api.dart';
 import 'connection.dart';
@@ -112,10 +114,10 @@ class _TelegramSetupState extends State<TelegramSetup> {
     setState(() => busy = true);
     if (widget.telegram.step == TelegramStep.credentials) {
       await widget.telegram.setCredentials(id.text, hash.text);
-      hash.clear();
+      if (mounted) hash.clear();
     } else {
       await widget.telegram.submit(value.text);
-      value.clear();
+      if (mounted) value.clear();
     }
     if (mounted) setState(() => busy = false);
   }
@@ -139,6 +141,7 @@ class _TelegramSetupState extends State<TelegramSetup> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              spacing: AppSpacing.item,
               children: [
                 const Text(
                   'Rezeptgarten nutzt Telegram für den Zugriff unterwegs und sendet dazu Anfragen an den Rezeptgarten-Bot.',

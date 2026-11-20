@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'spacing.dart';
 import 'ingredient_icon.dart';
 
 class PantryView extends StatefulWidget {
@@ -24,6 +25,7 @@ class PantryView extends StatefulWidget {
 }
 
 class _PantryViewState extends State<PantryView> {
+  final _searchField = TextEditingController();
   List<Json> _categories = [];
   List<Json> _items = [];
   String _query = '';
@@ -45,6 +47,12 @@ class _PantryViewState extends State<PantryView> {
     if (widget.refreshCount != oldWidget.refreshCount && !_writing) {
       unawaited(_load());
     }
+  }
+
+  @override
+  void dispose() {
+    _searchField.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -157,40 +165,79 @@ class _PantryViewState extends State<PantryView> {
 
   Widget _toolbar(bool enabled) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: AppSpacing.item,
     children: [
-      Text('Mein Vorrat', style: Theme.of(context).textTheme.headlineMedium),
-      const Text('Halte fest, welche Zutaten du zu Hause hast.'),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      Row(
+        spacing: AppSpacing.related,
         children: [
-          FilledButton(
-            onPressed: enabled && _categories.isNotEmpty ? () => _edit() : null,
-            child: const Text('Zutat hinzufügen'),
+          Expanded(
+            child: Text(
+              'Mein Vorrat',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
           ),
-          OutlinedButton(
-            onPressed: enabled ? () => _edit(newCategory: true) : null,
-            child: const Text('Neue Kategorie'),
-          ),
-          TextButton(
-            onPressed: () => _expandAll(false),
-            child: const Text('Alle einklappen'),
-          ),
-          TextButton(
-            onPressed: () => _expandAll(true),
-            child: const Text('Alle ausklappen'),
-          ),
+          if (_categories.isNotEmpty)
+            PopupMenuButton<String>(
+              tooltip: 'Vorratsaktionen',
+              onSelected: (action) {
+                if (action == 'new') {
+                  unawaited(_edit(newCategory: true));
+                } else {
+                  _expandAll(action == 'expand');
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  enabled: enabled,
+                  value: 'new',
+                  child: const Text('Neue Kategorie'),
+                ),
+                PopupMenuItem(
+                  enabled: _query.isEmpty,
+                  value: 'collapse',
+                  child: const Text('Alle einklappen'),
+                ),
+                PopupMenuItem(
+                  enabled: _query.isEmpty,
+                  value: 'expand',
+                  child: const Text('Alle ausklappen'),
+                ),
+              ],
+            ),
         ],
       ),
-      TextField(
-        maxLength: 100,
-        onChanged: (value) =>
-            setState(() => _query = value.trim().toLowerCase()),
-        decoration: const InputDecoration(
-          labelText: 'Vorrat durchsuchen',
-          prefixIcon: Icon(Icons.search),
-          counterText: '',
+      if (_categories.isNotEmpty)
+        TextField(
+          controller: _searchField,
+          maxLength: 100,
+          onChanged: (value) =>
+              setState(() => _query = value.trim().toLowerCase()),
+          decoration: InputDecoration(
+            labelText: 'Vorrat durchsuchen',
+            prefixIcon: const Icon(Icons.search),
+            counterText: '',
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Suche leeren',
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _searchField.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+          ),
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: FilledButton.icon(
+          onPressed: enabled
+              ? () => _edit(newCategory: _categories.isEmpty)
+              : null,
+          icon: const Icon(Icons.add),
+          label: Text(
+            _categories.isEmpty ? 'Neue Kategorie' : 'Zutat hinzufügen',
+          ),
         ),
       ),
       if (_loading || _writing) const LinearProgressIndicator(),
@@ -200,7 +247,6 @@ class _PantryViewState extends State<PantryView> {
       ],
       if (!_loading && _error == null && _categories.isEmpty)
         const Text('Lege eine Kategorie an, um Zutaten einzutragen.'),
-      const SizedBox(height: 12),
     ],
   );
 
@@ -209,7 +255,7 @@ class _PantryViewState extends State<PantryView> {
     final name = text(category['name']);
     return Card(
       key: ValueKey(id),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: AppSpacing.item),
       child: ExpansionTile(
         key: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
         initiallyExpanded: _query.isNotEmpty || !widget.collapsed.contains(id),
@@ -265,25 +311,13 @@ class _PantryViewState extends State<PantryView> {
               subtitle: text(item['quantity']).isNotEmpty
                   ? Text(text(item['quantity']))
                   : null,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: '${item['name']} bearbeiten',
-                    onPressed: enabled ? () => _edit(item: item) : null,
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  IconButton(
-                    tooltip: '${item['name']} entfernen',
-                    onPressed: enabled
-                        ? () => _change(
-                            'DELETE',
-                            '/api/pantry/items/${item['id']}',
-                          )
-                        : null,
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+              onTap: enabled ? () => _edit(item: item) : null,
+              trailing: IconButton(
+                tooltip: '${item['name']} entfernen',
+                onPressed: enabled
+                    ? () => _change('DELETE', '/api/pantry/items/${item['id']}')
+                    : null,
+                icon: const Icon(Icons.close),
               ),
             ),
         ],
@@ -313,8 +347,15 @@ class _PantryViewState extends State<PantryView> {
       },
       child: ReorderableListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-        header: _toolbar(enabled),
+        padding: AppSpacing.page,
+        header: Padding(
+          padding: EdgeInsets.only(
+            bottom: categories.isNotEmpty || _query.isNotEmpty
+                ? AppSpacing.section
+                : 0,
+          ),
+          child: _toolbar(enabled),
+        ),
         footer: _query.isNotEmpty && categories.isEmpty
             ? const Text('Keine passenden Zutaten gefunden.')
             : null,
@@ -483,6 +524,7 @@ class _PantryEditorState extends State<_PantryEditor> {
         key: _form,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          spacing: AppSpacing.item,
           children: [
             TextFormField(
               autofocus: true,
@@ -498,16 +540,18 @@ class _PantryEditorState extends State<_PantryEditor> {
               onFieldSubmitted: _newCategory ? (_) => _save() : null,
             ),
             if (!_newCategory) ...[
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final suggestion in _suggestions)
-                    ActionChip(
-                      label: Text(text(suggestion['name'])),
-                      onPressed: () => _select(suggestion),
-                    ),
-                ],
-              ),
+              if (_suggestions.isNotEmpty)
+                Wrap(
+                  spacing: AppSpacing.related,
+                  runSpacing: AppSpacing.related,
+                  children: [
+                    for (final suggestion in _suggestions)
+                      ActionChip(
+                        label: Text(text(suggestion['name'])),
+                        onPressed: () => _select(suggestion),
+                      ),
+                  ],
+                ),
               TextFormField(
                 controller: _quantity,
                 enabled: !_saving,

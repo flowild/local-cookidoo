@@ -4,12 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/telegram_service.dart';
+import 'package:rezeptgarten/telegram_setup.dart';
 import 'package:rezeptgarten/telegram_view.dart';
 
 class FakeTelegram extends TelegramService {
   final calls = <String>[];
   Map<String, bool> saved = {};
   Completer<Map<String, bool>>? pendingChecks;
+  Completer<void>? pendingLogin;
+  String today = '2026-01-07';
 
   @override
   Future<Json> snapshot(String kind, {String? day}) async {
@@ -40,7 +43,7 @@ class FakeTelegram extends TelegramService {
       };
     }
     return {
-      'today': '2026-01-07',
+      'today': today,
       'days': [
         {
           'date': day,
@@ -61,9 +64,48 @@ class FakeTelegram extends TelegramService {
   @override
   Future<void> saveChecks(Map<String, bool> checks) async =>
       saved = Map.of(checks);
+
+  @override
+  Future<void> submit(String value) async => pendingLogin!.future;
 }
 
 void main() {
+  testWidgets('closing the setup during login keeps completion safe', (
+    tester,
+  ) async {
+    final telegram = FakeTelegram()
+      ..step = TelegramStep.code
+      ..pendingLogin = Completer<void>();
+    addTearDown(telegram.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) =>
+                    TelegramSetup(telegram: telegram, api: RezeptgartenApi()),
+              ),
+              child: const Text('Einrichten'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Einrichten'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '12345');
+    await tester.tap(find.text('Weiter'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(TelegramSetup), findsNothing);
+    telegram.pendingLogin!.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows week snapshots and changes the requested week', (
     tester,
   ) async {
@@ -108,7 +150,27 @@ void main() {
     telegram.dispose();
   });
 
-  testWidgets('late saved checks do not overwrite a new change', (
+  testWidgets('week navigation stays on Mondays across the time change', (
+    tester,
+  ) async {
+    final telegram = FakeTelegram()..today = '2026-03-30';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TelegramView(telegram: telegram, cart: false)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(telegram.calls.last, 'week 2026-03-30');
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    expect(telegram.calls.last, 'week 2026-03-23');
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pumpAndSettle();
+    expect(telegram.calls.last, 'week 2026-03-30');
+    telegram.dispose();
+  });
+
+  testWidgets('cart waits for saved checks before allowing edits', (
     tester,
   ) async {
     final telegram = FakeTelegram()
@@ -118,10 +180,34 @@ void main() {
         home: Scaffold(body: TelegramView(telegram: telegram, cart: true)),
       ),
     );
+    await tester.pump();
+    expect(find.byType(CheckboxListTile), findsNothing);
+    telegram.pendingChecks!.complete({'other': true});
     await tester.pumpAndSettle();
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
-    telegram.pendingChecks!.complete({'a': false});
+    expect(telegram.saved, {'a': true, 'other': true});
+    telegram.dispose();
+  });
+
+  testWidgets('failed saved checks can be loaded again', (tester) async {
+    final telegram = FakeTelegram()
+      ..pendingChecks = Completer<Map<String, bool>>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TelegramView(telegram: telegram, cart: true)),
+      ),
+    );
+    telegram.pendingChecks!.completeError(StateError('Storage unavailable'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Häkchen konnten nicht geladen werden'),
+      findsOneWidget,
+    );
+    expect(find.byType(CheckboxListTile), findsNothing);
+    telegram.pendingChecks = null;
+    telegram.saved = {'a': true};
+    await tester.tap(find.text('Erneut laden'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,

@@ -32,13 +32,14 @@ class WifiStatus(private val activity: MainActivity) {
                 "requestPermission" -> {
                     if (permissionResult != null) {
                         result.error("busy", "Die Berechtigungsanfrage läuft bereits.", null)
+                    } else if (hasPreciseLocation()) {
+                        result.success(current())
                     } else {
-                        val permissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
-                        val missing = permissions.filter { activity.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-                        if (missing.isEmpty()) result.success(current()) else {
-                            permissionResult = result
-                            activity.requestPermissions(missing.toTypedArray(), 2174)
-                        }
+                        permissionResult = result
+                        activity.requestPermissions(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                            2174,
+                        )
                     }
                 }
                 else -> result.notImplemented()
@@ -57,6 +58,9 @@ class WifiStatus(private val activity: MainActivity) {
         })
     }
 
+    private fun hasPreciseLocation() =
+        activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
     fun onPermissionResult(requestCode: Int) {
         if (requestCode == 2174) {
             permissionResult?.success(current())
@@ -70,7 +74,7 @@ class WifiStatus(private val activity: MainActivity) {
         val network = connectivity.activeNetwork
         val capabilities = network?.let { connectivity.getNetworkCapabilities(it) }
         val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-        val granted = activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val granted = hasPreciseLocation()
         val ssid = if (isWifi && granted) wifi.connectionInfo?.ssid?.removeSurrounding("\"") else null
         return mapOf("ssid" to ssid?.takeUnless { it == "<unknown ssid>" }, "permission" to granted, "wifi" to isWifi,
                      "online" to (capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true))

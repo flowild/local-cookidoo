@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,64 +8,166 @@ import 'package:rezeptgarten/recipe_library.dart';
 import 'package:rezeptgarten/recipe_card.dart';
 
 void main() {
-  testWidgets('recipe cards display advanced difficulty in German', (tester) async {
+  testWidgets('equal-width recipe cards keep the same height with long titles', (
+    tester,
+  ) async {
     final api = _LibraryApi();
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: RecipeCard(
-      api: api,
-      recipe: const {'id': 'r1', 'name': 'Reis', 'difficulty': 'advanced'},
-    ))));
+    const longTitle =
+        'Gebratener Reis mit winterlichem Ofengemüse, Kichererbsen und Kräutern';
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 144,
+                child: RecipeCard(api: api, recipe: const {'name': 'Reis'}),
+              ),
+              SizedBox(
+                width: 144,
+                child: RecipeCard(
+                  api: api,
+                  recipe: const {
+                    'name': longTitle,
+                    'difficulty': 'advanced',
+                    'total_seconds': 3600,
+                    'version_servings': [2, 4, 6, 8, 10],
+                    'has_note': true,
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Anspruchsvoll'), findsOneWidget);
+    final cards = find.byType(RecipeCard);
+    expect(tester.getSize(cards.first), tester.getSize(cards.last));
+    final title = tester.widget<Text>(find.text(longTitle));
+    expect(title.maxLines, 2);
+    expect(title.overflow, TextOverflow.ellipsis);
+    expect(tester.takeException(), isNull);
   });
-  testWidgets('search and multiple ingredient filters use the collection API', (
+
+  testWidgets('recipe cards display advanced difficulty in German', (
     tester,
   ) async {
     final api = _LibraryApi();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: RecipeBrowser(
+          body: RecipeCard(
             api: api,
-            collection: const {
-              'id': 'local:meals',
-              'name': 'Meine Rezepte',
-              'kind': 'local',
+            recipe: const {
+              'id': 'r1',
+              'name': 'Reis',
+              'difficulty': 'advanced',
             },
-            openRecipe: (_) async {},
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Gemüse');
+    expect(find.text('Anspruchsvoll'), findsOneWidget);
+  });
+  testWidgets(
+    'search, sorting and multiple ingredient filters use the recipe API',
+    (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = _LibraryApi()..present = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RecipeBrowser(api: api, openRecipe: (_) async {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Gemüse');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(api.lastRecipeQuery['q'], ['Gemüse']);
+      await tester.tap(find.text('Name · A bis Z'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Kürzeste Gesamtzeit'));
+      await tester.pumpAndSettle();
+      expect(api.lastRecipeQuery['sort'], ['time']);
+
+      await tester.tap(find.text('Filtern'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rezepte filtern'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      Finder field(String label) => find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == label,
+      );
+      await tester.enterText(field('Zutat'), 'Paprika');
+      await tester.tap(find.byTooltip('Zutat zum Filter hinzufügen'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Zutat'), 'Reis');
+      await tester.enterText(field('Mindestens Portionen'), '4');
+      await tester.enterText(field('Gesamtzeit höchstens (Min.)'), '30');
+      await tester.ensureVisible(find.text('Anwenden'));
+      await tester.tap(find.text('Anwenden'));
+      await tester.pumpAndSettle();
+      expect(api.lastRecipeQuery['ingredient'], ['Paprika', 'Reis']);
+      expect(api.lastRecipeQuery['min_servings'], ['4']);
+      expect(api.lastRecipeQuery['max_minutes'], ['30']);
+      expect(find.text('2 Rezepte'), findsOneWidget);
+      final card = find.ancestor(
+        of: find.text('Gemüsesuppe'),
+        matching: find.byType(Opacity),
+      );
+      expect(card, findsOneWidget);
+      expect(tester.widget<Opacity>(card).opacity, lessThan(1));
+    },
+  );
+
+  testWidgets('compact recipe grid stays visible until search returns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(332, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _LibraryApi()..present = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecipeBrowser(api: api, openRecipe: (_) async {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byType(RecipeCard).at(0)).dy,
+      tester.getTopLeft(find.byType(RecipeCard).at(1)).dy,
+    );
+
+    final result = Completer<void>();
+    api.searchPending = result.future;
+    await tester.enterText(find.byType(TextField), 'Reis');
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.lastRecipeQuery['offset'], ['0']);
+    expect(find.text('Gemüsesuppe'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    result.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await tester.tap(find.byTooltip('Suche leeren'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
-    expect(api.lastRecipeQuery['q'], ['Gemüse']);
-    expect(api.lastRecipeQuery['show_all'], ['true']);
-
-    await tester.tap(find.text('Filtern'));
-    await tester.pumpAndSettle();
-    Finder field(String label) => find.byWidgetPredicate(
-      (widget) => widget is TextField && widget.decoration?.labelText == label,
-    );
-    await tester.enterText(field('Zutat'), 'Paprika');
-    await tester.tap(find.byTooltip('Zutat zum Filter hinzufügen'));
-    await tester.pumpAndSettle();
-    await tester.enterText(field('Zutat'), 'Reis');
-    await tester.enterText(field('Mindestens Portionen'), '4');
-    await tester.enterText(field('Gesamtzeit höchstens (Min.)'), '30');
-    await tester.tap(find.text('Anwenden'));
-    await tester.pumpAndSettle();
-    expect(api.lastRecipeQuery['ingredient'], ['Paprika', 'Reis']);
-    expect(api.lastRecipeQuery['min_servings'], ['4']);
-    expect(api.lastRecipeQuery['max_minutes'], ['30']);
-    expect(find.text('1 von 2 Rezepten passen zum Filter'), findsOneWidget);
-    final card = find.ancestor(
-      of: find.text('Gemüsesuppe'),
-      matching: find.byType(Opacity),
-    );
-    expect(card, findsOneWidget);
-    expect(tester.widget<Opacity>(card).opacity, lessThan(1));
+    expect(api.lastRecipeQuery['q'], ['']);
   });
 
   testWidgets('creates a local list, adds a candidate and confirms removal', (
@@ -88,7 +191,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Neue Liste'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Abendessen');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Abendessen',
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Anlegen'));
     await tester.pumpAndSettle();
@@ -96,6 +205,10 @@ void main() {
 
     await tester.tap(find.text('Abendessen'));
     await tester.pumpAndSettle();
+    expect(find.text('Liste öffnen'), findsOneWidget);
+    await tester.tap(find.text('Liste öffnen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filtern'), findsNothing);
     await tester.tap(find.text('Rezepte hinzufügen'));
     await tester.pumpAndSettle();
     await tester
@@ -131,6 +244,7 @@ class _LibraryApi extends RezeptgartenApi {
   Map<String, List<String>> lastRecipeQuery = {};
   String? name;
   bool present = false;
+  Future<void>? searchPending;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
@@ -138,6 +252,7 @@ class _LibraryApi extends RezeptgartenApi {
     switch (uri.path) {
       case '/api/recipes':
         lastRecipeQuery = uri.queryParametersAll;
+        await searchPending;
         final candidate = lastRecipeQuery.containsKey('exclude_collection');
         final items = [
           if (candidate != present)

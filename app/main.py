@@ -462,7 +462,9 @@ def create_app(directory=None, secure_cookies=None):
                     ingredient['in_pantry'] = ingredient_available(name, pantry_names)
                     ingredient['is_water'] = ingredient_group_key(name) == 'wasser'
             elif item['kind'] == 'additional':
-                item['data']['is_water'] = ingredient_group_key(item['data'].get('name', '')) == 'wasser'
+                name = item['data'].get('name', '')
+                item['data']['category'] = shopping_category(name, pantry_categories)
+                item['data']['is_water'] = ingredient_group_key(name) == 'wasser'
         for item in items:
             if item['kind'] == 'recipe':
                 if item['data'].get('image_url'):
