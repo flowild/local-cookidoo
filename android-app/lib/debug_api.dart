@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 
 import 'api.dart';
 
@@ -58,6 +59,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
   ) => {
     'id': id,
     'calendar_id': id,
+    'image_file': '$id.png',
     'name': name,
     'is_local': true,
     'servings': portions,
@@ -445,6 +447,9 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
     final id = data['recipe_id'] as String;
     final week = _week(monday);
     final wasOnShelf = week['shelf']?.contains(id) == true;
+    if (source == 'preview' && target == 'shelf' && wasOnShelf) {
+      throw const ApiException('Das Rezept liegt bereits in der Ablage.');
+    }
     week[source]?.remove(id);
     if (target != 'trash') (week[target] ??= {}).add(id);
     if (target == 'trash' ||
@@ -486,7 +491,13 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
   Future<dynamic> probeHealth() async => {'ok': true};
 
   @override
-  Future<Uint8List?> image(Object? filename, {bool full = false}) async => null;
+  Future<Uint8List?> image(Object? filename, {bool full = false}) async {
+    if (!_recipes.values.any((recipe) => recipe['image_file'] == filename)) {
+      return null;
+    }
+    final image = await rootBundle.load('assets/debug/$filename');
+    return image.buffer.asUint8List(image.offsetInBytes, image.lengthInBytes);
+  }
 
   @override
   Future<Uint8List> exportCollection() async => Uint8List.fromList(

@@ -28,7 +28,7 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 
 ## Design und Bedienung
 
-- Material 3 Expressive definiert Rollenfarben, Titel, Karten, Dialoge und Bedienelemente. Dunkelmodus und benutzerdefinierte Akzentfarben gelten auch für Dialoge, Navigation und Rückmeldungen. Zutaten- und Platzhaltersymbole bleiben in der APK verfügbar.
+- Material 3 Expressive definiert Titel, Karten, Dialoge und Bedienelemente. Die Rollenfarben übernehmen die Hell- und Dunkelpalette der Web-App. Dunkelmodus und benutzerdefinierte Akzentfarben gelten auch für Dialoge, Navigation und Rückmeldungen. Zutaten- und Platzhaltersymbole bleiben in der APK verfügbar.
 - Auf schmalen Displays stehen sechs Ziele unten. Ab 600 logischen Pixeln steht die Navigation links und zeigt ab 1200 Pixeln die Bezeichnungen neben den Symbolen. Android-Systemleisten und große Schrift bei der Anordnung berücksichtigen.
 - Die Wochenansicht verbindet die Datumsschalter zu einer Gruppe und hebt den heutigen Tag hervor. Die Hauptansichten verwenden die vom Flutter-Paket mitgelieferte Expressive-Feder und überspringen diese Bewegung, wenn Android Animationen reduziert.
 - Das gemeinsame Abstandsraster setzt 16 dp für Seitenränder und Abschnitte, 12 dp zwischen Karten und Formulareingaben sowie 8 dp innerhalb zusammengehöriger Gruppen ein. Die Woche zeigt sieben Spalten, sobald genügend Platz für Karten und Zwischenräume vorhanden ist.
@@ -38,7 +38,12 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 - Im Einkaufswagen sind die Zutaten vor den Rezepten sichtbar und zeilenweise antippbar. Ein Eingabeblatt erfasst zusätzliche Artikel. Im Vorrat bleibt „Zutat hinzufügen“ direkt sichtbar und das Menü bündelt die gemeinsamen Kategorieaktionen.
 - Gleich breite Rezeptkarten bleiben unabhängig von der Titellänge gleich hoch. Sie zeigen bis zu zwei Titelzeilen mit Auslassungszeichen. Die Rezeptdetails zeigen den vollständigen Namen.
 - In der Übersicht sitzt das Wechsel-Symbol am Zufallsrezept. Pillen führen zu Listen und Rezepten. Aufklappbare Listen haben eine eigene Suche. In „Alle Rezepte“ bilden Suche, Sortierung und Filter einen gemeinsamen Bereich.
-- In „Meine Woche“ sitzt das Einkaufssymbol neben den Datumsschaltern. Nach 250 ms Halten ist eine Kachel ausgewählt. Aufwärts sind 140 dp, abwärts 90 dp erforderlich. Ablagerezepte und Platzhalter verwenden kompakte Kacheln.
+- Aufgeklappte Listen zeigen umrandete Rezeptkarten in genau zwei Spalten. Der farbige Listenkopf trennt den Titel von den Karten. Das Bearbeiten-Symbol öffnet die Verwaltung lokaler Listen. „Rezepte hinzufügen“ zeigt Rezeptkarten mit einem Plus oben rechts.
+- Die Hauptnavigation nutzt einen horizontalen `PageView` mit Flutters Seitenphysik beim Wischen und demselben Controller beim Antippen von Tabs. Bei reduzierter Bewegung wechselt die Ansicht direkt. Im Kalender von „Meine Woche“ wechselt die Geste weiterhin den Tag.
+- Bereits sichtbare Listen, Vorratskategorien und Wocheninhalte behalten beim Nachladen nach einem Seitenwechsel ihre Position.
+- In den Rezeptdetails zeigen kontrastreiche Punkte den Vorratsstatus. „Zur Ablage hinzufügen“ steht über „Heute kochen“ und verwendet die aktuelle Berliner Kalenderwoche. Die Aktionsschaltflächen zeigen Symbol und Text linksbündig.
+- In „Meine Woche“ sitzt das Einkaufssymbol neben den Datumsschaltern. Nach 250 ms Halten ist eine Kachel ausgewählt. Aufwärts sind 140 dp, abwärts 90 dp erforderlich. Die Wochenablage zeigt kleine Rezeptkarten mit Bild über dem Titel in einer seitlich scrollbaren Reihe. Ein Wisch nach unten entfernt den Eintrag.
+- Der Debug-Modus verwendet drei unterschiedliche mitgelieferte Rezeptbilder.
 - Vergleichsaufnahmen von APK und PWA mit demselben isolierten Testdatenstand erstellen. Normalzustände, leere Ansichten, lange Rezeptnamen, Lade- und Fehlerzustände sowie Hell- und Dunkelmodus prüfen.
 - Wochenwechsel, langes Drücken, Wischen, Rückgängig, Einkaufs-Häkchen und Android-Zurück-Navigation auf einem echten Gerät prüfen.
 

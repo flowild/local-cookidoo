@@ -60,6 +60,9 @@ class NavigationApi extends FakeApi {
       return {'connected': false, 'cart_recipe_count': 0};
     }
     if (path == '/api/collections') return <Json>[];
+    if (Uri.parse(path).path == '/api/recipes') {
+      return {'items': <Json>[], 'total': 0, 'match_total': 0};
+    }
     if (path == '/api/calendar/week') return {'days': <Json>[]};
     throw StateError('Unexpected request: $path');
   }

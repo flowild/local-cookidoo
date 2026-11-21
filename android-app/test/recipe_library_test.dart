@@ -205,8 +205,14 @@ void main() {
 
     await tester.tap(find.text('Abendessen'));
     await tester.pumpAndSettle();
-    expect(find.text('Liste öffnen'), findsOneWidget);
-    await tester.tap(find.text('Liste öffnen'));
+    expect(
+      tester.widget<Text>(find.text('Abendessen')).style?.fontWeight,
+      FontWeight.w700,
+    );
+    expect(find.byType(RecipeCard), findsOneWidget);
+    expect(tester.widget<RecipeCard>(find.byType(RecipeCard)).outlined, isTrue);
+    expect(find.text('Liste öffnen'), findsNothing);
+    await tester.tap(find.byTooltip('Liste verwalten'));
     await tester.pumpAndSettle();
     expect(find.text('Filtern'), findsNothing);
     await tester.tap(find.text('Rezepte hinzufügen'));
@@ -217,7 +223,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(syncs, 1);
     expect(api.lastRecipeQuery['exclude_collection'], ['local:meals']);
-    await tester.tap(find.byTooltip('Reis zur Liste hinzufügen'));
+    final addRice = find.byTooltip('Reis zur Liste hinzufügen');
+    final riceCard = find.ancestor(
+      of: addRice,
+      matching: find.byType(RecipeCard),
+    );
+    expect(riceCard, findsOneWidget);
+    final card = tester.widget<RecipeCard>(riceCard);
+    expect(card.outlined, isTrue);
+    expect(card.cornerAction?.icon, Icons.add);
+    final bounds = tester.getRect(riceCard);
+    final addCenter = tester.getCenter(addRice);
+    expect(addCenter.dx, greaterThan(bounds.center.dx));
+    expect(addCenter.dy, lessThan(bounds.center.dy));
+    await tester.tap(addRice);
     await tester.pumpAndSettle();
     expect(api.present, isTrue);
     expect(find.byTooltip('Reis zur Liste hinzufügen'), findsNothing);
@@ -236,6 +255,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.name, isNull);
     expect(find.text('Abendessen'), findsNothing);
+  });
+
+  testWidgets('opened lists show two recipe cards per row below their title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(332, 830);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _LibraryApi()
+      ..name = 'Abendessen'
+      ..present = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecipeCollections(api: api, openRecipe: (_) async {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(find.text('Neue Liste')).dy,
+      lessThan(tester.getCenter(find.byType(TextField)).dy),
+    );
+    await tester.tap(find.text('Abendessen'));
+    await tester.pumpAndSettle();
+    final cards = find.byType(RecipeCard);
+    expect(cards, findsNWidgets(2));
+    expect(tester.getTopLeft(cards.first).dy, tester.getTopLeft(cards.last).dy);
+    expect(
+      tester.getTopLeft(cards.first).dx,
+      lessThan(tester.getTopLeft(cards.last).dx),
+    );
+    expect(tester.takeException(), isNull);
   });
 }
 

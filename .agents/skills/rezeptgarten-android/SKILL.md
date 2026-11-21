@@ -11,6 +11,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   in `expressive_theme.dart`. Prüfe helle und dunkle Rollenfarben, Akzentfarben,
   kompakte Navigation und Seitenleiste, große Schrift und reduzierte Bewegung.
   Verwende dieselben isolierten Testdaten wie die PWA.
+- Standardfarben für Hintergrund, Karte, Text und Akzent an die Hell- und
+  Dunkelwerte in `app/static/style.css` anlehnen.
 - Verwende `AppSpacing` für Seiten- und Kartenränder, Abschnitte sowie Abstände
   zwischen zusammengehörigen Bedienelementen. Verbundene Schalter und Abzeichen
   verwenden die kompakten Werte. Listenkarten erhalten ihren Abstand im Layout.
@@ -27,7 +29,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit
-  auf den sichtbaren Tab begrenzen. Bei Änderungen der Kontoverbindung und
+  auf den sichtbaren Tab begrenzen. Beim erneuten Laden sichtbarer Listen,
+  Vorratskategorien oder Wocheninhalte ihre Position beibehalten. Bei Änderungen der Kontoverbindung und
   beim Verlassen des Heimnetzmodus private Ansichtsdaten und Bildcache leeren.
 - Bilder getrennt nach Vorschau und Original laden. Gleichzeitige Bildabrufe
   bündeln, die Cachefreigabe des Servers beachten und den Speicher begrenzen.
@@ -42,9 +45,27 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Im Vorrat Zutaten durch Antippen bearbeiten und Kategorieaktionen bündeln.
 - Beim Bestätigen von Einkaufs-Häkchen die Höhe vor den vorhandenen Einträgen
   konstant halten und Warenbereiche aus der Serverantwort verwenden.
-- Listentitel sind aufklappbar und durchsuchbar. Sortierung und Filter sind in
+- Listentitel sind aufklappbar und durchsuchbar. Kräftige Schrift und ein eigener
+  Hintergrund unterscheiden sie von den zweispaltigen Rezeptkarten. Lokale
+  Listen werden über das Bearbeiten-Symbol verwaltet. Sortierung und Filter sind in
   der globalen Rezeptansicht zusammen mit der Suche erreichbar.
+- Rahmen umfassen Bild, Titel und Schwierigkeit der Karten in Rezeptlisten.
+  „Rezepte hinzufügen“ verwendet dieselben Karten mit einem Plus in der oberen
+  rechten Bildecke. Antippen der restlichen Karte öffnet die Rezeptdetails.
+- Horizontales Wischen im Hauptinhalt wechselt zum benachbarten Eintrag der
+  Navigation. Der horizontale `PageView` rastet mit Flutters Seitenphysik ein.
+  Tabtasten verwenden denselben `PageController`. Bei reduzierter Bewegung
+  wechselt die Ansicht direkt. Der
+  horizontale Tageswechsel und das seitliche Scrollen der Wochenablage in
+  „Meine Woche“ haben in ihren Bereichen Vorrang. Die Ablage zeigt eine Reihe
+  kompakter Karten mit Rezeptbild über dem Titel und Symbolen für Platzhalter.
+  Einträge werden mit der vertikalen Wischgeste entfernt.
+- Rezeptdetails zeigen kontrastreiche Vorratspunkte. Die Schaltfläche über
+  „Heute kochen“ fügt das Rezept über die gemeinsame Kalender-API zur Ablage der
+  aktuellen Berliner Kalenderwoche hinzu. Aktionsschaltflächen zeigen ein
+  passendes Symbol links vor dem linksbündigen Text.
 - Der Schalter „Debug-Modus“ ist auch offline in den Einstellungen verfügbar.
+  Die Debug-Rezepte verwenden unterschiedliche mitgelieferte Vorschaubilder.
   Der Modus verwendet `DebugRezeptgartenApi` mit Beispieldaten für die normalen
   Ansichten und hält Änderungen bis zum Ende der App-Sitzung im Speicher. Die
   Auswahl des Modus bleibt über Neustarts erhalten. Im Debug-Modus bleiben

@@ -4,9 +4,28 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
+import 'package:rezeptgarten/appearance.dart';
+import 'package:rezeptgarten/debug_api.dart';
+import 'package:rezeptgarten/expressive_theme.dart';
 import 'package:rezeptgarten/main.dart';
 
 void main() {
+  test('Android uses the web surface and accent colors in both modes', () {
+    final light = rezeptgartenTheme(Brightness.light, defaultAccent);
+    final dark = rezeptgartenTheme(Brightness.dark, defaultAccent);
+    expect(light.scaffoldBackgroundColor, const Color(0xfff7f7f2));
+    expect(light.cardTheme.color, Colors.white);
+    expect(light.colorScheme.primary, const Color(0xff234d3c));
+    expect(light.colorScheme.secondaryContainer, const Color(0xffedf1e5));
+    expect(dark.scaffoldBackgroundColor, const Color(0xff102729));
+    expect(dark.cardTheme.color, const Color(0xff1b383a));
+    expect(dark.colorScheme.primary, const Color(0xff8fc9c5));
+    expect(dark.colorScheme.secondaryContainer, const Color(0xff294a4b));
+    final custom = rezeptgartenTheme(Brightness.light, 0xff8b3264);
+    expect(custom.colorScheme.primary, isNot(light.colorScheme.primary));
+    expect(custom.scaffoldBackgroundColor, light.scaffoldBackgroundColor);
+  });
+
   testWidgets('returning to recipes keeps the search and avoids a new load', (
     tester,
   ) async {
@@ -49,6 +68,93 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('swipes through main sections and keeps the week day swipe', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
+    await tester.pumpAndSettle();
+
+    int selectedSection() =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+    expect(selectedSection(), 3);
+    final pager = find.byKey(const ValueKey('main-pager'));
+    final week = find.byWidgetPredicate(
+      (widget) =>
+          widget is PageView && widget.key != const ValueKey('main-pager'),
+    );
+    final days = tester.widget<PageView>(week).controller!;
+    final initialDay = days.page!.round();
+    final dayDelta = initialDay == 6 ? 1.0 : -1.0;
+    await tester.drag(week, Offset(260 * dayDelta, 0));
+    await tester.pumpAndSettle();
+    expect(days.page, isNot(initialDay));
+    expect(selectedSection(), 3);
+
+    final body = tester.getRect(find.byKey(const ValueKey('main-content')));
+    final swipeStart = Offset(body.center.dx, body.top + 32);
+    final today = find.text('Diese Woche');
+    final todayX = tester.getCenter(today).dx;
+    final shortDrag = await tester.startGesture(swipeStart);
+    await shortDrag.moveBy(const Offset(24, 0));
+    await shortDrag.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(tester.getCenter(today).dx, greaterThan(todayX));
+    await shortDrag.up();
+    await tester.pumpAndSettle();
+    expect(selectedSection(), 3);
+    expect(tester.getCenter(today).dx, todayX);
+
+    final drag = await tester.startGesture(swipeStart);
+    await drag.moveBy(const Offset(24, 0));
+    await drag.moveBy(const Offset(250, 0));
+    await tester.pump();
+    final search = find.byType(TextField);
+    expect(tester.getCenter(today).dx, closeTo(todayX + 250, 1));
+    expect(tester.getRect(search).left, lessThan(body.left));
+    expect(tester.getRect(search).right, greaterThan(body.left));
+    expect(selectedSection(), 3);
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(selectedSection(), 2);
+    expect(tester.getRect(search).left, greaterThanOrEqualTo(body.left));
+
+    Future<void> swipe(double dx) async {
+      final body = tester.getRect(find.byKey(const ValueKey('main-content')));
+      await tester.dragFrom(
+        Offset(body.center.dx, body.top + 32),
+        Offset(dx, 0),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.text('Listen'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      tester.widget<PageView>(pager).controller!.page,
+      allOf(greaterThan(1), lessThan(2)),
+    );
+    await tester.pumpAndSettle();
+    expect(selectedSection(), 1);
+
+    await tester.flingFrom(swipeStart, const Offset(-100, 0), 1100);
+    await tester.pumpAndSettle();
+    expect(selectedSection(), 2);
+
+    for (final section in [1, 0, 0]) {
+      await swipe(260);
+      expect(selectedSection(), section);
+    }
+    for (final section in [1, 2, 3, 4, 5, 5]) {
+      await swipe(-260);
+      expect(selectedSection(), section);
+    }
+  });
+
   testWidgets('main navigation fits a narrow screen with larger text', (
     tester,
   ) async {
@@ -66,6 +172,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps loaded sections in place while a swipe refreshes them', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _DelayedSectionApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pumpAndSettle();
+
+    for (final (target, from, dx, path, anchor) in [
+      ('Listen', 'Rezepte', 260.0, '/api/collections', 'Schnelle Alltagsküche'),
+      (
+        'Woche',
+        'Rezepte',
+        -260.0,
+        '/api/calendar/week',
+        'Ablage für diese Woche',
+      ),
+      ('Vorrat', 'Einkauf', -260.0, '/api/pantry', 'Trockenwaren'),
+    ]) {
+      await tester.tap(find.text(target));
+      await tester.pumpAndSettle();
+      final item = find.text(anchor);
+      final originalPosition = tester.getTopLeft(item);
+      await tester.tap(find.text(from));
+      await tester.pumpAndSettle();
+
+      final response = Completer<void>();
+      api.delayedPath = path;
+      api.response = response;
+      final body = tester.getRect(find.byKey(const ValueKey('main-content')));
+      await tester.dragFrom(
+        Offset(body.center.dx, body.top + 32),
+        Offset(dx, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(api.delayedReads, greaterThan(0));
+      expect(tester.getTopLeft(item), originalPosition);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.getTopLeft(item), originalPosition);
+      response.complete();
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(item), originalPosition);
+      api.delayedReads = 0;
+      api.delayedPath = null;
+    }
   });
 
   testWidgets('a late older status cannot hide a newly started sync', (
@@ -174,7 +331,7 @@ void main() {
     expect(api.owned, isTrue);
     expect(tester.widget<Checkbox>(checkbox).value, isTrue);
     final remove = find.byTooltip('Reis mit Gemüse entfernen');
-    await tester.scrollUntilVisible(remove, 250);
+    await tester.scrollUntilVisible(remove, 250, scrollable: _verticalScroll);
     await tester.pumpAndSettle();
     await tester.tap(remove);
     await tester.pumpAndSettle();
@@ -239,11 +396,16 @@ void main() {
     expect(find.text('Artikel 000'), findsOneWidget);
     final last = find.text('Artikel 099');
     expect(last, findsNothing);
-    await tester.scrollUntilVisible(last, 300);
+    await tester.scrollUntilVisible(last, 300, scrollable: _verticalScroll);
     expect(last, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
+
+final _verticalScroll = find.byWidgetPredicate(
+  (widget) =>
+      widget is Scrollable && widget.axisDirection == AxisDirection.down,
+);
 
 class _LargeCartApi extends _TestApi {
   @override
@@ -305,6 +467,21 @@ class _SyncTestApi extends _TestApi {
       return {'started': true};
     }
     return super.write(method, path, body);
+  }
+}
+
+class _DelayedSectionApi extends DebugRezeptgartenApi {
+  String? delayedPath;
+  Completer<void>? response;
+  int delayedReads = 0;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == delayedPath) {
+      delayedReads++;
+      await response?.future;
+    }
+    return super.get(path, timeout: timeout);
   }
 }
 

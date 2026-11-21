@@ -7,6 +7,21 @@ import 'package:rezeptgarten/debug_api.dart';
 import 'package:rezeptgarten/main.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('debug previews use distinct bundled images', () async {
+    final api = DebugRezeptgartenApi();
+    final results = await api.get('/api/recipes') as Json;
+    final recipes = objects(results['items']);
+    final images = <String>{};
+    for (final recipe in recipes) {
+      final image = await api.image(recipe['image_file']);
+      expect(image!.take(8), [137, 80, 78, 71, 13, 10, 26, 10]);
+      images.add(base64Encode(image));
+    }
+    expect(images, hasLength(3));
+  });
+
   testWidgets('the settings switch works with an unreachable server', (
     tester,
   ) async {

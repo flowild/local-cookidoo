@@ -382,6 +382,7 @@ class _RecipeBrowserState extends State<RecipeBrowser> {
                 api: widget.api,
                 recipes: _recipes,
                 openRecipe: _open,
+                outlined: _collection != null,
               ),
               if (!_loading && _error == null && _recipes.length < _total)
                 SliverToBoxAdapter(
@@ -411,14 +412,19 @@ class _RecipeGrid extends StatelessWidget {
     required this.api,
     required this.recipes,
     required this.openRecipe,
+    this.outlined = false,
+    this.cornerAction,
   });
   final RezeptgartenApi api;
   final List<Json> recipes;
-  final OpenRecipe openRecipe;
+  final OpenRecipe? openRecipe;
+  final bool outlined;
+  final RecipeCornerAction Function(Json recipe)? cornerAction;
 
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
     builder: (context, constraints) {
+      final open = openRecipe;
       const gap = AppSpacing.item;
       final compact =
           MediaQuery.sizeOf(context).width < 600 &&
@@ -448,7 +454,9 @@ class _RecipeGrid extends StatelessWidget {
                       child: RecipeCard(
                         api: api,
                         recipe: recipe,
-                        onTap: () => openRecipe(recipe),
+                        onTap: open == null ? null : () => open(recipe),
+                        outlined: outlined,
+                        cornerAction: cornerAction?.call(recipe),
                       ),
                     ),
                   ),
@@ -804,63 +812,82 @@ class _CandidatesState extends State<_Candidates> {
           await widget.onSync?.call();
           if (mounted) await _load();
         },
-        child: ListView(
+        child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppSpacing.page,
-          children: [
-            TextField(
-              enabled: !_adding,
-              maxLength: 200,
-              decoration: const InputDecoration(
-                labelText: 'Rezepte suchen',
-                counterText: '',
+          slivers: [
+            SliverPadding(
+              padding: AppSpacing.page,
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          enabled: !_adding,
+                          maxLength: 200,
+                          decoration: const InputDecoration(
+                            labelText: 'Rezepte suchen',
+                            counterText: '',
+                          ),
+                          onChanged: (value) {
+                            _query = value.trim();
+                            _timer?.cancel();
+                            _request++;
+                            setState(() {
+                              recipes.clear();
+                              _loading = true;
+                              _error = null;
+                            });
+                            _timer = Timer(
+                              const Duration(milliseconds: 300),
+                              _load,
+                            );
+                          },
+                        ),
+                        if (_error != null) ...[
+                          Text(_error!),
+                          TextButton(
+                            onPressed: () => _load(append: recipes.isNotEmpty),
+                            child: const Text('Erneut laden'),
+                          ),
+                        ],
+                        if (_loading || _adding)
+                          const LinearProgressIndicator(),
+                        if (!_loading && _error == null && recipes.isEmpty)
+                          const Text('Keine weiteren Rezepte gefunden.'),
+                        const SizedBox(height: AppSpacing.section),
+                      ],
+                    ),
+                  ),
+                  _RecipeGrid(
+                    api: widget.api,
+                    recipes: recipes,
+                    outlined: true,
+                    openRecipe: _adding
+                        ? null
+                        : (recipe) async {
+                            await widget.openRecipe(recipe);
+                            if (mounted) await _load();
+                          },
+                    cornerAction: (recipe) => RecipeCornerAction(
+                      tooltip: '${text(recipe['name'])} zur Liste hinzufügen',
+                      icon: Icons.add,
+                      onPressed: _adding || _loading
+                          ? null
+                          : () => _add(recipe),
+                    ),
+                  ),
+                  if (!_loading && _error == null && recipes.length < _total)
+                    SliverToBoxAdapter(
+                      child: OutlinedButton(
+                        onPressed: () => _load(append: true),
+                        child: const Text('Weitere Rezepte anzeigen'),
+                      ),
+                    ),
+                ],
               ),
-              onChanged: (value) {
-                _query = value.trim();
-                _timer?.cancel();
-                _request++;
-                setState(() {
-                  recipes.clear();
-                  _loading = true;
-                  _error = null;
-                });
-                _timer = Timer(const Duration(milliseconds: 300), _load);
-              },
             ),
-            const SizedBox(height: AppSpacing.section),
-            if (_error != null) ...[
-              Text(_error!),
-              TextButton(
-                onPressed: () => _load(append: recipes.isNotEmpty),
-                child: const Text('Erneut laden'),
-              ),
-            ],
-            if (_loading || _adding) const LinearProgressIndicator(),
-            if (!_loading && _error == null && recipes.isEmpty)
-              const Text('Keine weiteren Rezepte gefunden.'),
-            for (final recipe in recipes)
-              ListTile(
-                title: Opacity(
-                  opacity: recipe['matches'] == false ? 0.48 : 1,
-                  child: Text(text(recipe['name'])),
-                ),
-                onTap: _adding
-                    ? null
-                    : () async {
-                        await widget.openRecipe(recipe);
-                        if (mounted) await _load();
-                      },
-                trailing: IconButton(
-                  tooltip: '${text(recipe['name'])} zur Liste hinzufügen',
-                  icon: const Icon(Icons.add),
-                  onPressed: _adding || _loading ? null : () => _add(recipe),
-                ),
-              ),
-            if (!_loading && _error == null && recipes.length < _total)
-              OutlinedButton(
-                onPressed: () => _load(append: true),
-                child: const Text('Weitere Rezepte anzeigen'),
-              ),
           ],
         ),
       ),
@@ -969,14 +996,6 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
                   'Deine Rezeptlisten',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
-                TextField(
-                  onChanged: (value) =>
-                      setState(() => _query = value.trim().toLowerCase()),
-                  decoration: const InputDecoration(
-                    labelText: 'Listen suchen',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                ),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: FilledButton.icon(
@@ -985,8 +1004,17 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
                     label: const Text('Neue Liste'),
                   ),
                 ),
+                TextField(
+                  onChanged: (value) =>
+                      setState(() => _query = value.trim().toLowerCase()),
+                  decoration: const InputDecoration(
+                    labelText: 'Listen suchen',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
                 if (_creating ||
-                    snapshot.connectionState != ConnectionState.done)
+                    (!snapshot.hasData &&
+                        snapshot.connectionState != ConnectionState.done))
                   const LinearProgressIndicator(),
                 if (snapshot.hasError) ...[
                   Text(snapshot.error.toString()),
@@ -1003,7 +1031,9 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
                       api: widget.api,
                       list: list,
                       refreshCount: widget.refreshCount,
-                      onOpen: () => _open(list),
+                      onManage: list['kind'] == 'local'
+                          ? () => _open(list)
+                          : null,
                       onRecipe: widget.openRecipe,
                     ),
                 ],
@@ -1022,14 +1052,14 @@ class _CollectionPreview extends StatefulWidget {
     required this.api,
     required this.list,
     required this.refreshCount,
-    required this.onOpen,
+    required this.onManage,
     required this.onRecipe,
   });
 
   final RezeptgartenApi api;
   final Json list;
   final int refreshCount;
-  final VoidCallback onOpen;
+  final VoidCallback? onManage;
   final OpenRecipe onRecipe;
 
   @override
@@ -1037,60 +1067,150 @@ class _CollectionPreview extends StatefulWidget {
 }
 
 class _CollectionPreviewState extends State<_CollectionPreview> {
-  Future<Json>? _items;
+  final _items = <Json>[];
+  int _request = 0;
+  int? _total;
+  bool _loading = false;
+  bool _retryAppend = false;
+  String? _error;
 
-  void _load() {
+  Future<void> _load({bool append = false}) async {
+    if (append && _loading) return;
+    final request = ++_request;
     setState(() {
-      _items = _recipePage(widget.api, {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await _recipePage(widget.api, {
         'collection': text(widget.list['id']),
         'limit': '12',
+        'offset': '${append ? _items.length : 0}',
       });
-    });
+      if (!mounted || request != _request) return;
+      setState(() {
+        if (!append) _items.clear();
+        _items.addAll(objects(result['items']));
+        _total = result['total'] as int;
+        _loading = false;
+      });
+    } on Exception catch (error) {
+      if (!mounted || request != _request) return;
+      setState(() {
+        _loading = false;
+        _retryAppend = append;
+        _error = error.toString();
+      });
+    }
   }
 
   @override
   void didUpdateWidget(_CollectionPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_items != null &&
+    if (_request > 0 &&
         (oldWidget.refreshCount != widget.refreshCount ||
             oldWidget.list['recipe_count'] != widget.list['recipe_count'])) {
-      _load();
+      unawaited(_load());
     }
   }
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text(text(widget.list['name'])),
-    onExpansionChanged: (expanded) {
-      if (expanded && _items == null) _load();
-    },
-    children: [
-      FutureBuilder<Json>(
-        future: _items,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return TextButton(
-              onPressed: _load,
-              child: const Text('Erneut laden'),
-            );
-          }
-          if (!snapshot.hasData) return const LinearProgressIndicator();
-          final recipes = objects(snapshot.requireData['items']);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (recipes.isEmpty)
-                const ListTile(title: Text('Keine Rezepte in dieser Liste.')),
-              for (final recipe in recipes)
-                ListTile(
-                  title: Text(text(recipe['name'])),
-                  onTap: () => widget.onRecipe(recipe),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        backgroundColor: colors.secondaryContainer,
+        collapsedBackgroundColor: colors.secondaryContainer,
+        iconColor: colors.onSecondaryContainer,
+        collapsedIconColor: colors.onSecondaryContainer,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        leading: Icon(Icons.list_alt, color: colors.onSecondaryContainer),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                text(widget.list['name']),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colors.onSecondaryContainer,
+                  fontWeight: FontWeight.w700,
                 ),
-            ],
-          );
+              ),
+            ),
+            if (widget.onManage != null)
+              IconButton(
+                tooltip: 'Liste verwalten',
+                onPressed: widget.onManage,
+                icon: Icon(
+                  Icons.edit_outlined,
+                  color: colors.onSecondaryContainer,
+                ),
+              ),
+          ],
+        ),
+        onExpansionChanged: (expanded) {
+          if (expanded && _total == null && !_loading) unawaited(_load());
         },
+        children: [
+          Material(
+            color: colors.surfaceContainerLow,
+            child: Padding(
+              padding: AppSpacing.compactPanel,
+              child: _recipeRows(),
+            ),
+          ),
+        ],
       ),
-      TextButton(onPressed: widget.onOpen, child: const Text('Liste öffnen')),
+    );
+  }
+
+  Widget _recipeRows() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: AppSpacing.related,
+    children: [
+      if (_items.isNotEmpty)
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = AppSpacing.related;
+            final width = (constraints.maxWidth - gap) / 2;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final recipe in _items)
+                  SizedBox(
+                    key: ValueKey(recipe['id']),
+                    width: width,
+                    child: RecipeCard(
+                      api: widget.api,
+                      recipe: recipe,
+                      onTap: () => widget.onRecipe(recipe),
+                      outlined: true,
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      if (_loading && _total == null)
+        const LinearProgressIndicator()
+      else if (_error case final String error) ...[
+        Text(error),
+        TextButton(
+          onPressed: () => _load(append: _retryAppend),
+          child: const Text('Erneut laden'),
+        ),
+      ] else if (_total case final int total)
+        if (total == 0)
+          const Text('Keine Rezepte in dieser Liste.')
+        else if (_items.length < total)
+          TextButton(
+            onPressed: _loading ? null : () => _load(append: true),
+            child: const Text('Weitere Rezepte laden'),
+          ),
     ],
   );
 }

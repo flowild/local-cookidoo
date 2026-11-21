@@ -29,6 +29,15 @@ class RecipeDetail extends StatefulWidget {
 
 class _RecipeDetailState extends State<RecipeDetail> {
   static const _links = MethodChannel('de.rezeptgarten/links');
+  static const _buttonStyle = ButtonStyle(
+    alignment: AlignmentDirectional.centerStart,
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(
+        horizontal: AppSpacing.section,
+        vertical: AppSpacing.related,
+      ),
+    ),
+  );
   final _note = TextEditingController();
   final _noteFocus = FocusNode();
   late String _id = text(widget.preview['id']);
@@ -264,6 +273,34 @@ class _RecipeDetailState extends State<RecipeDetail> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _addToShelf() async {
+    final id = _id;
+    final week = await widget.api.get('/api/calendar/week') as Json;
+    final monday = objects(week['days']).firstOrNull?['date'];
+    if (monday is! String || monday.isEmpty) {
+      throw const ApiException(
+        'Die aktuelle Woche konnte nicht geladen werden.',
+      );
+    }
+    if (!mounted) return;
+    if (objects(week['shelf']).any((recipe) => recipe['id'] == id)) {
+      _message('Das Rezept liegt bereits in der Ablage.');
+      return;
+    }
+    const creationPrefix = 'creation:';
+    final custom = id.startsWith(creationPrefix);
+    await widget.api.write('POST', '/api/calendar/placement', {
+      'week': monday,
+      'source': 'preview',
+      'target': 'shelf',
+      'recipe_id': custom ? id.substring(creationPrefix.length) : id,
+      'custom': custom,
+      'recipe': <String, dynamic>{},
+      'move_id': newCalendarMoveId(),
+    });
+    if (mounted) _message('Zur Ablage der aktuellen Woche hinzugefügt.');
+  }
+
   static List<dynamic> _list(Object? value) {
     if (value is String) {
       try {
@@ -276,6 +313,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
   }
 
   Widget? _ingredients(Json recipe) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final inPantry = dark ? const Color(0xff46ed79) : const Color(0xff00853e);
+    final missing = dark ? const Color(0xffff6572) : const Color(0xffd32239);
     final hidden = _list(recipe['hidden_ingredient_positions']).toSet();
     final availability = recipe['ingredient_availability'];
     final rows = <Widget>[];
@@ -317,11 +358,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
                 },
                 child: Icon(
                   Icons.circle,
-                  size: 10,
+                  size: 13,
                   color: switch (available) {
-                    true => const Color(0xff528045),
-                    false => Theme.of(context).colorScheme.error,
-                    _ => Theme.of(context).colorScheme.outline,
+                    true => inPantry,
+                    false => missing,
+                    _ => theme.colorScheme.outline,
                   },
                 ),
               ),
@@ -410,12 +451,19 @@ class _RecipeDetailState extends State<RecipeDetail> {
       ),
       if (_noteStatus != null) Text(_noteStatus!),
       if (_original == null && !_noteLoading && !_working)
-        TextButton(
+        TextButton.icon(
           onPressed: () => _action(_loadNote),
-          child: const Text('Notiz erneut laden'),
+          style: _buttonStyle,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Notiz erneut laden'),
         ),
       if (_dirty && _saving == null)
-        TextButton(onPressed: _flushNote, child: const Text('Notiz speichern')),
+        TextButton.icon(
+          onPressed: _flushNote,
+          style: _buttonStyle,
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Notiz speichern'),
+        ),
     ],
   );
 
@@ -497,9 +545,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
           children: [for (final tip in tips) ListTile(title: Text(tip))],
         ),
       if (_tipsError != null)
-        TextButton(
+        TextButton.icon(
           onPressed: _working ? null : () => _action(_loadTips),
-          child: const Text('Tipps erneut laden'),
+          style: _buttonStyle,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Tipps erneut laden'),
         ),
       if (!_calendarRecipe)
         Column(
@@ -511,9 +561,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             if (_listError != null)
-              TextButton(
+              TextButton.icon(
                 onPressed: _working ? null : () => _action(_loadLists),
-                child: const Text('Listen erneut laden'),
+                style: _buttonStyle,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Listen erneut laden'),
               )
             else if (!_working && _localLists.isEmpty)
               const Text(
@@ -545,7 +597,13 @@ class _RecipeDetailState extends State<RecipeDetail> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: AppSpacing.related,
         children: [
-          FilledButton(
+          FilledButton.icon(
+            onPressed: _working ? null : () => _action(_addToShelf),
+            style: _buttonStyle,
+            icon: const Icon(Icons.playlist_add),
+            label: const Text('Zur Ablage hinzufügen'),
+          ),
+          FilledButton.icon(
             onPressed: _working
                 ? null
                 : () => _action(() async {
@@ -559,9 +617,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
                       );
                     }
                   }),
-            child: const Text('Heute kochen'),
+            style: _buttonStyle,
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: const Text('Heute kochen'),
           ),
-          FilledButton(
+          FilledButton.icon(
             onPressed: _working
                 ? null
                 : () => _action(() async {
@@ -578,16 +638,20 @@ class _RecipeDetailState extends State<RecipeDetail> {
                       );
                     }
                   }),
-            child: const Text('Zum Einkaufswagen hinzufügen'),
+            style: _buttonStyle,
+            icon: const Icon(Icons.add_shopping_cart),
+            label: const Text('Zum Einkaufswagen hinzufügen'),
           ),
           if (recipe['source_url'] case final String url)
-            OutlinedButton(
+            OutlinedButton.icon(
               onPressed: _working
                   ? null
                   : () => _action(() async {
                       await _links.invokeMethod<void>('openCookidoo', url);
                     }),
-              child: const Text('In Cookidoo öffnen'),
+              style: _buttonStyle,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('In Cookidoo öffnen'),
             ),
         ],
       ),
@@ -632,9 +696,11 @@ class _RecipeDetailState extends State<RecipeDetail> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(_error!),
-                TextButton(
+                TextButton.icon(
                   onPressed: _working ? null : () => _load(_id),
-                  child: const Text('Erneut laden'),
+                  style: _buttonStyle,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Erneut laden'),
                 ),
               ],
             ),

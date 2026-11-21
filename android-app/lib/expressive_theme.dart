@@ -1,26 +1,59 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'appearance.dart';
 import 'spacing.dart';
 
 ThemeData rezeptgartenTheme(Brightness brightness, int accent) {
+  // The default roles follow the light and dark variables in app/static/style.css.
+  final dark = brightness == Brightness.dark;
   final seed = Color(accent);
-  final accentColors = ColorScheme.fromSeed(
+  final customAccent = accent != defaultAccent;
+  final paper = dark ? const Color(0xff102729) : const Color(0xfff7f7f2);
+  final card = dark ? const Color(0xff1b383a) : Colors.white;
+  final ink = dark ? const Color(0xffe4f1ef) : const Color(0xff253c31);
+  final soft = dark ? const Color(0xff294a4b) : const Color(0xffedf1e5);
+  final line = dark ? const Color(0xff36585a) : const Color(0xffe5e7dd);
+  final standardAccent = dark
+      ? const Color(0xff8fc9c5)
+      : const Color(defaultAccent);
+  final accentScheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
     dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
   );
-  final colors =
-      ColorScheme.fromSeed(
-        seedColor: seed,
-        brightness: brightness,
-        dynamicSchemeVariant: DynamicSchemeVariant.expressive,
-      ).copyWith(
-        primary: accentColors.primary,
-        onPrimary: accentColors.onPrimary,
-        primaryContainer: accentColors.primaryContainer,
-        onPrimaryContainer: accentColors.onPrimaryContainer,
-        inversePrimary: accentColors.inversePrimary,
-      );
+  final primary = customAccent ? accentScheme.primary : standardAccent;
+  final onPrimary = customAccent
+      ? accentScheme.onPrimary
+      : (dark ? const Color(0xff102b2c) : Colors.white);
+  final accentSurface = customAccent
+      ? Color.alphaBlend(seed.withValues(alpha: .14), card)
+      : soft;
+  final colors = accentScheme.copyWith(
+    primary: primary,
+    onPrimary: onPrimary,
+    primaryContainer: accentSurface,
+    onPrimaryContainer: ink,
+    secondary: primary,
+    onSecondary: onPrimary,
+    secondaryContainer: accentSurface,
+    onSecondaryContainer: ink,
+    tertiary: primary,
+    onTertiary: onPrimary,
+    tertiaryContainer: soft,
+    onTertiaryContainer: ink,
+    surface: paper,
+    onSurface: ink,
+    onSurfaceVariant: dark ? const Color(0xffaec8c6) : const Color(0xff59665b),
+    surfaceContainerLowest: card,
+    surfaceContainerLow: card,
+    surfaceContainer: card,
+    surfaceContainerHigh: card,
+    surfaceContainerHighest: soft,
+    outline: dark ? const Color(0xff789996) : const Color(0xff788376),
+    outlineVariant: line,
+    inverseSurface: ink,
+    onInverseSurface: paper,
+  );
   const pill = StadiumBorder();
   const cardShape = RoundedRectangleBorder(
     borderRadius: BorderRadius.all(Radius.circular(24)),

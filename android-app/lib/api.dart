@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -11,6 +12,13 @@ List<Json> objects(Object? value) =>
 
 String text(Object? value, [String fallback = '']) =>
     value?.toString() ?? fallback;
+
+final _calendarMoveRandom = Random.secure();
+
+String newCalendarMoveId() => List.generate(
+  16,
+  (_) => _calendarMoveRandom.nextInt(256).toRadixString(16).padLeft(2, '0'),
+).join();
 
 class ApiException implements Exception {
   const ApiException(this.message);

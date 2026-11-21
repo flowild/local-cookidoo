@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/debug_api.dart';
+import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/spacing.dart';
 import 'package:rezeptgarten/week_view.dart';
 
@@ -152,6 +153,59 @@ void main() {
     expect(page.controller!.page, 1);
   });
 
+  testWidgets('the shelf shows recipe thumbnails in one scrollable row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: _ShelfApi(),
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final first = tester.getCenter(find.text('Ablagerezept 1'));
+    final last = find.text('Ablagerezept 4');
+    final lastBefore = tester.getCenter(last);
+    expect(lastBefore.dy, closeTo(first.dy, 1));
+    final cards = find.byWidgetPredicate(
+      (widget) => widget is RecipeCard && widget.compact,
+    );
+    expect(cards, findsNWidgets(4));
+    expect(
+      find.descendant(of: cards, matching: find.byType(Image)),
+      findsNWidgets(4),
+    );
+    expect(
+      tester
+          .getRect(
+            find.descendant(of: cards.first, matching: find.byType(Image)),
+          )
+          .bottom,
+      lessThan(first.dy),
+    );
+    final shelf = find.byWidgetPredicate(
+      (widget) =>
+          widget is SingleChildScrollView &&
+          widget.scrollDirection == Axis.horizontal,
+    );
+    final bounds = tester.getRect(shelf);
+    await tester.dragFrom(
+      Offset(bounds.right - 12, bounds.center.dy),
+      const Offset(-310, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(last).dx, lessThan(lastBefore.dx - 150));
+  });
+
   testWidgets('swipes a selected recipe to the shelf and undoes its removal', (
     tester,
   ) async {
@@ -199,7 +253,13 @@ void main() {
     expect(api.queued.single['source'], '2026-11-16');
     expect(api.queued.single['target'], 'shelf');
 
-    await tester.tap(find.byTooltip('Reisgericht entfernen'));
+    expect(find.byTooltip('Reisgericht entfernen'), findsNothing);
+    final remove = await tester.startGesture(tester.getCenter(recipe));
+    await tester.pump(const Duration(milliseconds: 270));
+    await remove.moveBy(const Offset(0, 120));
+    await tester.pump();
+    expect(find.text('Entfernen'), findsOneWidget);
+    await remove.up();
     await tester.pump();
     expect(api.shelf, isFalse);
     expect(find.text('Rückgängig'), findsOneWidget);
@@ -243,6 +303,31 @@ class _MultipleDaysApi extends _WeekApi {
       };
     }
     return super.get(path, timeout: timeout);
+  }
+}
+
+class _ShelfApi extends _WeekApi {
+  final _bytes = File('assets/icon.png').readAsBytesSync();
+
+  @override
+  Future<Uint8List?> image(Object? filename, {bool full = false}) async =>
+      filename == 'test-thumbnail.png' ? _bytes : null;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    final result = await super.get(path, timeout: timeout);
+    if (path != '/api/calendar/week') return result;
+    return <String, dynamic>{
+      ...result as Json,
+      'shelf': [
+        for (var i = 1; i <= 4; i++)
+          {
+            'id': 's$i',
+            'name': 'Ablagerezept $i',
+            'image_file': 'test-thumbnail.png',
+          },
+      ],
+    };
   }
 }
 

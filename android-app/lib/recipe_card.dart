@@ -14,6 +14,8 @@ class RecipeCard extends StatefulWidget {
     this.onTap,
     this.cornerAction,
     this.detail = false,
+    this.outlined = false,
+    this.compact = false,
   });
 
   final RezeptgartenApi api;
@@ -21,6 +23,8 @@ class RecipeCard extends StatefulWidget {
   final VoidCallback? onTap;
   final RecipeCornerAction? cornerAction;
   final bool detail;
+  final bool outlined;
+  final bool compact;
 
   @override
   State<RecipeCard> createState() => _RecipeCardState();
@@ -50,13 +54,14 @@ class _RecipeCardState extends State<RecipeCard> {
 
   Widget _picture(ThemeData theme, String? duration, String? portions) {
     final colors = theme.colorScheme;
-    final hasNote = !widget.detail && widget.recipe['has_note'] == true;
+    final hasNote =
+        !widget.detail && !widget.compact && widget.recipe['has_note'] == true;
     final action = widget.cornerAction;
     final badgeStyle = theme.textTheme.labelSmall!.copyWith(
       color: colors.onInverseSurface,
       letterSpacing: 0,
     );
-    final badgeHeight = widget.detail
+    final badgeHeight = widget.detail || widget.compact
         ? 0.0
         : (action != null ? 48.0 : 28.0) +
               _lineHeight(context, badgeStyle) * _badgeLines +
@@ -189,7 +194,9 @@ class _RecipeCardState extends State<RecipeCard> {
     final recipe = widget.recipe;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final titleStyle = theme.textTheme.titleMedium!;
+    final titleStyle = widget.compact
+        ? theme.textTheme.labelLarge!
+        : theme.textTheme.titleMedium!;
     final difficultyStyle = theme.textTheme.bodySmall!.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -198,10 +205,19 @@ class _RecipeCardState extends State<RecipeCard> {
     final servings = offeredServings is List && offeredServings.isNotEmpty
         ? offeredServings.join(' / ')
         : recipe['servings'];
+    final cardShape = theme.cardTheme.shape;
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
       color: colors.surfaceContainerHigh,
+      shape: widget.outlined
+          ? (cardShape is OutlinedBorder
+                    ? cardShape
+                    : const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                      ))
+                .copyWith(side: BorderSide(color: colors.outline))
+          : null,
       child: InkWell(
         onTap: widget.onTap,
         onHighlightChanged: widget.onTap == null
@@ -218,16 +234,20 @@ class _RecipeCardState extends State<RecipeCard> {
                 borderRadius: BorderRadius.circular(20),
                 child: _picture(
                   theme,
-                  !widget.detail && seconds is num
+                  !widget.detail && !widget.compact && seconds is num
                       ? '${(seconds / 60).round()} Min.'
                       : null,
-                  !widget.detail && servings != null ? '$servings Port.' : null,
+                  !widget.detail && !widget.compact && servings != null
+                      ? '$servings Port.'
+                      : null,
                 ),
               ),
             ),
             if (!widget.detail)
               Padding(
-                padding: AppSpacing.compactPanel,
+                padding: widget.compact
+                    ? const EdgeInsets.fromLTRB(8, 4, 8, 8)
+                    : AppSpacing.compactPanel,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: AppSpacing.tight,
@@ -241,25 +261,26 @@ class _RecipeCardState extends State<RecipeCard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    SizedBox(
-                      height: _lineHeight(context, difficultyStyle),
-                      child: recipe['difficulty'] == null
-                          ? null
-                          : Text(
-                              switch (text(recipe['difficulty'])
-                                  .toLowerCase()
-                                  .split('.')
-                                  .last) {
-                                'easy' => 'Einfach',
-                                'medium' => 'Mittel',
-                                'advanced' || 'hard' => 'Anspruchsvoll',
-                                _ => text(recipe['difficulty']),
-                              },
-                              style: difficultyStyle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                    ),
+                    if (!widget.compact)
+                      SizedBox(
+                        height: _lineHeight(context, difficultyStyle),
+                        child: recipe['difficulty'] == null
+                            ? null
+                            : Text(
+                                switch (text(recipe['difficulty'])
+                                    .toLowerCase()
+                                    .split('.')
+                                    .last) {
+                                  'easy' => 'Einfach',
+                                  'medium' => 'Mittel',
+                                  'advanced' || 'hard' => 'Anspruchsvoll',
+                                  _ => text(recipe['difficulty']),
+                                },
+                                style: difficultyStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                      ),
                   ],
                 ),
               ),

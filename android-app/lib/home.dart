@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/physics.dart';
+import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
@@ -83,12 +83,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   final _visitedAreas = {3};
   final _areaRefreshes = List.filled(areas.length, 0);
   int _session = 0;
+  var _pagerKey = GlobalKey<_SectionPagerState>();
   late bool _wasLocal;
   bool _recipesNeedRefresh = false;
   final pantryCollapsed = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
-  late Future<dynamic> data = _load();
+  final _areaData = <int, Future<dynamic>>{};
 
   bool get _local =>
       widget.connection == null ||
@@ -131,13 +132,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       serverCartCount = null;
       viewRefresh++;
       _areaRefreshes[area]++;
-      data = _load();
+      _areaData[area] = _load(area);
     });
     if (_local) unawaited(_startupSync());
   }
 
   void _resetSession() {
     _session++;
+    _pagerKey = GlobalKey<_SectionPagerState>();
+    _areaData.clear();
     _visitedAreas
       ..clear()
       ..add(area);
@@ -188,9 +191,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (approved == true) await widget.connection?.requestPermission();
   }
 
-  Future<dynamic> _load() async => !_local
+  Future<dynamic> _load(int index) async => !_local
       ? null
-      : switch (area) {
+      : switch (index) {
           0 => _loadOverview(),
           4 => _loadCart(),
           _ => null,
@@ -258,7 +261,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             setState(() {
               _resetSession();
               serverCartCount = null;
-              data = _load();
+              _areaData[area] = _load(area);
             });
           },
         ),
@@ -363,9 +366,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     });
   }
 
+  bool _canOpen(int index) =>
+      !busy &&
+      index >= 0 &&
+      index < areas.length &&
+      (_local || index == 3 || index == 4);
+
   void _open(int index) {
-    if (!_local && index != 3 && index != 4) return;
-    if (busy || area == index) return;
+    if (!_canOpen(index) || area == index) return;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       area = index;
@@ -373,8 +381,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         _areaRefreshes[index]++;
       }
       if (index == 2) _recipesNeedRefresh = false;
-      data = _load();
+      _areaData[area] = _load(area);
     });
+  }
+
+  Future<void> _navigate(int index) async {
+    if (!_canOpen(index)) return;
+    await _pagerKey.currentState?.goTo(index);
   }
 
   Future<void> _refresh() async {
@@ -390,9 +403,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       });
       return;
     }
-    final updated = _load();
+    final updated = _load(area);
     setState(() {
-      data = updated;
+      _areaData[area] = updated;
     });
     try {
       await updated;
@@ -421,9 +434,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       message = error.toString();
     }
     if (!mounted) return saved;
-    final updated = _load();
+    final updated = _load(area);
     setState(() {
-      data = updated;
+      _areaData[area] = updated;
     });
     try {
       await updated;
@@ -974,12 +987,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             runSpacing: AppSpacing.related,
             children: [
               FilledButton.tonalIcon(
-                onPressed: () => _open(1),
+                onPressed: () => _navigate(1),
                 icon: const Icon(Icons.layers_outlined),
                 label: const Text('Alle Listen ansehen'),
               ),
               FilledButton.tonalIcon(
-                onPressed: () => _open(2),
+                onPressed: () => _navigate(2),
                 icon: const Icon(Icons.menu_book),
                 label: const Text('Alle Rezepte'),
               ),
@@ -1019,10 +1032,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Widget _localArea(int index) {
-    if (index != area &&
-        (!_retainedAreas.contains(index) || !_visitedAreas.contains(index))) {
-      return const SizedBox.shrink();
-    }
     final refreshCount = _areaRefreshes[index];
     return switch (index) {
       1 => RecipeCollections(
@@ -1062,7 +1071,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Widget _simpleArea(int index) => FutureBuilder<dynamic>(
-    future: data,
+    future: _areaData.putIfAbsent(index, () => _load(index)),
     builder: (context, snapshot) {
       final waiting = snapshot.connectionState != ConnectionState.done;
       return RefreshIndicator(
@@ -1180,17 +1189,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             tooltip: 'Rezepte suchen',
             onPressed: busy || !_local
                 ? null
-                : () {
-                    _open(2);
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted && area == 2) recipeSearch.requestFocus();
-                    });
+                : () async {
+                    await _navigate(2);
+                    if (mounted && area == 2) recipeSearch.requestFocus();
                   },
             icon: const Icon(Icons.search),
           ),
           IconButton(
             tooltip: 'Einkaufswagen öffnen',
-            onPressed: busy ? null : () => _open(4),
+            onPressed: busy ? null : () => _navigate(4),
             icon: Badge(
               isLabelVisible: serverCartCount != null,
               label: Text(text(serverCartCount)),
@@ -1230,7 +1237,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                     : NavigationRailLabelType.all,
                 useIndicator: true,
                 scrollable: true,
-                onDestinationSelected: _open,
+                onDestinationSelected: _navigate,
                 destinations: [
                   for (final (index, label) in areas.indexed)
                     NavigationRailDestination(
@@ -1243,55 +1250,16 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               ),
             Expanded(
               key: const ValueKey('main-content'),
-              child: _SectionEntrance(
-                key: ValueKey(_session),
-                child: !_local
-                    ? widget.connection?.mode == ConnectionMode.telegram &&
-                              widget.telegram != null
-                          ? TelegramView(
-                              key: ValueKey('telegram-$area-$viewRefresh'),
-                              telegram: widget.telegram!,
-                              cart: area == 4,
-                              notice: widget.connection?.error,
-                            )
-                          : Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    widget.connection?.error ??
-                                        'Verbindung wird geprüft.',
-                                  ),
-                                  if (widget.connection?.hasPermission == false)
-                                    TextButton(
-                                      onPressed: _networkPermission,
-                                      child: const Text(
-                                        'WLAN-Erkennung einrichten',
-                                      ),
-                                    ),
-                                  TextButton(
-                                    onPressed: widget.connection?.refresh,
-                                    child: const Text('Erneut prüfen'),
-                                  ),
-                                ],
-                              ),
-                            )
-                    : IndexedStack(
-                        key: ValueKey(_session),
-                        index: area,
-                        children: [
-                          for (var index = 0; index < areas.length; index++)
-                            TickerMode(
-                              enabled: index == area,
-                              child: ExcludeFocus(
-                                excluding: index != area,
-                                child: PrimaryScrollController.none(
-                                  child: _localArea(index),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+              child: _SectionPager(
+                key: _pagerKey,
+                index: area,
+                firstIndex: _local || area < 3 ? 0 : 3,
+                count: _local || area < 3 ? areas.length : 2,
+                swipeEnabled: !busy && (_local || area >= 3),
+                canOpen: _canOpen,
+                onOpen: _open,
+                retain: (index) => _local && _retainedAreas.contains(index),
+                builder: _local ? _localArea : _remoteArea,
               ),
             ),
           ],
@@ -1304,7 +1272,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               labelBehavior: hideNavigationLabels
                   ? NavigationDestinationLabelBehavior.alwaysHide
                   : NavigationDestinationLabelBehavior.alwaysShow,
-              onDestinationSelected: _open,
+              onDestinationSelected: _navigate,
               destinations: [
                 for (final (index, label) in areas.indexed)
                   NavigationDestination(
@@ -1317,48 +1285,218 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             ),
     );
   }
-}
 
-class _SectionEntrance extends StatefulWidget {
-  const _SectionEntrance({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_SectionEntrance> createState() => _SectionEntranceState();
-}
-
-class _SectionEntranceState extends State<_SectionEntrance>
-    with SingleTickerProviderStateMixin {
-  late final _progress = AnimationController.unbounded(vsync: this);
-  bool _started = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _progress.value = 1;
-    } else if (!_started) {
-      _progress.animateWith(
-        SpringSimulation(Springs.expressiveDefaultSpatial, 0, 1, 0),
+  Widget _remoteArea(int index) {
+    final connection = widget.connection;
+    final telegram = widget.telegram;
+    if (connection?.mode == ConnectionMode.telegram && telegram != null) {
+      return TelegramView(
+        key: ValueKey('telegram-$index-$viewRefresh'),
+        telegram: telegram,
+        cart: index == 4,
+        notice: connection?.error,
       );
     }
-    _started = true;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(connection?.error ?? 'Verbindung wird geprüft.'),
+          if (connection?.hasPermission == false)
+            TextButton(
+              onPressed: _networkPermission,
+              child: const Text('WLAN-Erkennung einrichten'),
+            ),
+          TextButton(
+            onPressed: connection?.refresh,
+            child: const Text('Erneut prüfen'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionPager extends StatefulWidget {
+  const _SectionPager({
+    super.key,
+    required this.index,
+    required this.firstIndex,
+    required this.count,
+    required this.swipeEnabled,
+    required this.canOpen,
+    required this.onOpen,
+    required this.retain,
+    required this.builder,
+  });
+
+  final int index;
+  final int firstIndex;
+  final int count;
+  final bool swipeEnabled;
+  final bool Function(int) canOpen;
+  final ValueChanged<int> onOpen;
+  final bool Function(int) retain;
+  final Widget Function(int) builder;
+
+  @override
+  State<_SectionPager> createState() => _SectionPagerState();
+}
+
+class _SectionPagerState extends State<_SectionPager> {
+  late final _controller = PageController(
+    initialPage: widget.index - widget.firstIndex,
+    keepPage: false,
+  );
+  double _reducedMotionDistance = 0;
+
+  @override
+  void didUpdateWidget(_SectionPager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.firstIndex != widget.firstIndex ||
+        oldWidget.count != widget.count) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller.hasClients) {
+          _controller.jumpToPage(widget.index - widget.firstIndex);
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
-    _progress.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
+  Future<void> goTo(int index) async {
+    if (!_controller.hasClients || !widget.canOpen(index)) return;
+    final page = index - widget.firstIndex;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.jumpToPage(page);
+    } else {
+      await _controller.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (mounted && _controller.hasClients && _controller.page == page) {
+      _commit();
+    }
+  }
+
+  void _commit() {
+    if (!_controller.hasClients ||
+        _controller.position.isScrollingNotifier.value) {
+      return;
+    }
+    final page = _controller.page;
+    if (page == null) return;
+    final index = page.round() + widget.firstIndex;
+    if (index == widget.index) return;
+    if (widget.canOpen(index)) {
+      widget.onOpen(index);
+    } else {
+      _controller.jumpToPage(widget.index - widget.firstIndex);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _progress,
-    child: widget.child,
-    builder: (context, child) => Transform.translate(
-      offset: Offset(0, 12 * (1 - _progress.value)),
-      child: child,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final skipAnimation = reduceMotion && widget.swipeEnabled;
+    return LayoutBuilder(
+      builder: (context, constraints) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        supportedDevices: const {PointerDeviceKind.touch},
+        onHorizontalDragStart: skipAnimation
+            ? (_) => _reducedMotionDistance = 0
+            : null,
+        onHorizontalDragUpdate: skipAnimation
+            ? (details) => _reducedMotionDistance += details.delta.dx
+            : null,
+        onHorizontalDragEnd: skipAnimation
+            ? (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                final movement = _reducedMotionDistance;
+                final direction = velocity.abs() > 20 ? velocity : movement;
+                if (velocity.abs() > 20 ||
+                    movement.abs() >= constraints.maxWidth / 2) {
+                  unawaited(goTo(widget.index + (direction < 0 ? 1 : -1)));
+                }
+              }
+            : null,
+        child: NotificationListener<ScrollEndNotification>(
+          onNotification: (notification) {
+            if (notification.depth == 0) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _commit();
+              });
+            }
+            return false;
+          },
+          child: PageView.builder(
+            key: const ValueKey('main-pager'),
+            controller: _controller,
+            physics: !widget.swipeEnabled || reduceMotion
+                ? const NeverScrollableScrollPhysics()
+                : null,
+            itemCount: widget.count,
+            itemBuilder: (context, page) {
+              final index = page + widget.firstIndex;
+              final active = index == widget.index;
+              return _SectionPage(
+                key: ValueKey(index),
+                retain: widget.retain(index),
+                child: TickerMode(
+                  enabled: active,
+                  child: ExcludeFocus(
+                    excluding: !active,
+                    child: ExcludeSemantics(
+                      excluding: !active,
+                      child: IgnorePointer(
+                        ignoring: !active,
+                        child: PrimaryScrollController.none(
+                          child: widget.builder(index),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionPage extends StatefulWidget {
+  const _SectionPage({super.key, required this.retain, required this.child});
+
+  final bool retain;
+  final Widget child;
+
+  @override
+  State<_SectionPage> createState() => _SectionPageState();
+}
+
+class _SectionPageState extends State<_SectionPage>
+    with AutomaticKeepAliveClientMixin<_SectionPage> {
+  @override
+  bool get wantKeepAlive => widget.retain;
+
+  @override
+  void didUpdateWidget(_SectionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.retain != widget.retain) updateKeepAlive();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

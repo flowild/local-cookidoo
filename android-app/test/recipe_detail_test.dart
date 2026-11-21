@@ -7,6 +7,74 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/recipe_detail.dart';
 
 void main() {
+  testWidgets('adds the selected recipe to the current week shelf', (
+    tester,
+  ) async {
+    final api = _DetailApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'creation:r1', 'name': 'Reisgericht'},
+          calendar: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final add = find.text('Zur Ablage hinzufügen');
+    await tester.scrollUntilVisible(
+      find.text('Heute kochen'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester.getCenter(add).dy,
+      lessThan(tester.getCenter(find.text('Heute kochen')).dy),
+    );
+    for (final (label, icon, type) in [
+      ('Zur Ablage hinzufügen', Icons.playlist_add, FilledButton),
+      ('Heute kochen', Icons.calendar_today_outlined, FilledButton),
+      ('Zum Einkaufswagen hinzufügen', Icons.add_shopping_cart, FilledButton),
+      ('In Cookidoo öffnen', Icons.open_in_new, OutlinedButton),
+    ]) {
+      final text = find.text(label);
+      final button = find.ancestor(
+        of: text,
+        matching: find.byWidgetPredicate((widget) {
+          return type == FilledButton
+              ? widget is FilledButton
+              : widget is OutlinedButton;
+        }),
+      );
+      final leading = find.descendant(of: button, matching: find.byIcon(icon));
+      expect(leading, findsOneWidget);
+      final left = tester.getRect(button).left;
+      expect(tester.getRect(leading).left, closeTo(left + 16, 1));
+      expect(
+        tester.getRect(leading).right,
+        lessThan(tester.getRect(text).left),
+      );
+    }
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(api.placements.single, {
+      'week': '2026-11-16',
+      'source': 'preview',
+      'target': 'shelf',
+      'recipe_id': 'r1',
+      'custom': true,
+      'recipe': <String, dynamic>{},
+      'move_id': matches(RegExp(r'^[a-f0-9]{32}$')),
+    });
+    expect(
+      find.text('Zur Ablage der aktuellen Woche hinzugefügt.'),
+      findsOneWidget,
+    );
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(api.placements, hasLength(1));
+  });
+
   testWidgets('refresh saves a draft before syncing and reloading', (
     tester,
   ) async {
@@ -67,6 +135,7 @@ void main() {
 
       expect(find.text('2 EL Öl, erwärmt'), findsOneWidget);
       expect(find.byTooltip('Im Vorrat'), findsOneWidget);
+      expect(find.byTooltip('Nicht im Vorrat'), findsOneWidget);
       expect(find.text('Wasser'), findsNothing);
       expect(find.text('Den Reis kochen.'), findsNothing);
       await tester.tap(find.text('Zubereitung'));
@@ -114,6 +183,7 @@ class _DetailApi extends RezeptgartenApi {
   _DetailApi() : super(client: HttpClient());
 
   final writes = <Json>[];
+  final placements = <Json>[];
   bool changedElsewhere = false;
 
   @override
@@ -121,9 +191,10 @@ class _DetailApi extends RezeptgartenApi {
     '/api/recipes/creation%3Ar1' => {
       'id': 'creation:r1',
       'name': 'Reisgericht',
-      'ingredients_json': '[{"description":"2 EL","name":"Öl","preparation":"erwärmt"},"Wasser"]',
+      'source_url': 'https://example.test/recipe',
+      'ingredients_json': '[{"description":"2 EL","name":"Öl","preparation":"erwärmt"},"Wasser","Mehl"]',
       'hidden_ingredient_positions': [1],
-      'ingredient_availability': {'0': true},
+      'ingredient_availability': {'0': true, '2': false},
       'instructions_json': '[{"title":"Reis","steps":["Den Reis kochen."]}]',
       'tips_json': '["Warm servieren.","Notiz: Interne Testnotiz"]',
       'collections': [
@@ -136,11 +207,25 @@ class _DetailApi extends RezeptgartenApi {
         {'id': 'local:l1', 'name': 'Schnell', 'kind': 'local'},
       ],
     },
+    '/api/calendar/week' => {
+      'days': [
+        {'date': '2026-11-16'},
+      ],
+      'shelf': [
+        if (placements.isNotEmpty) {'id': 'creation:r1'},
+      ],
+    },
     _ => throw StateError('Unexpected API path: $path'),
   };
 
   @override
   Future<dynamic> write(String method, String path, [Json? body]) async {
+    if (method == 'POST' && path == '/api/calendar/placement' && body != null) {
+      placements.add(body);
+      return {
+        'shelf_recipe': {'id': 'creation:r1'},
+      };
+    }
     if (method != 'PUT' || path != '/api/notes/creation%3Ar1' || body == null) {
       throw StateError('Unexpected API write: $method $path');
     }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -27,8 +28,6 @@ const _weekdays = [
   'Samstag',
   'Sonntag',
 ];
-final _moveRandom = Random.secure();
-
 String _dayString(DateTime value) => value.toIso8601String().substring(0, 10);
 
 class _WeekEntry {
@@ -460,10 +459,7 @@ class _WeekViewState extends State<WeekView> {
       );
       return;
     }
-    final moveId = List.generate(
-      16,
-      (_) => _moveRandom.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
+    final moveId = newCalendarMoveId();
     await _perform(() async {
       setState(() {
         _recipes[entry.source]?.removeWhere(
@@ -628,14 +624,13 @@ class _WeekViewState extends State<WeekView> {
     final enabled = entry.placeholder ? _ready : _canPlaceRecipe;
     final selected = _selected == entry.identity;
     final shelf = entry.source == 'shelf';
-    final target = shelf ? 'trash' : 'shelf';
-    final action = RecipeCornerAction(
-      tooltip: shelf
-          ? '${entry.name} entfernen'
-          : '${entry.name} in die Ablage',
-      onPressed: enabled ? () => _move(entry, target, monday) : null,
-      icon: shelf ? Icons.delete_outline : Icons.close,
-    );
+    final action = shelf
+        ? null
+        : RecipeCornerAction(
+            tooltip: '${entry.name} in die Ablage',
+            onPressed: enabled ? () => _move(entry, 'shelf', monday) : null,
+            icon: Icons.close,
+          );
     void open() {
       if (_selected != null) {
         setState(() => _selected = null);
@@ -644,35 +639,29 @@ class _WeekViewState extends State<WeekView> {
       }
     }
 
-    final recipe = shelf
-        ? CompactRecipeTile(
-            title: entry.name,
-            leading: entry.placeholder
-                ? Text(_placeholders[entry.type]?.$2 ?? '')
-                : null,
-            actionLabel: action.tooltip,
-            actionIcon: action.icon,
-            onAction: action.onPressed,
-            onTap: !entry.placeholder || selected ? open : null,
-          )
-        : entry.placeholder
+    final recipe = entry.placeholder
         ? Stack(
             alignment: AlignmentDirectional.topEnd,
             children: [
               Card(
+                shape: shelf ? const StadiumBorder() : null,
                 child: ListTile(
                   leading: Text(_placeholders[entry.type]?.$2 ?? ''),
-                  title: Text(entry.name),
-                  contentPadding: const EdgeInsetsDirectional.only(
+                  title: Text(
+                    entry.name,
+                    maxLines: shelf ? 2 : null,
+                    overflow: shelf ? TextOverflow.ellipsis : null,
+                  ),
+                  contentPadding: EdgeInsetsDirectional.only(
                     start: AppSpacing.section,
-                    end: 48,
+                    end: shelf ? AppSpacing.item : 48,
                   ),
                   onTap: selected
                       ? () => setState(() => _selected = null)
                       : null,
                 ),
               ),
-              action,
+              ?action,
             ],
           )
         : RecipeCard(
@@ -680,6 +669,7 @@ class _WeekViewState extends State<WeekView> {
             recipe: entry.data,
             cornerAction: action,
             onTap: open,
+            compact: shelf,
           );
     final colors = Theme.of(context).colorScheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -772,7 +762,22 @@ class _WeekViewState extends State<WeekView> {
         },
       ),
     );
-    return _draggable(entry, monday, enabled, gestures);
+    return _draggable(
+      entry,
+      monday,
+      enabled,
+      shelf && enabled
+          ? Semantics(
+              customSemanticsActions: {
+                CustomSemanticsAction(
+                  label: '${entry.name} aus der Ablage entfernen',
+                ): () =>
+                    _move(entry, 'trash', monday),
+              },
+              child: gestures,
+            )
+          : gestures,
+    );
   }
 
   Widget _swipeFeedback(String target, Offset distance) {
@@ -871,6 +876,9 @@ class _WeekViewState extends State<WeekView> {
             : isToday
             ? colors.onPrimaryContainer
             : colors.onSurface;
+        final shelfTileWidth = MediaQuery.textScalerOf(context).scale(1) > 1.25
+            ? 168.0
+            : 144.0;
         final content = [
           Text(
             title,
@@ -884,30 +892,24 @@ class _WeekViewState extends State<WeekView> {
               style: TextStyle(color: foreground),
             ),
           if (target == 'shelf' && entries.isNotEmpty)
-            LayoutBuilder(
-              builder: (_, constraints) {
-                const gap = AppSpacing.related;
-                final minimum = MediaQuery.textScalerOf(context).scale(1) > 1.25
-                    ? 172
-                    : 128;
-                final columns = ((constraints.maxWidth + gap) / (minimum + gap))
-                    .floor()
-                    .clamp(1, 4);
-                final width =
-                    (constraints.maxWidth - gap * (columns - 1)) / columns;
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: gap,
+            ClipRect(
+              clipper: const _ShelfClipper(),
+              child: SingleChildScrollView(
+                key: PageStorageKey('shelf-$monday'),
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Row(
+                  spacing: AppSpacing.tight,
                   children: [
                     for (final entry in entries)
                       SizedBox(
                         key: ValueKey(entry.identity),
-                        width: width,
+                        width: shelfTileWidth,
                         child: _tile(entry, monday),
                       ),
                   ],
-                );
-              },
+                ),
+              ),
             )
           else
             for (final entry in entries) _tile(entry, monday),
@@ -1062,7 +1064,8 @@ class _WeekViewState extends State<WeekView> {
             ),
           ],
         ),
-        if (_loading || _busy) const LinearProgressIndicator(),
+        if ((_loading && _week == null) || _busy)
+          const LinearProgressIndicator(),
         if (_error != null) ...[
           Text(_error!),
           TextButton(
@@ -1195,6 +1198,18 @@ class _WeekViewState extends State<WeekView> {
 }
 
 typedef _WeekDrag = ({_WeekEntry item, String monday});
+
+class _ShelfClipper extends CustomClipper<Rect> {
+  const _ShelfClipper();
+
+  // Keep horizontal overflow hidden while the selected pill moves vertically.
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTWH(0, -48, size.width, size.height + 96);
+
+  @override
+  bool shouldReclip(_ShelfClipper oldClipper) => false;
+}
 
 class _MouseWeekDrag extends Draggable<_WeekDrag> {
   const _MouseWeekDrag({

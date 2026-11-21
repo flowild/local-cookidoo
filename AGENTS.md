@@ -24,6 +24,8 @@ Lies den passenden Skill bei entsprechender Arbeit; kombiniere sie bei Bedarf:
 Die Android-Oberfläche verwendet Material 3 Expressive. Das gemeinsame Flutter-
 Theme setzt Rollenfarben, betonte Titel, abgerundete Komponenten und einheitliche
 Aktionsgrößen um. Die Hauptnavigation wechselt auf breiten Fenstern zur Seitenleiste.
+Android nutzt die Grundfarben der Web-App im Hell- und Dunkelmodus. Eine
+eigene Akzentfarbe passt Aktionsfarben an und behält die Grundflächen.
 Ansichtswechsel nutzen die Expressive-Feder und berücksichtigen reduzierte Bewegung.
 Die Wochenansicht gruppiert ihre Datumsschalter und hebt den heutigen Tag hervor.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
@@ -42,7 +44,9 @@ Wisch nach oben braucht 140 dp, nach unten 90 dp. Die Wochenablage zeigt kompakt
 Kacheln nebeneinander, sobald die Breite ausreicht. Das Wochen-Einkaufssymbol
 steht rechts neben den Datumsschaltern.
 Android-Rezeptlisten sind unter ihren Titeln aufklappbar und haben eine
-Titelsuche. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
+Titelsuche unter „Neue Liste“. Die Titel sind fett gesetzt und farblich vom
+zweispaltigen Raster mit Rezeptbildern abgesetzt. Lokale Listen haben ein
+Bearbeiten-Symbol. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
 Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
 Zusatzartikel erhalten ihren Warenbereich über denselben Serverabgleich wie
 Rezeptzutaten. Die Rezepte im Einkaufswagen erscheinen als kompakte Zeilen.
@@ -84,15 +88,24 @@ Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
 über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
+Kontrastreiche Punkte markieren den Zutatenstatus. „Zur Ablage hinzufügen“
+speichert das Rezept in der Ablage der aktuellen Berliner Kalenderwoche und
+steht direkt über „Heute kochen“. Die Aktionsschaltflächen richten Symbole
+und Beschriftungen gemeinsam links aus.
 Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
 Portionen, Gesamtzeit und Sortierung. Lokale Listen lassen sich anlegen, nach
 Bestätigung löschen und um noch nicht enthaltene Rezepte ergänzen.
+Rezeptkarten in Android-Listen erhalten einen Rahmen um Bild und Text. Die
+Auswahl „Rezepte hinzufügen“ zeigt dieselben Karten mit einem Plus oben rechts.
 Der Android-Vorrat verwendet den gemeinsamen Zutatenkatalog und die gespeicherte
 Kategorienreihenfolge. Kategorien und Vorratseinträge können wie im Web verwaltet
 werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 „Meine Woche“ auf Android verwendet die serverseitige Warteschlange und die
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
+Die Wochenablage zeigt kompakte Rezeptkarten mit dem Bild über dem Titel in
+einer seitlich scrollbaren Reihe. Ein Wisch nach unten entfernt den Eintrag.
+Der Debug-Modus zeigt unterscheidbare mitgelieferte Rezeptbilder.
 Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo.
 Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
 Heimnetz und beim Herunterziehen einer Ansicht. Die App zeigt laufenden Abgleich
@@ -311,3 +324,10 @@ App gelöscht werden.
 
 Auf dem Handy stehen sechs Hauptbereiche in einer unteren Navigationszeile; die
 Einstellungen sind über das Zahnrad in der Kopfzeile erreichbar.
+In Android wechselt horizontales Wischen im Inhaltsbereich zum benachbarten
+Hauptbereich. Flutter berücksichtigt beim Einrasten Zugstrecke und
+Wischgeschwindigkeit. Antippen eines Tabs nutzt dieselbe seitliche Animation.
+Bei reduzierter Bewegung wechselt die Ansicht direkt. Im Kalender von
+„Meine Woche“ blättert dieselbe Geste weiterhin zwischen den Tagen.
+Beim Aktualisieren bereits geladener Listen, Vorratskategorien und Wocheninhalte
+bleibt deren Position erhalten.

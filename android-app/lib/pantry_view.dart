@@ -31,6 +31,7 @@ class _PantryViewState extends State<PantryView> {
   String _query = '';
   String? _error;
   bool _loading = true;
+  bool _loaded = false;
   bool _writing = false;
   int _request = 0;
   int _expansionVersion = 0;
@@ -65,6 +66,7 @@ class _PantryViewState extends State<PantryView> {
       final result = await widget.api.get('/api/pantry') as Json;
       if (!mounted || request != _request) return;
       setState(() {
+        _loaded = true;
         _categories = objects(result['categories']);
         _items = objects(result['items']);
       });
@@ -240,12 +242,12 @@ class _PantryViewState extends State<PantryView> {
           ),
         ),
       ),
-      if (_loading || _writing) const LinearProgressIndicator(),
+      if ((_loading && !_loaded) || _writing) const LinearProgressIndicator(),
       if (_error != null) ...[
         Text(_error!),
         TextButton(onPressed: _load, child: const Text('Erneut laden')),
       ],
-      if (!_loading && _error == null && _categories.isEmpty)
+      if (_loaded && _error == null && _categories.isEmpty)
         const Text('Lege eine Kategorie an, um Zutaten einzutragen.'),
     ],
   );
@@ -267,9 +269,10 @@ class _PantryViewState extends State<PantryView> {
             widget.collapsed.add(id);
           }
         },
-        leading: _query.isEmpty && enabled
+        leading: _query.isEmpty
             ? ReorderableDragStartListener(
                 index: index,
+                enabled: enabled,
                 child: Semantics(
                   label: '$name verschieben',
                   child: const Icon(Icons.drag_handle),

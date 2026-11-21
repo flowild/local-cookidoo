@@ -205,12 +205,62 @@ Die signierte ARM64-APK für Testbuild **30** liegt unter
 `android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.4.0-build30.apk`.
 Paket-ID, Version, Architektur und Signatur wurden geprüft.
 
+Version `1.4.1` hebt aufklappbare Listenköpfe farblich ab und zeigt ihre
+Rezeptkarten mit Vorschaubild in zwei Spalten. „Neue Liste“ steht über der Suche.
+Das Bearbeiten-Symbol führt zur Verwaltung lokaler Listen.
+Die Android-Grundfarben folgen im Hell- und Dunkelmodus der Web-App.
+Alle 43 Flutter-Tests bestanden. Geprüft wurden unter anderem die Palette
+in beiden Modi und zwei Rezeptkarten pro Zeile bei 332 dp.
+Die signierte ARM64-APK für Testbuild **31** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.4.1-build31.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
+
+Version `1.5.0` umrandet Rezeptkarten in Listen. „Rezepte hinzufügen“ zeigt
+die Karten mit einem Plus in der oberen rechten Bildecke. Wischen im Hauptinhalt
+wechselt den Navigationsbereich und im Wochenkalender weiterhin den Tag.
+Rezeptdetails zeigen kräftigere Vorratspunkte und bieten die Ablageaktion
+für die aktuelle Berliner Kalenderwoche über „Heute kochen“ an.
+Die statische Analyse und alle 45 Flutter-Tests bestanden.
+Die signierte ARM64-APK für Testbuild **33** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.5.0-build33.apk`.
+Paket-ID, Version, Architektur und Signatur wurden geprüft.
+
+Version `1.5.1` führt beide Navigationsseiten beim Wischen mit. Der Widget-Test
+prüft ihre Positionen während des Ziehens, das Zurückgleiten nach kurzer Geste,
+den Wechsel beim Loslassen und die separate Tagesgeste in „Meine Woche“.
+Die Rezeptansicht zeigt linksbündige Aktionsschaltflächen mit Symbolen. In der
+Wochenablage stehen die Vorschaupillen in einer seitlich scrollbaren Reihe.
+Die statische Analyse und alle 46 Flutter-Tests bestanden.
+Die signierte ARM64-APK für Testbuild **34** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.5.1-build34.apk`.
+Paket-ID, Version, Architektur und Signatur wurden lokal geprüft.
+
+Version `1.5.2` hält die Position geladener Listen, Vorratskategorien und
+Wocheninhalte nach einem Wischwechsel auch bei verzögerter Serverantwort.
+Die Wochenablage zeigt kleine Karten mit dem Bild über dem Titel. Ein Wisch
+nach unten entfernt den Eintrag und lässt sich bei Rezepten rückgängig
+machen. Die drei Debug-Rezepte verwenden unterschiedliche mitgelieferte PNGs.
+Die statische Analyse und alle 48 Flutter-Tests bestanden.
+Die signierte ARM64-APK für Testbuild **35** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.5.2-build35.apk`.
+Paket-ID, Version, Architektur, Signatur und die mitgelieferten PNGs wurden
+lokal geprüft.
+
+Version `1.5.3` verwendet einen horizontalen Flutter-`PageView` für die
+Hauptnavigation. Wischen nutzt die Geschwindigkeits- und Einrastphysik von
+Flutter. Tabtasten verwenden denselben `PageController`. Der Widget-Test prüft
+auch die Wochentage und die Position während verzögerter Aktualisierung.
+Die statische Analyse und alle 48 Flutter-Tests bestanden.
+Die signierte ARM64-APK für Testbuild **36** liegt unter
+`android-app/build/app/outputs/flutter-apk/Rezeptgarten-Test-1.5.3-build36.apk`.
+Paket-ID, Version, Architektur und Signatur wurden lokal geprüft.
+
 ## Noch ausstehend
 
 1. Telegram-Anmeldung und Kopplung, Android-Dateiauswahl und den In-App-Installer
    mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
    ist in `FLUTTER-PORTIERUNG.md` beschrieben.
-2. Die lokale Version `1.4.0` und den Android-Testkanal auf LXC 103 bereitstellen
+2. Die lokale Version `1.5.3` und den Android-Testkanal auf LXC 103 bereitstellen
    und HTTPS-Download samt Manifest prüfen. Beim Prüflauf war der LXC vom
    aktuellen WLAN aus weder über HTTPS noch über SSH erreichbar.
 
