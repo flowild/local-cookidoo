@@ -16,12 +16,18 @@ class RecipeDetail extends StatefulWidget {
     required this.preview,
     required this.calendar,
     this.onSync,
+    this.onRecipeCardsChanged,
+    this.onWeekChanged,
+    this.onCartChanged,
   });
 
   final RezeptgartenApi api;
   final Json preview;
   final bool calendar;
   final Future<void> Function()? onSync;
+  final VoidCallback? onRecipeCardsChanged;
+  final VoidCallback? onWeekChanged;
+  final VoidCallback? onCartChanged;
 
   @override
   State<RecipeDetail> createState() => _RecipeDetailState();
@@ -193,6 +199,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         if (_note.text == draft) _note.text = _original!;
         _noteStatus = 'In Cookidoo gespeichert.';
       });
+      widget.onRecipeCardsChanged?.call();
       return true;
     } on Exception catch (error) {
       if (mounted) {
@@ -298,7 +305,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
       'recipe': <String, dynamic>{},
       'move_id': newCalendarMoveId(),
     });
-    if (mounted) _message('Zur Ablage der aktuellen Woche hinzugefügt.');
+    if (mounted) {
+      widget.onWeekChanged?.call();
+      _message('Zur Ablage der aktuellen Woche hinzugefügt.');
+    }
   }
 
   static List<dynamic> _list(Object? value) {
@@ -470,6 +480,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
   Widget _content(Json recipe) {
     final lists = objects(recipe['collections']);
     final memberships = lists.map((list) => list['id']).toSet();
+    final difficulty = recipeDifficulty(recipe['difficulty']);
     final versions = objects(recipe['versions']);
     final showVersions =
         versions.length > 1 && versions.any((version) => version['id'] == _id);
@@ -508,12 +519,12 @@ class _RecipeDetailState extends State<RecipeDetail> {
             ],
           ),
         ),
-      if ([
-        'total_seconds',
-        'active_seconds',
-        'servings',
-        'difficulty',
-      ].any((field) => recipe[field] != null))
+      if (difficulty != null ||
+          [
+            'total_seconds',
+            'active_seconds',
+            'servings',
+          ].any((field) => recipe[field] != null))
         Wrap(
           spacing: AppSpacing.related,
           runSpacing: AppSpacing.related,
@@ -524,15 +535,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
               Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
             if (recipe['servings'] != null)
               Chip(label: Text('${recipe['servings']} Portionen')),
-            if (recipe['difficulty'] != null)
-              Chip(
-                label: Text(switch (text(recipe['difficulty']).toLowerCase()) {
-                  'easy' => 'Einfach',
-                  'medium' => 'Mittel',
-                  'advanced' || 'hard' => 'Anspruchsvoll',
-                  _ => text(recipe['difficulty']),
-                }),
-              ),
+            if (difficulty != null) Chip(label: Text(difficulty)),
           ],
         ),
       _noteEditor(),
@@ -586,6 +589,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
                           '/api/local-collections/$listId/recipes/$recipeId',
                           {'present': present},
                         );
+                        if (mounted) widget.onRecipeCardsChanged?.call();
                         final refreshed =
                             await widget.api.get(_recipePath) as Json;
                         if (mounted) setState(() => _recipe = refreshed);
@@ -612,6 +616,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
                       '$_recipePath/plan-today${_calendarRecipe ? '?calendar=true' : ''}',
                     ) as Json;
                     if (mounted) {
+                      widget.onWeekChanged?.call();
                       _message(
                         result['verified'] == true ? 'Für heute eingeplant.' : 'Die Planung konnte nicht bestätigt werden. Bitte prüfe den Kalender in Cookidoo.',
                       );
@@ -631,6 +636,9 @@ class _RecipeDetailState extends State<RecipeDetail> {
                       {'recipe_id': _id, 'calendar': _calendarRecipe},
                     ) as Json;
                     if (mounted) {
+                      if (result['added'] != false) {
+                        widget.onCartChanged?.call();
+                      }
                       _message(
                         result['added'] == false
                             ? 'Rezept bereits im Einkaufswagen.'

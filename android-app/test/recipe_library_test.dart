@@ -154,6 +154,17 @@ void main() {
       tester.getTopLeft(find.byType(RecipeCard).at(1)).dy,
     );
 
+    final sort = tester.getRect(
+      find.widgetWithText(OutlinedButton, 'Name · A bis Z'),
+    );
+    final filter = tester.getRect(find.widgetWithText(FilledButton, 'Filtern'));
+    final search = tester.getRect(find.byType(TextField));
+    expect(sort.width, filter.width);
+    expect(sort.top, filter.top);
+    expect(sort.height, filter.height);
+    expect(sort.left, search.left);
+    expect(filter.right, search.right);
+
     final result = Completer<void>();
     api.searchPending = result.future;
     await tester.enterText(find.byType(TextField), 'Reis');
@@ -170,9 +181,13 @@ void main() {
     expect(api.lastRecipeQuery['q'], ['']);
   });
 
-  testWidgets('creates a local list, adds a candidate and confirms removal', (
+  testWidgets('adds and removes recipes from the same list editor', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final api = _LibraryApi();
     var syncs = 0;
     await tester.pumpWidget(
@@ -210,19 +225,28 @@ void main() {
       FontWeight.w700,
     );
     expect(find.byType(RecipeCard), findsOneWidget);
-    expect(tester.widget<RecipeCard>(find.byType(RecipeCard)).outlined, isTrue);
+    final preview = tester.widget<Card>(
+      find.descendant(of: find.byType(RecipeCard), matching: find.byType(Card)),
+    );
+    expect((preview.shape! as OutlinedBorder).side.style, BorderStyle.solid);
     expect(find.text('Liste öffnen'), findsNothing);
     await tester.tap(find.byTooltip('Liste verwalten'));
     await tester.pumpAndSettle();
-    expect(find.text('Filtern'), findsNothing);
-    await tester.tap(find.text('Rezepte hinzufügen'));
+    expect(find.text('Alle Rezepte'), findsOneWidget);
+    expect(find.text('Gemüsesuppe'), findsOneWidget);
+    expect(find.byTooltip('Reis zur Liste hinzufügen'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Reis');
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
+    expect(find.text('Gemüsesuppe'), findsNothing);
     await tester
         .widget<RefreshIndicator>(find.byType(RefreshIndicator))
         .onRefresh();
     await tester.pumpAndSettle();
     expect(syncs, 1);
     expect(api.lastRecipeQuery['exclude_collection'], ['local:meals']);
+    expect(api.lastRecipeQuery['q'], ['Reis']);
     final addRice = find.byTooltip('Reis zur Liste hinzufügen');
     final riceCard = find.ancestor(
       of: addRice,
@@ -230,7 +254,10 @@ void main() {
     );
     expect(riceCard, findsOneWidget);
     final card = tester.widget<RecipeCard>(riceCard);
-    expect(card.outlined, isTrue);
+    final candidate = tester.widget<Card>(
+      find.descendant(of: riceCard, matching: find.byType(Card)),
+    );
+    expect((candidate.shape! as OutlinedBorder).side.style, BorderStyle.solid);
     expect(card.cornerAction?.icon, Icons.add);
     final bounds = tester.getRect(riceCard);
     final addCenter = tester.getCenter(addRice);
@@ -240,12 +267,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.present, isTrue);
     expect(find.byTooltip('Reis zur Liste hinzufügen'), findsNothing);
-    await tester.tap(find.byType(BackButton));
+    expect(find.text('In dieser Liste'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(RecipeCard), matching: find.text('Reis')),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'Reis',
+    );
+    await tester.tap(find.byTooltip('Suche leeren'));
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
+    expect(find.text('Gemüsesuppe'), findsOneWidget);
 
-    await tester.tap(find.text('Liste löschen'));
+    final removeRice = find.byTooltip('Reis aus der Liste entfernen');
+    expect(removeRice, findsNothing);
+    await tester.tap(find.text('Rezepte entfernen'));
+    await tester.pump();
+    expect(removeRice, findsOneWidget);
+    final rice = find.widgetWithText(RecipeCard, 'Reis');
+    final initialPosition = tester.getTopLeft(rice);
+    await tester.pump(const Duration(milliseconds: 65));
+    expect(tester.getTopLeft(rice), isNot(initialPosition));
+    await tester.tap(removeRice);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(api.present, isFalse);
+    expect(removeRice, findsNothing);
+    expect(addRice, findsOneWidget);
+
+    await tester.tap(find.text('Fertig'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Gemüsesuppe aus der Liste entfernen'), findsNothing);
+    final deleteButton = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byTooltip('Liste löschen'),
+    );
+    expect(deleteButton, findsOneWidget);
+    expect(find.text('Liste löschen'), findsNothing);
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(api.name, 'Abendessen');
+    await tester.tap(find.text('Abbrechen'));
     await tester.pumpAndSettle();
     expect(api.name, 'Abendessen');
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
@@ -306,7 +375,10 @@ class _LibraryApi extends RezeptgartenApi {
       case '/api/recipes':
         lastRecipeQuery = uri.queryParametersAll;
         await searchPending;
-        final candidate = lastRecipeQuery.containsKey('exclude_collection');
+        final candidate = uri.queryParameters.containsKey('exclude_collection');
+        final editor =
+            candidate || uri.queryParameters.containsKey('collection');
+        final query = uri.queryParameters['q']?.toLowerCase() ?? '';
         final items = [
           if (candidate != present)
             {
@@ -315,11 +387,12 @@ class _LibraryApi extends RezeptgartenApi {
               'matches': true,
               'difficulty': 'advanced',
             },
-          if (!candidate) {'id': 'r2', 'name': 'Gemüsesuppe', 'matches': false},
+          if (!candidate && (!editor || 'gemüsesuppe'.contains(query)))
+            {'id': 'r2', 'name': 'Gemüsesuppe', 'matches': false},
         ];
         return {
           'items': items,
-          'total': candidate ? items.length : 2,
+          'total': editor ? items.length : 2,
           'match_total': 1,
         };
       case '/api/collections':

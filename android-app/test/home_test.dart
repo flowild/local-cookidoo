@@ -8,6 +8,7 @@ import 'package:rezeptgarten/appearance.dart';
 import 'package:rezeptgarten/debug_api.dart';
 import 'package:rezeptgarten/expressive_theme.dart';
 import 'package:rezeptgarten/main.dart';
+import 'package:rezeptgarten/recipe_card.dart';
 
 void main() {
   test('Android uses the web surface and accent colors in both modes', () {
@@ -68,6 +69,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'overview and library share two recipe columns on narrow phones',
+    (tester) async {
+      tester.view.physicalSize = const Size(332, 875);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Start'));
+      await tester.pumpAndSettle();
+      final previews = find.descendant(
+        of: find.byType(RecipePreviewGrid),
+        matching: find.byType(RecipeCard),
+      );
+      final first = tester.getRect(previews.at(0));
+      final second = tester.getRect(previews.at(1));
+      expect(first.width, second.width);
+      expect(first.top, second.top);
+
+      await tester.tap(find.text('Rezepte'));
+      await tester.pumpAndSettle();
+      final cards = find.byType(RecipeCard);
+      final libraryFirst = tester.getRect(cards.at(0));
+      final librarySecond = tester.getRect(cards.at(1));
+      expect(libraryFirst.width, first.width);
+      expect(librarySecond.top, libraryFirst.top);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('swipes through main sections and keeps the week day swipe', (
     tester,
   ) async {
@@ -116,7 +149,13 @@ void main() {
     expect(tester.getCenter(today).dx, closeTo(todayX + 250, 1));
     expect(tester.getRect(search).left, lessThan(body.left));
     expect(tester.getRect(search).right, greaterThan(body.left));
-    expect(selectedSection(), 3);
+    expect(selectedSection(), 2);
+    expect(
+      tester
+          .widget<NavigationBar>(find.byType(NavigationBar))
+          .animationDuration,
+      Duration.zero,
+    );
     await drag.up();
     await tester.pumpAndSettle();
     expect(selectedSection(), 2);
@@ -174,14 +213,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('keeps loaded sections in place while a swipe refreshes them', (
+  testWidgets('swipes to visited sections without reloading them', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final api = _DelayedSectionApi();
+    final api = _SectionReadsApi();
     await tester.pumpWidget(RezeptgartenApp(api: api));
     await tester.pumpAndSettle();
 
@@ -195,6 +234,14 @@ void main() {
         'Ablage für diese Woche',
       ),
       ('Vorrat', 'Einkauf', -260.0, '/api/pantry', 'Trockenwaren'),
+      ('Einkauf', 'Vorrat', 260.0, '/api/cart', 'Mein Einkaufswagen'),
+      (
+        'Übersicht',
+        'Listen',
+        260.0,
+        '/api/featured-recipe',
+        'Dein Rezeptgarten',
+      ),
     ]) {
       await tester.tap(find.text(target));
       await tester.pumpAndSettle();
@@ -203,25 +250,15 @@ void main() {
       await tester.tap(find.text(from));
       await tester.pumpAndSettle();
 
-      final response = Completer<void>();
-      api.delayedPath = path;
-      api.response = response;
+      final reads = api.reads[path];
       final body = tester.getRect(find.byKey(const ValueKey('main-content')));
       await tester.dragFrom(
         Offset(body.center.dx, body.top + 32),
         Offset(dx, 0),
       );
       await tester.pumpAndSettle();
-      expect(api.delayedReads, greaterThan(0));
+      expect(api.reads[path], reads);
       expect(tester.getTopLeft(item), originalPosition);
-
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(tester.getTopLeft(item), originalPosition);
-      response.complete();
-      await tester.pumpAndSettle();
-      expect(tester.getTopLeft(item), originalPosition);
-      api.delayedReads = 0;
-      api.delayedPath = null;
     }
   });
 
@@ -470,17 +507,12 @@ class _SyncTestApi extends _TestApi {
   }
 }
 
-class _DelayedSectionApi extends DebugRezeptgartenApi {
-  String? delayedPath;
-  Completer<void>? response;
-  int delayedReads = 0;
+class _SectionReadsApi extends DebugRezeptgartenApi {
+  final reads = <String, int>{};
 
   @override
-  Future<dynamic> get(String path, {Duration? timeout}) async {
-    if (path == delayedPath) {
-      delayedReads++;
-      await response?.future;
-    }
+  Future<dynamic> get(String path, {Duration? timeout}) {
+    reads.update(Uri.parse(path).path, (count) => count + 1, ifAbsent: () => 1);
     return super.get(path, timeout: timeout);
   }
 }

@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'calendar_badge.dart';
+import 'expandable_list_card.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
 import 'telegram_service.dart';
@@ -111,6 +113,9 @@ class _TelegramViewState extends State<TelegramView> {
 
   Widget _week(Json data) {
     final days = objects(data['days']);
+    final today = text(data['today']);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     Widget? entries(Object? raw, {bool placeholders = false}) {
       final items = raw is List ? raw.whereType<String>() : const <String>[];
       if (items.isEmpty) return null;
@@ -128,26 +133,38 @@ class _TelegramViewState extends State<TelegramView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.item,
       children: [
+        Text('Meine Woche', style: theme.textTheme.headlineMedium),
         Row(
           spacing: AppSpacing.related,
           children: [
             IconButton(
+              tooltip: 'Vorherige Woche',
               onPressed: () {
                 monday = monday.subtract(const Duration(days: 7));
                 _refresh();
               },
               icon: const Icon(Icons.chevron_left),
             ),
-            Expanded(child: Text(_date(monday), textAlign: TextAlign.center)),
-            TextButton(
-              onPressed: () {
-                monday = _monday(DateTime.now());
-                initialWeek = true;
-                _refresh();
-              },
-              child: const Text('Diese Woche'),
+            Expanded(
+              child: Column(
+                children: [
+                  CalendarWeekBadge(date: _date(monday), today: today),
+                  Text(_date(monday), textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+            Flexible(
+              child: TextButton(
+                onPressed: () {
+                  monday = _monday(DateTime.now());
+                  initialWeek = true;
+                  _refresh();
+                },
+                child: const Text('Diese Woche', textAlign: TextAlign.center),
+              ),
             ),
             IconButton(
+              tooltip: 'Nächste Woche',
               onPressed: () {
                 monday = monday.add(const Duration(days: 7));
                 _refresh();
@@ -167,15 +184,22 @@ class _TelegramViewState extends State<TelegramView> {
           ),
         for (final (index, day) in days.indexed)
           Card(
+            color: day['date'] == today ? colors.primaryContainer : null,
             child: Padding(
               padding: AppSpacing.compactPanel,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: AppSpacing.related,
                 children: [
+                  if (day['date'] == today) const TodayBadge(),
                   Text(
                     '${index < _days.length ? _days[index] : ''} · ${text(day['date'])}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: day['date'] == today
+                          ? colors.onPrimaryContainer
+                          : null,
+                      fontWeight: day['date'] == today ? FontWeight.w800 : null,
+                    ),
                   ),
                   if (entries(day['recipes']) case final Widget recipes)
                     recipes,
@@ -235,13 +259,19 @@ class _TelegramViewState extends State<TelegramView> {
         Row(
           spacing: AppSpacing.related,
           children: [
-            const Expanded(child: Text('Mein Einkaufswagen')),
-            TextButton(
+            Expanded(
+              child: Text(
+                'Mein Einkaufswagen',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Häkchen zurücksetzen',
               onPressed: () {
                 setState(() => checks = {});
                 _saveChecks();
               },
-              child: const Text('Häkchen zurücksetzen'),
+              icon: const Icon(Icons.restart_alt),
             ),
           ],
         ),
@@ -250,8 +280,8 @@ class _TelegramViewState extends State<TelegramView> {
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.section),
               child: Text(
-                checked(row) ? 'Bereits abgehakt' : 'Noch benötigt',
-                style: Theme.of(context).textTheme.titleMedium,
+                checked(row) ? 'Abgehakt' : 'Zutaten',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
           if (index == 0 ||
@@ -291,14 +321,17 @@ class _TelegramViewState extends State<TelegramView> {
           const Text('Der Einkaufswagen enthält keine benötigten Zutaten.'),
         ],
         const SizedBox(height: AppSpacing.section),
-        ExpansionTile(
-          title: Text('Rezepte (${recipes.length})'),
-          children: [
-            if (recipes.isEmpty)
-              const ListTile(title: Text('Keine Rezepte im Einkaufswagen.')),
-            for (final recipe in recipes)
-              ListTile(title: Text(text(recipe['name'], 'Rezept'))),
-          ],
+        ExpandableListCard(
+          title: 'Rezepte (${recipes.length})',
+          leading: const Icon(Icons.menu_book_outlined),
+          body: Column(
+            children: [
+              if (recipes.isEmpty)
+                const ListTile(title: Text('Keine Rezepte im Einkaufswagen.')),
+              for (final recipe in recipes)
+                ListTile(title: Text(text(recipe['name'], 'Rezept'))),
+            ],
+          ),
         ),
       ],
     );

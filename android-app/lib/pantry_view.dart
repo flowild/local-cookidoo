@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'api.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
+import 'expandable_list_card.dart';
 
 class PantryView extends StatefulWidget {
   const PantryView({
@@ -13,12 +14,14 @@ class PantryView extends StatefulWidget {
     required this.collapsed,
     this.refreshCount = 0,
     this.onSync,
+    this.onChanged,
   });
 
   final RezeptgartenApi api;
   final Set<int> collapsed;
   final int refreshCount;
   final Future<void> Function()? onSync;
+  final VoidCallback? onChanged;
 
   @override
   State<PantryView> createState() => _PantryViewState();
@@ -84,6 +87,7 @@ class _PantryViewState extends State<PantryView> {
     setState(() => _writing = true);
     try {
       await widget.api.write(method, path, body);
+      if (mounted) widget.onChanged?.call();
     } on Exception catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -113,7 +117,10 @@ class _PantryViewState extends State<PantryView> {
         item: item,
       ),
     );
-    if (saved == true && mounted) await _load();
+    if (saved == true && mounted) {
+      widget.onChanged?.call();
+      await _load();
+    }
   }
 
   Future<void> _removeCategory(Json category) async {
@@ -255,11 +262,12 @@ class _PantryViewState extends State<PantryView> {
   Widget _category(Json category, List<Json> items, int index, bool enabled) {
     final id = category['id'] as int;
     final name = text(category['name']);
-    return Card(
+    return Padding(
       key: ValueKey(id),
-      margin: const EdgeInsets.only(bottom: AppSpacing.item),
-      child: ExpansionTile(
-        key: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
+      padding: const EdgeInsets.only(bottom: AppSpacing.item),
+      child: ExpandableListCard(
+        title: name,
+        expansionKey: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
         initiallyExpanded: _query.isNotEmpty || !widget.collapsed.contains(id),
         onExpansionChanged: (expanded) {
           if (_query.isNotEmpty) return;
@@ -279,51 +287,46 @@ class _PantryViewState extends State<PantryView> {
                 ),
               )
             : null,
-        title: Row(
-          children: [
-            Expanded(child: Text(name)),
-            PopupMenuButton<String>(
-              enabled: enabled,
-              tooltip: 'Aktionen für $name',
-              onSelected: (value) {
-                if (value == 'add') {
-                  unawaited(_edit(categoryId: id));
-                } else {
-                  unawaited(_removeCategory(category));
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'add', child: Text('Zutat hinzufügen')),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Kategorie löschen'),
-                ),
-              ],
-            ),
+        action: PopupMenuButton<String>(
+          enabled: enabled,
+          tooltip: 'Aktionen für $name',
+          onSelected: (value) {
+            if (value == 'add') {
+              unawaited(_edit(categoryId: id));
+            } else {
+              unawaited(_removeCategory(category));
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'add', child: Text('Zutat hinzufügen')),
+            PopupMenuItem(value: 'delete', child: Text('Kategorie löschen')),
           ],
         ),
         subtitle: Text('${items.length} Zutaten'),
-        children: [
-          if (items.isEmpty)
-            const ListTile(title: Text('Noch keine Zutaten eingetragen.')),
-          for (final item in items)
-            ListTile(
-              dense: true,
-              leading: IngredientIcon(text(item['name']), category: name),
-              title: Text(text(item['name'])),
-              subtitle: text(item['quantity']).isNotEmpty
-                  ? Text(text(item['quantity']))
-                  : null,
-              onTap: enabled ? () => _edit(item: item) : null,
-              trailing: IconButton(
-                tooltip: '${item['name']} entfernen',
-                onPressed: enabled
-                    ? () => _change('DELETE', '/api/pantry/items/${item['id']}')
+        body: Column(
+          children: [
+            if (items.isEmpty)
+              const ListTile(title: Text('Noch keine Zutaten eingetragen.')),
+            for (final item in items)
+              ListTile(
+                dense: true,
+                leading: IngredientIcon(text(item['name']), category: name),
+                title: Text(text(item['name'])),
+                subtitle: text(item['quantity']).isNotEmpty
+                    ? Text(text(item['quantity']))
                     : null,
-                icon: const Icon(Icons.close),
+                onTap: enabled ? () => _edit(item: item) : null,
+                trailing: IconButton(
+                  tooltip: '${item['name']} entfernen',
+                  onPressed: enabled
+                      ? () =>
+                            _change('DELETE', '/api/pantry/items/${item['id']}')
+                      : null,
+                  icon: const Icon(Icons.close),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

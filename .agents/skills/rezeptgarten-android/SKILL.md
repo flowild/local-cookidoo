@@ -26,6 +26,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   die geplante Aktion vor dem Loslassen anzeigen. Wochenkacheln nach 250 ms
   markieren und aufwärts ab 140 dp, abwärts ab 90 dp ausführen.
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
+  Die Wochenansichten zeigen die ISO-Kalenderwoche an der Navigation. Die
+  aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit
@@ -49,12 +51,20 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Hintergrund unterscheiden sie von den zweispaltigen Rezeptkarten. Lokale
   Listen werden über das Bearbeiten-Symbol verwaltet. Sortierung und Filter sind in
   der globalen Rezeptansicht zusammen mit der Suche erreichbar.
-- Rahmen umfassen Bild, Titel und Schwierigkeit der Karten in Rezeptlisten.
-  „Rezepte hinzufügen“ verwendet dieselben Karten mit einem Plus in der oberen
-  rechten Bildecke. Antippen der restlichen Karte öffnet die Rezeptdetails.
+- Rahmen umfassen Bild, Titel und Schwierigkeit aller Rezeptvorschauen.
+  Übersicht, Bibliothek und Listen teilen sich das adaptive Raster. Rezeptlisten
+  und Vorratskategorien zeigen dieselben getönten aufklappbaren Kopfzeilen.
+  Die Listenbearbeitung zeigt vorhandene und hinzufügbare Rezepte unter
+  „Alle Rezepte“ mit einer gemeinsamen Suche. Ein Plus in der oberen rechten
+  Bildecke fügt Rezepte hinzu. „Rezepte entfernen“ aktiviert das X an
+  vorhandenen Karten. Sie wackeln außer bei reduzierter Bewegung. „Fertig“
+  beendet den Modus. Außerhalb davon öffnet die Karte die Rezeptdetails.
 - Horizontales Wischen im Hauptinhalt wechselt zum benachbarten Eintrag der
   Navigation. Der horizontale `PageView` rastet mit Flutters Seitenphysik ein.
-  Tabtasten verwenden denselben `PageController`. Bei reduzierter Bewegung
+  Die Navigationsmarkierung wechselt beim Überqueren der Seitenmitte.
+  Geladene Tabs bleiben beim Wechsel bestehen und laden bei Datenänderungen
+  oder auf Anforderung erneut. Tabtasten verwenden denselben `PageController`.
+  Bei reduzierter Bewegung
   wechselt die Ansicht direkt. Der
   horizontale Tageswechsel und das seitliche Scrollen der Wochenablage in
   „Meine Woche“ haben in ihren Bereichen Vorrang. Die Ablage zeigt eine Reihe

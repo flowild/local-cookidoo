@@ -26,8 +26,9 @@ Theme setzt Rollenfarben, betonte Titel, abgerundete Komponenten und einheitlich
 Aktionsgrößen um. Die Hauptnavigation wechselt auf breiten Fenstern zur Seitenleiste.
 Android nutzt die Grundfarben der Web-App im Hell- und Dunkelmodus. Eine
 eigene Akzentfarbe passt Aktionsfarben an und behält die Grundflächen.
-Ansichtswechsel nutzen die Expressive-Feder und berücksichtigen reduzierte Bewegung.
-Die Wochenansicht gruppiert ihre Datumsschalter und hebt den heutigen Tag hervor.
+Ansichtswechsel folgen beim Wischen dem Finger und berücksichtigen reduzierte Bewegung.
+Die Android-Wochenansicht hebt „Heute“ im Tageskopf hervor. Neben der Navigation
+steht die ISO-Kalenderwoche. Die laufende Berliner Woche ist farblich markiert.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im
@@ -56,6 +57,8 @@ ihren Zustand. Kontowechsel und Wechsel vom Heimnetz setzen die Ansichten und
 den Android-Bildcache zurück. Erfolgreiche Bildantworten mit Cachefreigabe
 werden im Arbeitsspeicher wiederverwendet. Andere API-Antworten verwenden
 keinen HTTP-Cache.
+Die Übersichtskarte „Deine Sammlung“ bietet Direktzugriffe auf Rezeptlisten,
+alle Rezepte, die Woche und den Einkaufswagen.
 Auf schmalen Android-Displays heißt der Übersichts-Tab „Start“. Wenn für die
 Schriftgröße zu wenig Platz ist, zeigt die Navigation die sechs Symbole mit
 zugänglichen Beschriftungen. Die Rezeptbibliothek zeigt zwei Karten je Reihe,
@@ -93,10 +96,20 @@ speichert das Rezept in der Ablage der aktuellen Berliner Kalenderwoche und
 steht direkt über „Heute kochen“. Die Aktionsschaltflächen richten Symbole
 und Beschriftungen gemeinsam links aus.
 Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
-Portionen, Gesamtzeit und Sortierung. Lokale Listen lassen sich anlegen, nach
+Portionen, Gesamtzeit und Sortierung. Sortieren und Filtern teilen sich die
+Reihe unter der Suche gleich breit. Lokale Listen lassen sich anlegen, nach
 Bestätigung löschen und um noch nicht enthaltene Rezepte ergänzen.
-Rezeptkarten in Android-Listen erhalten einen Rahmen um Bild und Text. Die
-Auswahl „Rezepte hinzufügen“ zeigt dieselben Karten mit einem Plus oben rechts.
+Android-Rezeptvorschauen verwenden in Übersicht, Bibliothek, Listen und Woche
+denselben Kartenrahmen und dieselben Bezeichnungen für Schwierigkeitsgrade.
+Das Raster in Übersicht, Bibliothek und Listen richtet sich nach der Breite
+und Schriftgröße. Rezeptlisten und Vorratskategorien verwenden dieselbe
+getönte Kopfzeile für aufklappbare Gruppen.
+Die Listenbearbeitung zeigt unter „Alle Rezepte“ vorhandene und hinzufügbare
+Rezepte mit einer gemeinsamen Suche. Hinzufügbare Karten haben ein Plus oben rechts.
+„Rezepte entfernen“ aktiviert das X an zugeordneten Karten. Die Karten wackeln
+bei aktiver Animation. „Fertig“ beendet den Modus.
+Das Papierkorb-Symbol oben rechts in der Titelleiste öffnet die Bestätigung
+zum Löschen der Liste.
 Der Android-Vorrat verwendet den gemeinsamen Zutatenkatalog und die gespeicherte
 Kategorienreihenfolge. Kategorien und Vorratseinträge können wie im Web verwaltet
 werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
@@ -326,7 +339,10 @@ Auf dem Handy stehen sechs Hauptbereiche in einer unteren Navigationszeile; die
 Einstellungen sind über das Zahnrad in der Kopfzeile erreichbar.
 In Android wechselt horizontales Wischen im Inhaltsbereich zum benachbarten
 Hauptbereich. Flutter berücksichtigt beim Einrasten Zugstrecke und
-Wischgeschwindigkeit. Antippen eines Tabs nutzt dieselbe seitliche Animation.
+Wischgeschwindigkeit. Beim Überqueren der Bildschirmmitte wechselt die
+Markierung unten sofort. Der Tabwechsel verwendet bereits geladene Ansichten
+weiter. Änderungen an den Daten und angeforderte Aktualisierungen lösen
+gezielte neue Abrufe aus. Antippen eines Tabs nutzt denselben Seitencontroller.
 Bei reduzierter Bewegung wechselt die Ansicht direkt. Im Kalender von
 „Meine Woche“ blättert dieselbe Geste weiterhin zwischen den Tagen.
 Beim Aktualisieren bereits geladener Listen, Vorratskategorien und Wocheninhalte

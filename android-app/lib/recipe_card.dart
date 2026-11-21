@@ -6,6 +6,69 @@ import 'package:material_ui/material_ui.dart';
 import 'api.dart';
 import 'spacing.dart';
 
+String? recipeDifficulty(Object? value) {
+  final label = text(value).trim();
+  return switch (label.toLowerCase().split('.').last) {
+    'easy' => 'Einfach',
+    'medium' => 'Mittel',
+    'advanced' || 'hard' => 'Anspruchsvoll',
+    _ when label.isNotEmpty => label,
+    _ => null,
+  };
+}
+
+({int columns, double width}) recipeGridLayout(
+  BuildContext context,
+  double width,
+) {
+  const gap = AppSpacing.item;
+  final compact =
+      MediaQuery.sizeOf(context).width < 600 &&
+      MediaQuery.textScalerOf(context).scale(1) <= 1.25;
+  final minimum = compact ? 132 : 182;
+  final columns = ((width + gap) / (minimum + gap)).floor().clamp(
+    1,
+    compact ? 2 : 5,
+  );
+  return (columns: columns, width: (width - (columns - 1) * gap) / columns);
+}
+
+class RecipePreviewGrid extends StatelessWidget {
+  const RecipePreviewGrid({
+    super.key,
+    required this.api,
+    required this.recipes,
+    required this.onOpen,
+  });
+
+  final RezeptgartenApi api;
+  final List<Json> recipes;
+  final ValueChanged<Json> onOpen;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, bounds) {
+      final layout = recipeGridLayout(context, bounds.maxWidth);
+      return Wrap(
+        spacing: AppSpacing.item,
+        runSpacing: AppSpacing.item,
+        children: [
+          for (final recipe in recipes)
+            SizedBox(
+              key: ValueKey(recipe['id']),
+              width: layout.width,
+              child: RecipeCard(
+                api: api,
+                recipe: recipe,
+                onTap: () => onOpen(recipe),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
 class RecipeCard extends StatefulWidget {
   const RecipeCard({
     super.key,
@@ -14,7 +77,6 @@ class RecipeCard extends StatefulWidget {
     this.onTap,
     this.cornerAction,
     this.detail = false,
-    this.outlined = false,
     this.compact = false,
   });
 
@@ -23,7 +85,6 @@ class RecipeCard extends StatefulWidget {
   final VoidCallback? onTap;
   final RecipeCornerAction? cornerAction;
   final bool detail;
-  final bool outlined;
   final bool compact;
 
   @override
@@ -197,6 +258,7 @@ class _RecipeCardState extends State<RecipeCard> {
     final titleStyle = widget.compact
         ? theme.textTheme.labelLarge!
         : theme.textTheme.titleMedium!;
+    final difficulty = recipeDifficulty(recipe['difficulty']);
     final difficultyStyle = theme.textTheme.bodySmall!.copyWith(
       color: colors.onSurfaceVariant,
     );
@@ -210,7 +272,7 @@ class _RecipeCardState extends State<RecipeCard> {
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
       color: colors.surfaceContainerHigh,
-      shape: widget.outlined
+      shape: !widget.detail
           ? (cardShape is OutlinedBorder
                     ? cardShape
                     : const RoundedRectangleBorder(
@@ -264,18 +326,10 @@ class _RecipeCardState extends State<RecipeCard> {
                     if (!widget.compact)
                       SizedBox(
                         height: _lineHeight(context, difficultyStyle),
-                        child: recipe['difficulty'] == null
+                        child: difficulty == null
                             ? null
                             : Text(
-                                switch (text(recipe['difficulty'])
-                                    .toLowerCase()
-                                    .split('.')
-                                    .last) {
-                                  'easy' => 'Einfach',
-                                  'medium' => 'Mittel',
-                                  'advanced' || 'hard' => 'Anspruchsvoll',
-                                  _ => text(recipe['difficulty']),
-                                },
+                                difficulty,
                                 style: difficultyStyle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

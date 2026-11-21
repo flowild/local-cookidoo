@@ -80,12 +80,11 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   Timer? syncPoll;
   int viewRefresh = 0;
   static const _retainedAreas = {1, 2, 3, 5};
-  final _visitedAreas = {3};
+  final _dirtyAreas = <int>{};
   final _areaRefreshes = List.filled(areas.length, 0);
   int _session = 0;
   var _pagerKey = GlobalKey<_SectionPagerState>();
   late bool _wasLocal;
-  bool _recipesNeedRefresh = false;
   final pantryCollapsed = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
@@ -141,10 +140,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _session++;
     _pagerKey = GlobalKey<_SectionPagerState>();
     _areaData.clear();
-    _visitedAreas
-      ..clear()
-      ..add(area);
-    _recipesNeedRefresh = false;
+    _dirtyAreas.clear();
     pantryCollapsed.clear();
     cartItem.clear();
     api.clearImageCache();
@@ -337,9 +333,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             ),
           );
         }
-        if (!syncRunning && ModalRoute.of(context)?.isCurrent == true) {
-          _recipesNeedRefresh = true;
-          await _refresh();
+        if (wasRunning && !syncRunning) {
+          _dirtyAreas.addAll([0, 1, 2, 3, 4, 5]);
+          if (ModalRoute.of(context)?.isCurrent == true) await _refresh();
         }
       } on Exception {
         if (mounted && generation == syncGeneration) {
@@ -375,14 +371,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   void _open(int index) {
     if (!_canOpen(index) || area == index) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() {
-      area = index;
-      if (!_visitedAreas.add(index) && (index != 2 || _recipesNeedRefresh)) {
-        _areaRefreshes[index]++;
-      }
-      if (index == 2) _recipesNeedRefresh = false;
-      _areaData[area] = _load(area);
-    });
+    setState(() => area = index);
+    if (_local && _dirtyAreas.contains(index)) unawaited(_refresh());
   }
 
   Future<void> _navigate(int index) async {
@@ -392,10 +382,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   Future<void> _refresh() async {
     if (busy) return;
+    _dirtyAreas.remove(area);
     if (_retainedAreas.contains(area)) {
       setState(() {
         if (_local) {
-          if (area == 2) _recipesNeedRefresh = false;
           _areaRefreshes[area]++;
         } else {
           viewRefresh++;
@@ -532,10 +522,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           preview: recipe,
           calendar: calendar,
           onSync: _syncFromPull,
+          onRecipeCardsChanged: () => _dirtyAreas.addAll([0, 1, 2, 3]),
+          onWeekChanged: () => _dirtyAreas.add(3),
+          onCartChanged: () => _dirtyAreas.add(4),
         ),
       ),
     );
-    if (mounted && area != 1 && area != 2 && area != 3) await _refresh();
+    if (mounted && _dirtyAreas.contains(area)) await _refresh();
   }
 
   Widget _heading(String title) =>
@@ -996,6 +989,16 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                 icon: const Icon(Icons.menu_book),
                 label: const Text('Alle Rezepte'),
               ),
+              FilledButton.tonalIcon(
+                onPressed: () => _navigate(3),
+                icon: const Icon(Icons.calendar_today_outlined),
+                label: const Text('Meine Woche'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => _navigate(4),
+                icon: const Icon(Icons.shopping_cart_outlined),
+                label: const Text('Einkaufswagen'),
+              ),
             ],
           ),
         ]),
@@ -1004,28 +1007,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             'Ein Blick in deine Sammlung',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          LayoutBuilder(
-            builder: (context, bounds) {
-              const gap = AppSpacing.item;
-              final columns = (bounds.maxWidth / 180).floor().clamp(1, 4);
-              final width = (bounds.maxWidth - (columns - 1) * gap) / columns;
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final recipe in previews)
-                    SizedBox(
-                      width: width,
-                      child: RecipeCard(
-                        api: api,
-                        recipe: recipe,
-                        onTap: () => _recipe(recipe),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+          RecipePreviewGrid(api: api, recipes: previews, onOpen: _recipe),
         ],
       ],
     );
@@ -1038,6 +1020,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         api: api,
         openRecipe: _recipe,
         onSync: _syncFromPull,
+        onChanged: () => _dirtyAreas.addAll([0, 2, 3]),
         refreshCount: refreshCount,
       ),
       2 => RecipeBrowser(
@@ -1056,15 +1039,20 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         statusChanged: _adoptStatus,
         cartCountChanged: (count) {
           if (mounted && area == 3 && serverCartCount != count) {
+            if (_areaData.containsKey(4) && serverCartCount != null) {
+              _dirtyAreas.add(4);
+            }
             setState(() => serverCartCount = count);
           }
         },
+        onCartChanged: () => _dirtyAreas.add(4),
       ),
       5 => PantryView(
         api: api,
         onSync: _syncFromPull,
         collapsed: pantryCollapsed,
         refreshCount: refreshCount,
+        onChanged: () => _dirtyAreas.add(4),
       ),
       _ => _simpleArea(index),
     };
@@ -1258,7 +1246,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                 swipeEnabled: !busy && (_local || area >= 3),
                 canOpen: _canOpen,
                 onOpen: _open,
-                retain: (index) => _local && _retainedAreas.contains(index),
                 builder: _local ? _localArea : _remoteArea,
               ),
             ),
@@ -1269,6 +1256,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           ? null
           : NavigationBar(
               selectedIndex: area,
+              animationDuration: Duration.zero,
               labelBehavior: hideNavigationLabels
                   ? NavigationDestinationLabelBehavior.alwaysHide
                   : NavigationDestinationLabelBehavior.alwaysShow,
@@ -1326,7 +1314,6 @@ class _SectionPager extends StatefulWidget {
     required this.swipeEnabled,
     required this.canOpen,
     required this.onOpen,
-    required this.retain,
     required this.builder,
   });
 
@@ -1336,7 +1323,6 @@ class _SectionPager extends StatefulWidget {
   final bool swipeEnabled;
   final bool Function(int) canOpen;
   final ValueChanged<int> onOpen;
-  final bool Function(int) retain;
   final Widget Function(int) builder;
 
   @override
@@ -1443,12 +1429,15 @@ class _SectionPagerState extends State<_SectionPager> {
                 ? const NeverScrollableScrollPhysics()
                 : null,
             itemCount: widget.count,
+            onPageChanged: (page) {
+              final index = page + widget.firstIndex;
+              if (widget.canOpen(index)) widget.onOpen(index);
+            },
             itemBuilder: (context, page) {
               final index = page + widget.firstIndex;
               final active = index == widget.index;
               return _SectionPage(
                 key: ValueKey(index),
-                retain: widget.retain(index),
                 child: TickerMode(
                   enabled: active,
                   child: ExcludeFocus(
@@ -1474,9 +1463,7 @@ class _SectionPagerState extends State<_SectionPager> {
 }
 
 class _SectionPage extends StatefulWidget {
-  const _SectionPage({super.key, required this.retain, required this.child});
-
-  final bool retain;
+  const _SectionPage({super.key, required this.child});
   final Widget child;
 
   @override
@@ -1486,13 +1473,7 @@ class _SectionPage extends StatefulWidget {
 class _SectionPageState extends State<_SectionPage>
     with AutomaticKeepAliveClientMixin<_SectionPage> {
   @override
-  bool get wantKeepAlive => widget.retain;
-
-  @override
-  void didUpdateWidget(_SectionPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.retain != widget.retain) updateKeepAlive();
-  }
+  bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {

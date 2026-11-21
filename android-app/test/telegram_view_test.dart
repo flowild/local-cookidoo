@@ -144,7 +144,7 @@ void main() {
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
     expect(telegram.saved, {'a': true});
-    await tester.tap(find.text('Häkchen zurücksetzen'));
+    await tester.tap(find.byTooltip('Häkchen zurücksetzen'));
     await tester.pumpAndSettle();
     expect(telegram.saved, isEmpty);
     telegram.dispose();
@@ -161,9 +161,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-30');
+    expect(find.text('KW 14'), findsOneWidget);
+    expect(find.text('Heute'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.chevron_left));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-23');
+    expect(find.text('KW 13'), findsOneWidget);
+    expect(find.text('Heute'), findsNothing);
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-30');

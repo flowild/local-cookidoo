@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'calendar_badge.dart';
+import 'expandable_list_card.dart';
 import 'recipe_card.dart';
 import 'spacing.dart';
 
@@ -55,6 +57,7 @@ class WeekView extends StatefulWidget {
     required this.api,
     required this.openRecipe,
     required this.cartCountChanged,
+    this.onCartChanged,
     this.statusChanged,
     this.refreshCount = 0,
     this.onSync,
@@ -64,6 +67,7 @@ class WeekView extends StatefulWidget {
   final RezeptgartenApi api;
   final Future<void> Function(Json recipe, bool calendar) openRecipe;
   final ValueChanged<int> cartCountChanged;
+  final VoidCallback? onCartChanged;
   final ValueChanged<Json>? statusChanged;
   final int refreshCount;
   final Future<void> Function()? onSync;
@@ -539,6 +543,7 @@ class _WeekViewState extends State<WeekView> {
       if (response['status'] == 'empty') {
         _message('In dieser Woche sind ab heute keine Rezepte eingeplant.');
       } else if (response['status'] == 'ok' && added is int && added >= 0) {
+        if (added > 0) widget.onCartChanged?.call();
         _message(
           added == 0
               ? 'Die Rezepte dieser Woche stehen bereits im Einkaufswagen.'
@@ -629,7 +634,7 @@ class _WeekViewState extends State<WeekView> {
         : RecipeCornerAction(
             tooltip: '${entry.name} in die Ablage',
             onPressed: enabled ? () => _move(entry, 'shelf', monday) : null,
-            icon: Icons.close,
+            icon: Icons.playlist_add,
           );
     void open() {
       if (_selected != null) {
@@ -880,9 +885,17 @@ class _WeekViewState extends State<WeekView> {
             ? 168.0
             : 144.0;
         final content = [
+          if (isToday)
+            const Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TodayBadge(),
+            ),
           Text(
             title,
-            style: theme.textTheme.titleMedium?.copyWith(color: foreground),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: foreground,
+              fontWeight: isToday ? FontWeight.w800 : null,
+            ),
           ),
           if (entries.isEmpty)
             Text(
@@ -944,7 +957,7 @@ class _WeekViewState extends State<WeekView> {
   }
 
   String _dayLabel(int index, String date) =>
-      '${_weekdays[index % 7]}, ${date.split('-').reversed.join('.')}${date == _week?['today'] ? ' · Heute' : ''}';
+      '${_weekdays[index % 7]}, ${date.split('-').reversed.join('.')}';
 
   Widget _days(String monday) {
     final days = objects(_week?['days']);
@@ -1007,62 +1020,97 @@ class _WeekViewState extends State<WeekView> {
     };
     final canNavigate = !_busy && !_loading;
     final canStep = canNavigate && (_monday != null || _requestedDay != null);
+    final monday = _monday;
+    final weekBadge = monday == null
+        ? null
+        : CalendarWeekBadge(date: monday, today: text(_week?['today']));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.related,
       children: [
         Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
-        Row(
-          spacing: AppSpacing.related,
-          children: [
-            Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton.filledTonal(
-                    tooltip: 'Vorherige Woche',
-                    style: ButtonStyle(
-                      shape: _weekControlShape(start: true),
-                      minimumSize: const WidgetStatePropertyAll(
-                        Size.square(48),
+        LayoutBuilder(
+          builder: (context, bounds) {
+            const controlsWidth =
+                4 * 48 + 2 * AppSpacing.connected + 4 * AppSpacing.related;
+            final labelWidth = MediaQuery.textScalerOf(context).scale(42);
+            final inlineBadge = bounds.maxWidth >= controlsWidth + labelWidth;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.related,
+              children: [
+                Row(
+                  spacing: AppSpacing.related,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton.filledTonal(
+                            tooltip: 'Vorherige Woche',
+                            style: ButtonStyle(
+                              shape: _weekControlShape(start: true),
+                              minimumSize: const WidgetStatePropertyAll(
+                                Size.square(48),
+                              ),
+                            ),
+                            onPressed: canStep ? () => _navigate(-1) : null,
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          const SizedBox(width: AppSpacing.connected),
+                          Flexible(
+                            child: FilledButton.tonal(
+                              style: ButtonStyle(
+                                shape: _weekControlShape(),
+                                padding: const WidgetStatePropertyAll(
+                                  EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.related,
+                                    vertical: AppSpacing.tight,
+                                  ),
+                                ),
+                              ),
+                              onPressed: canNavigate
+                                  ? () => _navigate(null)
+                                  : null,
+                              child: const Text(
+                                'Diese Woche',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.connected),
+                          IconButton.filledTonal(
+                            tooltip: 'Nächste Woche',
+                            style: ButtonStyle(
+                              shape: _weekControlShape(end: true),
+                              minimumSize: const WidgetStatePropertyAll(
+                                Size.square(48),
+                              ),
+                            ),
+                            onPressed: canStep ? () => _navigate(1) : null,
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                          if (inlineBadge && weekBadge != null) ...[
+                            const SizedBox(width: AppSpacing.related),
+                            weekBadge,
+                          ],
+                        ],
                       ),
                     ),
-                    onPressed: canStep ? () => _navigate(-1) : null,
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  const SizedBox(width: AppSpacing.connected),
-                  Flexible(
-                    child: FilledButton.tonal(
-                      style: ButtonStyle(shape: _weekControlShape()),
-                      onPressed: canNavigate ? () => _navigate(null) : null,
-                      child: const Text(
-                        'Diese Woche',
-                        textAlign: TextAlign.center,
+                    IconButton.filled(
+                      tooltip: 'In den Einkaufswagen',
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size.square(48),
                       ),
+                      onPressed: _canPlaceRecipe ? _shopping : null,
+                      icon: const Icon(Icons.shopping_cart_outlined),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.connected),
-                  IconButton.filledTonal(
-                    tooltip: 'Nächste Woche',
-                    style: ButtonStyle(
-                      shape: _weekControlShape(end: true),
-                      minimumSize: const WidgetStatePropertyAll(
-                        Size.square(48),
-                      ),
-                    ),
-                    onPressed: canStep ? () => _navigate(1) : null,
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
-              ),
-            ),
-            IconButton.filled(
-              tooltip: 'In den Einkaufswagen',
-              style: IconButton.styleFrom(minimumSize: const Size.square(48)),
-              onPressed: _canPlaceRecipe ? _shopping : null,
-              icon: const Icon(Icons.shopping_cart_outlined),
-            ),
-          ],
+                  ],
+                ),
+                if (!inlineBadge && weekBadge != null) weekBadge,
+              ],
+            );
+          },
         ),
         if ((_loading && _week == null) || _busy)
           const LinearProgressIndicator(),
@@ -1282,6 +1330,7 @@ class _WeekListsState extends State<_WeekLists> {
               );
             }
             return Column(
+              spacing: AppSpacing.related,
               children: [
                 for (final list in lists)
                   _WeekList(
@@ -1359,37 +1408,45 @@ class _WeekListState extends State<_WeekList> {
   }
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text(text(widget.list['name'])),
+  Widget build(BuildContext context) => ExpandableListCard(
+    title: text(widget.list['name']),
+    leading: const Icon(Icons.list_alt),
     onExpansionChanged: (expanded) {
       if (expanded && !_requested) unawaited(_load());
     },
-    children: [
-      for (final recipe in _items)
-        ListTile(
-          title: Text(text(recipe['name'])),
-          onTap: () => widget.onOpen(recipe),
-          trailing: IconButton(
-            tooltip: '${recipe['name']} zur Wochenablage hinzufügen',
-            onPressed: widget.canAdd && !widget.shelfIds.contains(recipe['id'])
-                ? () => widget.onAdd(recipe)
-                : null,
-            icon: Icon(
-              widget.shelfIds.contains(recipe['id']) ? Icons.check : Icons.add,
+    body: Column(
+      children: [
+        for (final recipe in _items)
+          ListTile(
+            title: Text(text(recipe['name'])),
+            onTap: () => widget.onOpen(recipe),
+            trailing: IconButton(
+              tooltip: '${recipe['name']} zur Wochenablage hinzufügen',
+              onPressed:
+                  widget.canAdd && !widget.shelfIds.contains(recipe['id'])
+                  ? () => widget.onAdd(recipe)
+                  : null,
+              icon: Icon(
+                widget.shelfIds.contains(recipe['id'])
+                    ? Icons.check
+                    : Icons.add,
+              ),
             ),
           ),
-        ),
-      if (_loading) const LinearProgressIndicator(),
-      if (_error != null) ...[
-        Text(_error!),
-        TextButton(onPressed: _load, child: const Text('Erneut laden')),
-      ] else if (!_loading && _items.length < _total)
-        TextButton(
-          onPressed: _load,
-          child: const Text('Weitere Rezepte anzeigen'),
-        )
-      else if (_requested && !_loading && _items.isEmpty)
-        const ListTile(title: Text('Diese Liste enthält noch keine Rezepte.')),
-    ],
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null) ...[
+          Text(_error!),
+          TextButton(onPressed: _load, child: const Text('Erneut laden')),
+        ] else if (!_loading && _items.length < _total)
+          TextButton(
+            onPressed: _load,
+            child: const Text('Weitere Rezepte anzeigen'),
+          )
+        else if (_requested && !_loading && _items.isEmpty)
+          const ListTile(
+            title: Text('Diese Liste enthält noch keine Rezepte.'),
+          ),
+      ],
+    ),
   );
 }

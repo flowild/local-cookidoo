@@ -11,6 +11,54 @@ import 'package:rezeptgarten/spacing.dart';
 import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  testWidgets('highlights today and the current ISO week across New Year', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(332, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(332, 900),
+              textScaler: TextScaler.linear(1.5),
+            ),
+            child: WeekView(
+              api: _WeekBoundaryApi(),
+              openRecipe: (_, _) async {},
+              cartCountChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final current = find.text('KW 53');
+    final next = find.byTooltip('Nächste Woche');
+    expect(current, findsOneWidget);
+    expect(find.bySemanticsLabel('Aktuelle Kalenderwoche 53'), findsOneWidget);
+    expect(find.text('Heute'), findsOneWidget);
+    expect(tester.getCenter(current).dy, closeTo(tester.getCenter(next).dy, 1));
+    final currentColor = tester.widget<Text>(current).style?.color;
+
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    final other = find.text('KW 1');
+    expect(other, findsOneWidget);
+    expect(find.bySemanticsLabel('Kalenderwoche 1'), findsOneWidget);
+    expect(tester.widget<Text>(other).style?.color, isNot(currentColor));
+    expect(find.text('Heute'), findsNothing);
+
+    await tester.tap(find.text('Diese Woche'));
+    await tester.pumpAndSettle();
+    expect(current, findsOneWidget);
+    expect(find.text('Heute'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('recipe metadata stays below the action in narrow day columns', (
     tester,
   ) async {
@@ -286,6 +334,35 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class _WeekBoundaryApi extends _WeekApi {
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    final uri = Uri.parse(path);
+    if (uri.path != '/api/calendar/week') {
+      return super.get(path, timeout: timeout);
+    }
+    const today = '2026-12-28';
+    final monday = DateTime.parse(
+      '${uri.queryParameters['day'] ?? today}T00:00:00Z',
+    );
+    return {
+      'today': today,
+      'days': [
+        for (var day = 0; day < 7; day++)
+          {
+            'date': monday
+                .add(Duration(days: day))
+                .toIso8601String()
+                .substring(0, 10),
+            'recipes': <Json>[],
+          },
+      ],
+      'shelf': <Json>[],
+      'placeholder_placements': <Json>[],
+    };
+  }
 }
 
 class _MultipleDaysApi extends _WeekApi {
