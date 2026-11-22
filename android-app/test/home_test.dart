@@ -611,6 +611,12 @@ void main() {
     final remove = find.byTooltip('Reis mit Gemüse entfernen');
     await tester.scrollUntilVisible(remove, 250, scrollable: _verticalScroll);
     await tester.pumpAndSettle();
+    final image = find.descendant(
+      of: find.widgetWithText(CompactRecipeTile, 'Reis mit Gemüse'),
+      matching: find.byType(RecipeImage),
+    );
+    expect(tester.widget<RecipeImage>(image).filename, '${'a' * 40}.webp');
+    expect(tester.getSize(image), const Size.square(40));
     await tester.tap(remove);
     await tester.pumpAndSettle();
     expect(api.addedDay, isNull);
@@ -630,6 +636,16 @@ void main() {
     await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
     await tester.pumpAndSettle();
 
+    final transfer = find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton && widget.tooltip == 'An Cookidoo übertragen',
+    );
+    expect(find.byTooltip('Einkaufswagenaktionen'), findsNothing);
+    expect(tester.widget<IconButton>(transfer).onPressed, isNull);
+    expect(
+      tester.getCenter(transfer).dy,
+      closeTo(tester.getCenter(find.text('Mein Einkaufswagen')).dy, 1),
+    );
     await tester.tap(find.text('Artikel hinzufügen'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '  Küchenrolle  ');
@@ -638,7 +654,7 @@ void main() {
     expect(api.cartItem, 'Küchenrolle');
     expect(api.extraStatus, 'pending');
 
-    await tester.tap(find.text('An Cookidoo übertragen').hitTestable());
+    await tester.tap(transfer.hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Übertragung ungeklärt'), findsOneWidget);
     expect(find.text('Cookidoo prüfen.'), findsOneWidget);
@@ -813,6 +829,7 @@ class _TestApi extends RezeptgartenApi {
             'status': 'pending',
             'data': {
               'name': 'Reis mit Gemüse',
+              'image_file': '${'a' * 40}.webp',
               'ingredients': [
                 {'name': 'Reis', 'text': '100 g Reis', 'owned': owned},
               ],

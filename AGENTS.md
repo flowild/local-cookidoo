@@ -50,7 +50,9 @@ zweispaltigen Raster mit Rezeptbildern abgesetzt. Lokale Listen haben ein
 Bearbeiten-Symbol. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
 Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
 Zusatzartikel erhalten ihren Warenbereich über denselben Serverabgleich wie
-Rezeptzutaten. Die Rezepte im Einkaufswagen erscheinen als kompakte Zeilen.
+Rezeptzutaten. Die Rezepte im Android-Einkaufswagen erscheinen als kompakte
+Zeilen mit runden Vorschaubildern wie in den Wochenlisten. Neben dem Wagentitel
+steht das Symbol „An Cookidoo übertragen“. Einträge lassen sich einzeln entfernen.
 Auf schmalen Displays bleiben die Hauptaktionen in der Kopfzeile bedienbar.
 Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Wechsel
 ihren Zustand. Kontowechsel und Wechsel vom Heimnetz setzen die Ansichten und

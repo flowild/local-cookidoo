@@ -916,47 +916,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               spacing: AppSpacing.related,
               children: [
                 Expanded(child: _heading('Mein Einkaufswagen')),
-                if (items.isNotEmpty)
-                  PopupMenuButton<String>(
-                    enabled: editable,
-                    tooltip: 'Einkaufswagenaktionen',
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'clear',
-                        child: Text('Einkaufswagen leeren'),
-                      ),
-                    ],
-                    onSelected: (_) async {
-                      if (await _confirm(
-                            'Den gesamten lokalen Einkaufswagen leeren?',
-                            'Einkaufswagen leeren',
-                          ) &&
-                          mounted) {
-                        await _mutate(
-                          'DELETE',
-                          '/api/cart',
-                          null,
-                          'Einkaufswagen geleert.',
-                        );
-                      }
-                    },
-                  ),
-              ],
-            ),
-            ActionPillGrid(
-              minColumnWidth: 208,
-              children: [
-                FilledButton.icon(
-                  style: ActionPillGrid.buttonStyle,
-                  onPressed: editable ? _addCartItem : null,
-                  icon: const Icon(Icons.add),
-                  label: const Text(
-                    'Artikel hinzufügen',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  style: ActionPillGrid.buttonStyle,
+                IconButton.filledTonal(
+                  tooltip: 'An Cookidoo übertragen',
                   onPressed:
                       editable &&
                           items.any((item) => item['status'] == 'pending')
@@ -967,13 +928,18 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                           'Einkaufswagen an Cookidoo übertragen.',
                         )
                       : null,
-                  icon: const Icon(Icons.shopping_cart_outlined),
-                  label: const Text(
-                    'An Cookidoo übertragen',
-                    textAlign: TextAlign.center,
-                  ),
+                  icon: const Icon(Icons.upload_outlined, size: 20),
                 ),
               ],
+            ),
+            FilledButton.icon(
+              style: ActionPillGrid.buttonStyle,
+              onPressed: editable ? _addCartItem : null,
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Artikel hinzufügen',
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
@@ -997,14 +963,24 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                     const SizedBox(height: AppSpacing.related),
                 itemBuilder: (context, index) {
                   final entry = recipes[index];
+                  final data = entry['data'] as Json;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: AppSpacing.related,
                     children: [
                       CompactRecipeTile(
-                        title: text(entry['data']['name'], 'Rezept'),
+                        title: text(data['name'], 'Rezept'),
+                        leading: ClipOval(
+                          child: SizedBox.square(
+                            dimension: 40,
+                            child: RecipeImage(
+                              api: api,
+                              filename: data['image_file'],
+                            ),
+                          ),
+                        ),
                         onTap: () => _recipe({
-                          ...entry['data'] as Json,
+                          ...data,
                           'id': entry['recipe_id'],
                         }, calendar: true),
                         actionLabel: removeLabel(entry),
@@ -1013,8 +989,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                             ? () => _mutate('DELETE', entryPath(entry))
                             : null,
                       ),
-                      if ((entry['data'] as Json)['ingredients_complete'] ==
-                          false)
+                      if (data['ingredients_complete'] == false)
                         const Text(
                           'Zutaten fehlen. Bitte nach der Synchronisierung erneut hinzufügen.',
                         ),
