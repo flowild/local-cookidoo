@@ -10,6 +10,28 @@ import 'package:rezeptgarten/main.dart';
 import 'package:rezeptgarten/settings_view.dart';
 
 void main() {
+  testWidgets('keeps loaded settings visible when a background read fails', (
+    tester,
+  ) async {
+    final api = _SettingsApi();
+    await tester.pumpWidget(MaterialApp(
+      home: SettingsView(api: api, appearance: AppearanceController()),
+    ));
+    await tester.pumpAndSettle();
+    final account = find.text('Dein Cookidoo-Konto');
+    expect(account, findsOneWidget);
+    api.statusUnavailable = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(account, findsOneWidget);
+    expect(find.text('Status nicht erreichbar.'), findsOneWidget);
+    api.statusUnavailable = false;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(account, findsOneWidget);
+    expect(find.text('Status nicht erreichbar.'), findsNothing);
+  });
+
   testWidgets('settings remain usable on a narrow screen with larger text', (
     tester,
   ) async {
@@ -207,9 +229,11 @@ class _SettingsApi extends RezeptgartenApi {
   _SettingsApi() : super(client: HttpClient());
 
   Json? account;
+  bool statusUnavailable = false;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async => switch (path) {
+    '/api/status' when statusUnavailable => throw const ApiException('Status nicht erreichbar.'),
     '/api/status' => {
       'account': account,
       'connected': account != null,

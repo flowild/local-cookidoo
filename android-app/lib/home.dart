@@ -114,11 +114,17 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       wasBackgrounded = true;
-    } else if (state == AppLifecycleState.resumed && wasBackgrounded) {
+    } else if (state == AppLifecycleState.resumed) {
+      final syncOnResume = wasBackgrounded;
       wasBackgrounded = false;
-      startupSyncAttempted = false;
-      if (widget.connection == null) unawaited(_startupSync());
+      unawaited(_resume(syncOnResume));
     }
+  }
+
+  Future<void> _resume(bool syncOnResume) async {
+    if (syncOnResume) startupSyncAttempted = false;
+    await widget.connection?.refresh();
+    if (mounted && syncOnResume && _local) await _startupSync();
   }
 
   void _connectionChanged() {

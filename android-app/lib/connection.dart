@@ -1,14 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
 import 'telegram_service.dart';
 
 enum ConnectionMode { checking, local, telegram, offline }
 
-class ConnectionController extends ChangeNotifier with WidgetsBindingObserver {
+class ConnectionController extends ChangeNotifier {
   ConnectionController(this.api, this.telegram);
 
   final RezeptgartenApi api;
@@ -20,50 +20,61 @@ class ConnectionController extends ChangeNotifier with WidgetsBindingObserver {
   bool hasPermission = false;
   String? error;
   int _generation = 0;
+  int? _probingGeneration;
   bool _disposed = false;
+  Map<String, dynamic>? _networkStatus;
 
   void start() {
     api.localAllowed = () => mode == ConnectionMode.local;
-    WidgetsBinding.instance.addObserver(this);
     telegram.addListener(_telegramChanged);
     _subscription = _changes.receiveBroadcastStream().listen(
-      (_) => _networkChanged(),
+      _networkChanged,
       onError: (Object _) => unawaited(refresh()),
     );
     unawaited(refresh());
   }
 
-  void _networkChanged() {
-    if (mode != ConnectionMode.checking) {
-      mode = ConnectionMode.checking;
-      notifyListeners();
+  void _networkChanged(dynamic event) {
+    final status = event is Map ? Map<String, dynamic>.from(event) : null;
+    if (status != null &&
+        mapEquals(status, _networkStatus) &&
+        (mode == ConnectionMode.local || _probingGeneration == _generation)) {
+      return;
     }
-    unawaited(refresh());
+    unawaited(_check(status));
   }
 
   void _telegramChanged() => unawaited(refresh());
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _networkChanged();
-  }
 
   Future<void> requestPermission() async {
     await _network.invokeMethod<Object?>('requestPermission');
     await refresh();
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() => _check(null);
+
+  Future<void> _check(Map<String, dynamic>? event) async {
     final generation = ++_generation;
     ConnectionMode next;
     String? problem;
     var permission = false;
     try {
       final status =
-          await _network.invokeMapMethod<String, dynamic>('status') ?? {};
+          event ??
+          await _network.invokeMapMethod<String, dynamic>('status') ??
+          {};
+      if (_disposed || generation != _generation) return;
+      final previous = _networkStatus;
+      _networkStatus = status;
       permission = status['permission'] == true;
-      if (status['ssid'] == 'ThomasWlan') {
+      if (permission && status['ssid'] == 'ThomasWlan') {
+        if (mode == ConnectionMode.local &&
+            previous?['networkId'] != status['networkId']) {
+          mode = ConnectionMode.checking;
+          notifyListeners();
+        }
         try {
+          _probingGeneration = generation;
           final health = await api.probeHealth();
           if (health is! Json || health['ok'] != true) {
             throw const ApiException(
@@ -79,6 +90,8 @@ class ConnectionController extends ChangeNotifier with WidgetsBindingObserver {
               ? ConnectionMode.telegram
               : ConnectionMode.offline;
           problem = failure.toString();
+        } finally {
+          if (_probingGeneration == generation) _probingGeneration = null;
         }
       } else if (telegram.paired &&
           telegram.step == TelegramStep.ready &&
@@ -112,7 +125,6 @@ class ConnectionController extends ChangeNotifier with WidgetsBindingObserver {
     api.localAllowed = null;
     _subscription?.cancel();
     telegram.removeListener(_telegramChanged);
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 }

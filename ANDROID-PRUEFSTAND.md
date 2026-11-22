@@ -1,6 +1,6 @@
 # Android-App: Stand der Fehlerprüfung
 
-Stand vom 22. November 2026. Die Android-Prüfung wurde fortgesetzt. Dieses Dokument
+Stand vom 23. November 2026. Die Android-Prüfung wurde fortgesetzt. Dieses Dokument
 hält die geprüften Abläufe, die lokalen Korrekturen und die ausstehende Abnahme fest.
 
 ## Bisher untersucht und bearbeitet
@@ -263,6 +263,14 @@ ist in `FLUTTER-PORTIERUNG.md` beschrieben.
 
 ## Aktueller technischer Stand
 
+- Der Widgettest für **1.10.1** sendet bei geöffneter Listensuche drei
+  identische Android-WLAN-Meldungen im Abstand von zwei Sekunden. Die Zahl der
+  Serverprüfungen und Listenabrufe bleibt dabei konstant. Bei der Rückkehr aus
+  dem Hintergrund lässt sich die Suche während einer verzögerten Serverantwort
+  weiter bearbeiten. Beim Wechsel ins Gastnetz wird der lokale Zugriff gesperrt.
+  Alle 63 Flutter-Tests und 130 Backendtests bestanden. Testbuild **50**
+  ist auf LXC 103 veröffentlicht. Signatur, HTTPS-Download und Update-Manifest
+  wurden geprüft.
 - Für Version **1.10.0** prüfen die Widgettests den Sprung mit „Heute“ auf
   Freitag, den 1. Januar 2027, aus der laufenden Woche und der Folgewoche.
   Im Telegram-Modus prüfen sie die sichtbare Position des heutigen Tageskopfs.

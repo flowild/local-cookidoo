@@ -76,7 +76,8 @@ class WifiStatus(private val activity: MainActivity) {
         val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
         val granted = hasPreciseLocation()
         val ssid = if (isWifi && granted) wifi.connectionInfo?.ssid?.removeSurrounding("\"") else null
-        return mapOf("ssid" to ssid?.takeUnless { it == "<unknown ssid>" }, "permission" to granted, "wifi" to isWifi,
+        return mapOf("networkId" to network?.networkHandle,
+                     "ssid" to ssid?.takeUnless { it == "<unknown ssid>" }, "permission" to granted, "wifi" to isWifi,
                      "online" to (capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true))
     }
 

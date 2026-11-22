@@ -37,6 +37,9 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   auf den sichtbaren Tab begrenzen. Beim erneuten Laden sichtbarer Listen,
   Vorratskategorien oder Wocheninhalte ihre Position beibehalten. Bei Änderungen der Kontoverbindung und
   beim Verlassen des Heimnetzmodus private Ansichtsdaten und Bildcache leeren.
+  Identische Android-Netzmeldungen im bestätigten Heimnetz überspringen.
+  Bei der Rückkehr zur App die Verbindung im Hintergrund prüfen und den
+  Sammlungsabgleich einmal anstoßen. Die lokale Ansicht bleibt dabei bedienbar.
 - Bilder getrennt nach Vorschau und Original laden. Gleichzeitige Bildabrufe
   bündeln, die Cachefreigabe des Servers beachten und den Speicher begrenzen.
   Die Dekodierungsgröße an die physische Anzeigebreite anpassen.

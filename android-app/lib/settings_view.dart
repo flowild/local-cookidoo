@@ -68,7 +68,7 @@ class _SettingsViewState extends State<SettingsView> {
           !_busy &&
           !_loading &&
           ModalRoute.of(context)?.isCurrent == true) {
-        unawaited(_load());
+        unawaited(_load(background: true));
       }
     });
   }
@@ -168,7 +168,7 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _load({bool showLoading = false}) async {
+  Future<void> _load({bool showLoading = false, bool background = false}) async {
     if (!_local) return;
     final request = ++_request;
     if (showLoading) setState(() => _loading = true);
@@ -185,7 +185,7 @@ class _SettingsViewState extends State<SettingsView> {
     } on Exception catch (error) {
       if (!mounted || request != _request) return;
       setState(() {
-        _status = null;
+        if (!background) _status = null;
         _error = error.toString();
       });
     } finally {

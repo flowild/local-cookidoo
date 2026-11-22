@@ -54,7 +54,9 @@ Rezeptzutaten. Die Rezepte im Einkaufswagen erscheinen als kompakte Zeilen.
 Auf schmalen Displays bleiben die Hauptaktionen in der Kopfzeile bedienbar.
 Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Wechsel
 ihren Zustand. Kontowechsel und Wechsel vom Heimnetz setzen die Ansichten und
-den Android-Bildcache zurück. Erfolgreiche Bildantworten mit Cachefreigabe
+den Android-Bildcache zurück. Wiederholte Netzmeldungen im selben Heim-WLAN
+erhalten die sichtbare Ansicht, ihre Bedienbarkeit und den laufenden Abgleich.
+Erfolgreiche Bildantworten mit Cachefreigabe
 werden im Arbeitsspeicher wiederverwendet. Andere API-Antworten verwenden
 keinen HTTP-Cache.
 Die Übersichtskarte „Deine Sammlung“ bietet Direktzugriffe auf Rezeptlisten,
