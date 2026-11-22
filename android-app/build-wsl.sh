@@ -6,7 +6,7 @@ mode=$2
 version=$3
 build_number=$4
 flutter=/home/flutterdev/flutter/bin/flutter
-case "$mode" in debug|release) ;; *) exit 2 ;; esac
+case "$mode" in debug|profile|release) ;; *) exit 2 ;; esac
 
 # Keep Flutter's intermediate files and Gradle's I/O on the WSL filesystem.
 work=$(mktemp -d /tmp/rezeptgarten-android.XXXXXXXXXX)

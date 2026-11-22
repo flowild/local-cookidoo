@@ -1,6 +1,22 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'pill_widgets.dart';
 import 'spacing.dart';
+
+String calendarDateLabel(String date) => date.split('-').reversed.join('.');
+
+String calendarDayLabel(int index, String date) {
+  const days = [
+    'Montag',
+    'Dienstag',
+    'Mittwoch',
+    'Donnerstag',
+    'Freitag',
+    'Samstag',
+    'Sonntag',
+  ];
+  return '${days[index % 7]}, ${calendarDateLabel(date)}';
+}
 
 class CalendarWeekBadge extends StatelessWidget {
   const CalendarWeekBadge({super.key, required this.date, required this.today});
@@ -26,45 +42,32 @@ class CalendarWeekBadge extends StatelessWidget {
       container: true,
       label: isCurrent ? 'Aktuelle Kalenderwoche $week' : 'Kalenderwoche $week',
       excludeSemantics: true,
-      child: _CalendarBadge(label: 'KW $week', highlighted: isCurrent),
+      child: InfoPill('KW $week', highlighted: isCurrent),
     );
   }
 }
 
-class TodayBadge extends StatelessWidget {
-  const TodayBadge({super.key});
+class CalendarDayHeading extends StatelessWidget {
+  const CalendarDayHeading(
+    this.title, {
+    super.key,
+    required this.isToday,
+    this.style,
+  });
 
-  @override
-  Widget build(BuildContext context) =>
-      const _CalendarBadge(label: 'Heute', highlighted: true);
-}
-
-class _CalendarBadge extends StatelessWidget {
-  const _CalendarBadge({required this.label, required this.highlighted});
-
-  final String label;
-  final bool highlighted;
+  final String title;
+  final bool isToday;
+  final TextStyle? style;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.related,
-        vertical: AppSpacing.tight,
-      ),
-      decoration: ShapeDecoration(
-        shape: const StadiumBorder(),
-        color: highlighted ? colors.primary : colors.surfaceContainerHighest,
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: highlighted ? colors.onPrimary : colors.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+    final heading = Text(title, style: style);
+    if (!isToday) return heading;
+    return Wrap(
+      spacing: AppSpacing.related,
+      runSpacing: AppSpacing.tight,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [heading, const InfoPill('Heute', highlighted: true)],
     );
   }
 }

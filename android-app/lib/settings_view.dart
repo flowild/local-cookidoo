@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'pill_widgets.dart';
 import 'spacing.dart';
 import 'appearance.dart';
 import 'telegram_service.dart';
@@ -348,17 +349,20 @@ class _SettingsViewState extends State<SettingsView> {
             ? null
             : (dark) => _perform(() => widget.appearance.update(dark: dark)),
       ),
-      Wrap(
-        spacing: AppSpacing.related,
-        runSpacing: AppSpacing.related,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      ActionPillGrid(
+        minColumnWidth: 184,
         children: [
           OutlinedButton.icon(
+            style: ActionPillGrid.buttonStyle,
             onPressed: _busy ? null : () => _pickAccent(appearance.accent),
             icon: Icon(Icons.circle, color: Color(appearance.accent)),
-            label: Text('Akzentfarbe ${_hex(appearance.accent)}'),
+            label: Text(
+              'Akzentfarbe ${_hex(appearance.accent)}',
+              textAlign: TextAlign.center,
+            ),
           ),
           TextButton(
+            style: ActionPillGrid.buttonStyle,
             onPressed: _busy || appearance.accent == defaultAccent
                 ? null
                 : () => _perform(
@@ -404,7 +408,10 @@ class _SettingsViewState extends State<SettingsView> {
         FilledButton.icon(
           onPressed: _busy ? null : _export,
           icon: const Icon(Icons.save_alt),
-          label: const Text('Sammlung als JSON exportieren'),
+          label: const Text(
+            'Sammlung als JSON exportieren',
+            textAlign: TextAlign.center,
+          ),
         ),
       ]),
     ];
@@ -515,6 +522,7 @@ class _SettingsViewState extends State<SettingsView> {
                         _updateAvailable
                             ? 'APK herunterladen und installieren'
                             : 'Nach Updates suchen',
+                        textAlign: TextAlign.center,
                       ),
                     ),
                     if (_downloadingUpdate) ...[

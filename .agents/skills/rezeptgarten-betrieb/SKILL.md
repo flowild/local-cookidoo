@@ -38,6 +38,8 @@ verschlüsselte Sitzung enthalten. Die vorbereitete Backupablage ist
 
 Android-Testbuilds werden lokal mit `scripts/Android-APK-veroeffentlichen.ps1`
 in WSL gebaut und bei `-Upload` auf dem bestehenden LXC 103 veröffentlicht.
+Der Testkanal verwendet die ARM64-Profil-APK mit der bestehenden Testsignatur
+und der Paket-ID `de.rezeptgarten.rezeptgarten.test`.
 Caddy bedient die Testseite unter `/android/test/` und den regulären Download
 unter `/android/`. Der Upload wird in `/var/lib/rezeptgarten-downloads/.incoming`
 geprüft und erst danach freigegeben. Danach aktualisiert der Publisher

@@ -7,10 +7,148 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/appearance.dart';
 import 'package:rezeptgarten/debug_api.dart';
 import 'package:rezeptgarten/expressive_theme.dart';
+import 'package:rezeptgarten/home.dart';
 import 'package:rezeptgarten/main.dart';
+import 'package:rezeptgarten/pill_widgets.dart';
 import 'package:rezeptgarten/recipe_card.dart';
+import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  for (final (width, scale, columns) in [
+    (332.0, 1.0, 2),
+    (332.0, 1.6, 1),
+    (1100.0, 1.0, 4),
+  ]) {
+    testWidgets(
+      'collection shortcuts align in $columns columns at $width / $scale',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final appearance = AppearanceController();
+        addTearDown(appearance.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: rezeptgartenTheme(Brightness.light, defaultAccent),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: RezeptgartenHome(
+              api: DebugRezeptgartenApi(),
+              appearance: appearance,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final navigation = find.byType(
+          width < 600 ? NavigationBar : NavigationRail,
+        );
+        await tester.tap(
+          find
+              .descendant(
+                of: navigation,
+                matching: find.bySemanticsLabel(
+                  RegExp(width < 360 ? 'Start' : 'Übersicht'),
+                ),
+              )
+              .hitTestable()
+              .first,
+        );
+        await tester.pumpAndSettle();
+        final grid = find.byType(ActionPillGrid);
+        final buttons = find.descendant(
+          of: grid,
+          matching: find.byWidgetPredicate((w) => w is FilledButton),
+        );
+        expect(buttons, findsNWidgets(4));
+        final bounds = tester.getRect(grid);
+        final rects = [
+          for (var i = 0; i < 4; i++) tester.getRect(buttons.at(i)),
+        ];
+        for (var i = 0; i < 4; i++) {
+          final rect = rects[i];
+          expect(rect.width, closeTo(rects.first.width, 0.01));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          if (i % columns == 0) expect(rect.left, closeTo(bounds.left, 0.01));
+          if (i % columns == columns - 1) {
+            expect(rect.right, closeTo(bounds.right, 0.01));
+          }
+          expect(rect.top, rects[i - i % columns].top);
+          if (i >= columns) {
+            expect(rect.top, greaterThan(rects[i - columns].bottom));
+          }
+        }
+        final cart = find.descendant(
+          of: grid,
+          matching: find.text('Einkaufswagen'),
+        );
+        await tester.ensureVisible(cart);
+        await tester.pumpAndSettle();
+        await tester.tap(cart);
+        await tester.pumpAndSettle();
+        expect(find.text('Mein Einkaufswagen'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  for (final (width, brightness) in [
+    (332.0, Brightness.dark),
+    (1100.0, Brightness.light),
+  ]) {
+    testWidgets(
+      'main sections and settings fit at width $width with large text',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 915);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final appearance = AppearanceController();
+        addTearDown(appearance.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: rezeptgartenTheme(brightness, defaultAccent),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.5),
+                disableAnimations: true,
+              ),
+              child: child!,
+            ),
+            home: RezeptgartenHome(
+              api: DebugRezeptgartenApi(),
+              appearance: appearance,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final label in [
+          width < 360 ? 'Start' : 'Übersicht',
+          'Listen',
+          'Rezepte',
+          'Woche',
+          'Einkauf',
+          'Vorrat',
+        ]) {
+          final navigation = width < 600
+              ? find.byType(NavigationBar)
+              : find.byType(NavigationRail);
+          final destination = find.descendant(
+            of: navigation,
+            matching: find.bySemanticsLabel(RegExp(label)),
+          );
+          await tester.tap(destination.hitTestable().first);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull, reason: label);
+        }
+        await tester.tap(find.byTooltip('Einstellungen öffnen').hitTestable());
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   test('Android uses the web surface and accent colors in both modes', () {
     final light = rezeptgartenTheme(Brightness.light, defaultAccent);
     final dark = rezeptgartenTheme(Brightness.dark, defaultAccent);
@@ -56,6 +194,58 @@ void main() {
     );
     expect(api.recipeReads, reads);
   });
+
+  testWidgets(
+    'reading a search result keeps the results and adding it updates the cart badge',
+    (tester) async {
+      final api = _SectionReadsApi();
+      await tester.pumpWidget(RezeptgartenApp(api: api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rezepte').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Zitrone');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      final reads = api.reads['/api/recipes'];
+      await tester.tap(find.text('Zitronenpasta').first);
+      await tester.pumpAndSettle();
+      final add = find.text('Zum Einkaufswagen hinzufügen');
+      await tester.scrollUntilVisible(
+        add,
+        260,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(add);
+      for (var attempt = 0; attempt < 2; attempt++) {
+        await tester.tap(add.hitTestable());
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            attempt == 0
+                ? 'Rezept im Einkaufswagen.'
+                : 'Rezept bereits im Einkaufswagen.',
+          ),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+      }
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(api.reads['/api/recipes'], reads);
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        'Zitrone',
+      );
+      expect(
+        find.descendant(
+          of: find.byTooltip('Einkaufswagen öffnen'),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('narrow phones use a shorter start label', (tester) async {
     tester.view.physicalSize = const Size(332, 780);
@@ -131,6 +321,7 @@ void main() {
     final swipeStart = Offset(body.center.dx, body.top + 32);
     final today = find.text('Diese Woche');
     final todayX = tester.getCenter(today).dx;
+    final originalWeek = tester.widget<WeekView>(find.byType(WeekView));
     final shortDrag = await tester.startGesture(swipeStart);
     await shortDrag.moveBy(const Offset(24, 0));
     await shortDrag.moveBy(const Offset(40, 0));
@@ -149,6 +340,18 @@ void main() {
     expect(tester.getCenter(today).dx, closeTo(todayX + 250, 1));
     expect(tester.getRect(search).left, lessThan(body.left));
     expect(tester.getRect(search).right, greaterThan(body.left));
+    expect(selectedSection(), 2);
+    expect(
+      tester.widget<WeekView>(find.byType(WeekView)),
+      same(originalWeek),
+      reason: 'Crossing the midpoint only updates the navigation indicator.',
+    );
+    await drag.moveBy(const Offset(-200, 0));
+    await tester.pump();
+    expect(selectedSection(), 3);
+    expect(tester.widget<WeekView>(find.byType(WeekView)), same(originalWeek));
+    await drag.moveBy(const Offset(200, 0));
+    await tester.pump();
     expect(selectedSection(), 2);
     expect(
       tester
@@ -193,6 +396,38 @@ void main() {
       expect(selectedSection(), section);
     }
   });
+
+  testWidgets(
+    'a fast tab fling settles without passing its destination or reversing',
+    (tester) async {
+      await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
+      await tester.pumpAndSettle();
+      final pager = tester.widget<PageView>(
+        find.byKey(const ValueKey('main-pager')),
+      );
+      final position = pager.controller!.position;
+      final target = position.viewportDimension * 2;
+      for (final speed in [-6000.0, -3000.0, 3000.0, 6000.0]) {
+        final start = target - speed.sign * 24;
+        final metrics = position.copyWith(pixels: start);
+        final motion = position.physics.createBallisticSimulation(
+          metrics,
+          speed,
+        )!;
+        var previous = start;
+        for (var ms = 1; ms <= 1000; ms++) {
+          final offset = motion.x(ms / 1000);
+          expect((target - offset) * speed.sign, greaterThanOrEqualTo(-0.001));
+          expect(
+            (offset - previous) * speed.sign,
+            greaterThanOrEqualTo(-0.001),
+          );
+          previous = offset;
+        }
+        expect(previous, closeTo(target, 0.001));
+      }
+    },
+  );
 
   testWidgets('main navigation fits a narrow screen with larger text', (
     tester,
@@ -329,6 +564,12 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(seconds: 1));
     await pending;
+    await tester.pumpAndSettle();
+    expect(
+      api.weekReads,
+      3,
+      reason: 'Initial load, startup sync and manual refresh load the week once each.',
+    );
   });
 
   testWidgets('week action opens a cart with a persistent checkbox', (
@@ -476,12 +717,14 @@ class _StaleStatusApi extends _SyncTestApi {
 }
 
 class _SyncTestApi extends _TestApi {
+  int weekReads = 0;
   int syncs = 0;
   int statusFailures = 0;
   bool keepRunning = false;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == '/api/calendar/week') weekReads++;
     if (path.startsWith('/api/calendar/badges?')) return {'items': <Json>[]};
     if (path == '/api/status') {
       if (statusFailures > 0) {

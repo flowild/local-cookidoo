@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'pill_widgets.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
 import 'recipe_card.dart';
@@ -36,7 +37,7 @@ class RecipeDetail extends StatefulWidget {
 class _RecipeDetailState extends State<RecipeDetail> {
   static const _links = MethodChannel('de.rezeptgarten/links');
   static const _buttonStyle = ButtonStyle(
-    alignment: AlignmentDirectional.centerStart,
+    alignment: Alignment.center,
     padding: WidgetStatePropertyAll(
       EdgeInsets.symmetric(
         horizontal: AppSpacing.section,
@@ -57,6 +58,9 @@ class _RecipeDetailState extends State<RecipeDetail> {
   String? _original;
   Future<bool>? _saving;
   bool _noteLoading = false;
+  bool _listsLoading = false;
+  bool _tipsLoading = false;
+  int _loadGeneration = 0;
   bool _working = false;
   bool _leaving = false;
   String get _recipePath => '/api/recipes/${Uri.encodeComponent(_id)}';
@@ -81,6 +85,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
   }
 
   Future<void> _load(String id) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _id = id;
       _error = null;
@@ -91,49 +96,69 @@ class _RecipeDetailState extends State<RecipeDetail> {
       _listError = null;
       _tips = null;
       _localLists = [];
+      _listsLoading = false;
+      _tipsLoading = false;
+      _noteLoading = false;
       _note.clear();
       _working = true;
     });
     try {
       final suffix = widget.calendar ? '?calendar=true' : '';
       final recipe = await widget.api.get('$_recipePath$suffix') as Json;
-      if (!mounted) return;
-      setState(() => _recipe = recipe);
-      // Cookidoo serializes its requests. Fetch the note before any remote tips.
-      await _loadNote();
-      if (!mounted) return;
-      await _loadTips();
-      if (!_calendarRecipe && mounted) await _loadLists();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _recipe = recipe;
+        _working = false;
+      });
+      // Collections are local. Give the live note priority over remote tips.
+      if (!_calendarRecipe) unawaited(_loadLists());
+      unawaited(_loadNoteAndTips(recipe, generation));
     } on Exception catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _error = error.toString();
+          _working = false;
+        });
+      }
     }
+  }
+
+  Future<void> _loadNoteAndTips(Json recipe, int generation) async {
+    final note = _loadNote();
+    if (recipe['tips_json'] == null) await note;
+    if (mounted && generation == _loadGeneration) await _loadTips();
   }
 
   Future<void> _loadNote() async {
     if (_noteLoading) return;
+    final generation = _loadGeneration;
     setState(() {
       _noteLoading = true;
       _noteStatus = 'Notiz wird geladen …';
     });
     try {
       final result = await widget.api.get(_notePath) as Json;
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _original = result['text'] as String;
         _note.text = _original!;
         _noteStatus = null;
       });
     } on Exception catch (error) {
-      if (mounted) setState(() => _noteStatus = error.toString());
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _noteStatus = error.toString());
+      }
     } finally {
-      if (mounted) setState(() => _noteLoading = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _noteLoading = false);
+      }
     }
   }
 
   Future<void> _loadTips() async {
+    final generation = _loadGeneration;
     final stored = _recipe?['tips_json'];
+    if (stored == null) setState(() => _tipsLoading = true);
     try {
       final Object? tips;
       if (stored != null) {
@@ -142,7 +167,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         final result = await widget.api.get('$_recipePath/tips') as Json;
         tips = result['tips'];
       }
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       final values = _list(tips).whereType<String>();
       setState(() {
         _tipsError = null;
@@ -154,14 +179,22 @@ class _RecipeDetailState extends State<RecipeDetail> {
                 .toList();
       });
     } on Exception catch (error) {
-      if (mounted) setState(() => _tipsError = error.toString());
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _tipsError = error.toString());
+      }
+    } finally {
+      if (mounted && generation == _loadGeneration && _tipsLoading) {
+        setState(() => _tipsLoading = false);
+      }
     }
   }
 
   Future<void> _loadLists() async {
+    final generation = _loadGeneration;
+    setState(() => _listsLoading = true);
     try {
       final result = await widget.api.get('/api/collections') as Json;
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _listError = null;
         _localLists = objects(result['items'])
@@ -169,7 +202,13 @@ class _RecipeDetailState extends State<RecipeDetail> {
             .toList();
       });
     } on Exception catch (error) {
-      if (mounted) setState(() => _listError = error.toString());
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _listError = error.toString());
+      }
+    } finally {
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _listsLoading = false);
+      }
     }
   }
 
@@ -462,17 +501,17 @@ class _RecipeDetailState extends State<RecipeDetail> {
       if (_noteStatus != null) Text(_noteStatus!),
       if (_original == null && !_noteLoading && !_working)
         TextButton.icon(
-          onPressed: () => _action(_loadNote),
+          onPressed: _loadNote,
           style: _buttonStyle,
           icon: const Icon(Icons.refresh),
-          label: const Text('Notiz erneut laden'),
+          label: const Text('Notiz erneut laden', textAlign: TextAlign.center),
         ),
       if (_dirty && _saving == null)
         TextButton.icon(
           onPressed: _flushNote,
           style: _buttonStyle,
           icon: const Icon(Icons.save_outlined),
-          label: const Text('Notiz speichern'),
+          label: const Text('Notiz speichern', textAlign: TextAlign.center),
         ),
     ],
   );
@@ -489,9 +528,9 @@ class _RecipeDetailState extends State<RecipeDetail> {
       if (lists.isNotEmpty)
         Wrap(
           spacing: AppSpacing.related,
-          runSpacing: AppSpacing.related,
+          runSpacing: AppSpacing.tight,
           children: [
-            for (final list in lists) Chip(label: Text(text(list['name']))),
+            for (final list in lists) InfoPill(text(list['name'])),
           ],
         ),
       Text(
@@ -527,15 +566,15 @@ class _RecipeDetailState extends State<RecipeDetail> {
           ].any((field) => recipe[field] != null))
         Wrap(
           spacing: AppSpacing.related,
-          runSpacing: AppSpacing.related,
+          runSpacing: AppSpacing.tight,
           children: [
             if (recipe['total_seconds'] case final num seconds)
-              Chip(label: Text('${(seconds / 60).round()} Min. gesamt')),
+              InfoPill('${(seconds / 60).round()} Min. gesamt'),
             if (recipe['active_seconds'] case final num seconds)
-              Chip(label: Text('${(seconds / 60).round()} Min. Arbeitszeit')),
+              InfoPill('${(seconds / 60).round()} Min. Arbeitszeit'),
             if (recipe['servings'] != null)
-              Chip(label: Text('${recipe['servings']} Portionen')),
-            if (difficulty != null) Chip(label: Text(difficulty)),
+              InfoPill('${recipe['servings']} Portionen'),
+            if (difficulty != null) InfoPill(difficulty),
           ],
         ),
       _noteEditor(),
@@ -547,12 +586,14 @@ class _RecipeDetailState extends State<RecipeDetail> {
           title: const Text('Tipps'),
           children: [for (final tip in tips) ListTile(title: Text(tip))],
         ),
-      if (_tipsError != null)
+      if (_tipsLoading)
+        const LinearProgressIndicator(semanticsLabel: 'Tipps werden geladen')
+      else if (_tipsError != null)
         TextButton.icon(
-          onPressed: _working ? null : () => _action(_loadTips),
+          onPressed: _working ? null : _loadTips,
           style: _buttonStyle,
           icon: const Icon(Icons.refresh),
-          label: const Text('Tipps erneut laden'),
+          label: const Text('Tipps erneut laden', textAlign: TextAlign.center),
         ),
       if (!_calendarRecipe)
         Column(
@@ -563,12 +604,19 @@ class _RecipeDetailState extends State<RecipeDetail> {
               'Zu lokalen Listen hinzufügen',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (_listError != null)
+            if (_listsLoading)
+              const LinearProgressIndicator(
+                semanticsLabel: 'Rezeptlisten werden geladen',
+              )
+            else if (_listError != null)
               TextButton.icon(
-                onPressed: _working ? null : () => _action(_loadLists),
+                onPressed: _working ? null : _loadLists,
                 style: _buttonStyle,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Listen erneut laden'),
+                label: const Text(
+                  'Listen erneut laden',
+                  textAlign: TextAlign.center,
+                ),
               )
             else if (!_working && _localLists.isEmpty)
               const Text(
@@ -605,7 +653,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
             onPressed: _working ? null : () => _action(_addToShelf),
             style: _buttonStyle,
             icon: const Icon(Icons.playlist_add),
-            label: const Text('Zur Ablage hinzufügen'),
+            label: const Text(
+              'Zur Ablage hinzufügen',
+              textAlign: TextAlign.center,
+            ),
           ),
           FilledButton.icon(
             onPressed: _working
@@ -624,7 +675,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
                   }),
             style: _buttonStyle,
             icon: const Icon(Icons.calendar_today_outlined),
-            label: const Text('Heute kochen'),
+            label: const Text('Heute kochen', textAlign: TextAlign.center),
           ),
           FilledButton.icon(
             onPressed: _working
@@ -648,7 +699,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
                   }),
             style: _buttonStyle,
             icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Zum Einkaufswagen hinzufügen'),
+            label: const Text(
+              'Zum Einkaufswagen hinzufügen',
+              textAlign: TextAlign.center,
+            ),
           ),
           if (recipe['source_url'] case final String url)
             OutlinedButton.icon(
@@ -659,7 +713,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
                     }),
               style: _buttonStyle,
               icon: const Icon(Icons.open_in_new),
-              label: const Text('In Cookidoo öffnen'),
+              label: const Text(
+                'In Cookidoo öffnen',
+                textAlign: TextAlign.center,
+              ),
             ),
         ],
       ),
@@ -708,7 +765,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
                   onPressed: _working ? null : () => _load(_id),
                   style: _buttonStyle,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Erneut laden'),
+                  label: const Text(
+                    'Erneut laden',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
             ),

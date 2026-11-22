@@ -59,10 +59,20 @@ android {
             applicationIdSuffix = ".test"
             manifestPlaceholders["rezeptgartenLabel"] = "Rezeptgarten Test"
         }
+        getByName("profile") {
+            manifestPlaceholders["rezeptgartenLabel"] = "Rezeptgarten Test"
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             signingConfig = signingConfigs.findByName("rezeptgartenRelease")
         }
     }
+}
+
+androidComponents.onVariants(androidComponents.selector().withBuildType("profile")) {
+    // Flutter copies the profile build type to library plugins. The test ID
+    // belongs only to the application variant.
+    it.applicationId.set("de.rezeptgarten.rezeptgarten.test")
 }
 
 kotlin {

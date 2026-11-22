@@ -114,12 +114,16 @@ ThemeData rezeptgartenTheme(Brightness brightness, int accent) {
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(minimumSize: const Size(48, 48))
-          .copyWith(shape: actionShape, animationDuration: Durations.short4),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 40),
+        tapTargetSize: MaterialTapTargetSize.padded,
+      ).copyWith(shape: actionShape, animationDuration: Durations.short4),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48))
-          .copyWith(shape: actionShape, animationDuration: Durations.short4),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 40),
+        tapTargetSize: MaterialTapTargetSize.padded,
+      ).copyWith(shape: actionShape, animationDuration: Durations.short4),
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,

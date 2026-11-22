@@ -76,6 +76,7 @@ class RecipeCard extends StatefulWidget {
     required this.recipe,
     this.onTap,
     this.cornerAction,
+    this.picture,
     this.detail = false,
     this.compact = false,
   });
@@ -84,6 +85,7 @@ class RecipeCard extends StatefulWidget {
   final Json recipe;
   final VoidCallback? onTap;
   final RecipeCornerAction? cornerAction;
+  final Widget? picture;
   final bool detail;
   final bool compact;
 
@@ -95,24 +97,6 @@ class _RecipeCardState extends State<RecipeCard> {
   static const _titleLines = 2;
   static const _badgeLines = 2;
   bool _pressed = false;
-  late Future<Uint8List?> image = widget.api.image(
-    widget.recipe['image_file'],
-    full: widget.detail,
-  );
-
-  @override
-  void didUpdateWidget(RecipeCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.api != oldWidget.api ||
-        widget.recipe['image_file'] != oldWidget.recipe['image_file'] ||
-        widget.detail != oldWidget.detail) {
-      image = widget.api.image(
-        widget.recipe['image_file'],
-        full: widget.detail,
-      );
-    }
-  }
-
   Widget _picture(ThemeData theme, String? duration, String? portions) {
     final colors = theme.colorScheme;
     final hasNote =
@@ -133,36 +117,22 @@ class _RecipeCardState extends State<RecipeCard> {
         fit: StackFit.passthrough,
         children: [
           Positioned.fill(
-            child: FutureBuilder<Uint8List?>(
-              future: image,
-              builder: (context, snapshot) => snapshot.data == null
-                  ? ColoredBox(
-                      color: colors.tertiaryContainer,
-                      child: Center(
-                        child: CircleAvatar(
-                          radius: 21,
-                          backgroundColor: colors.surfaceContainerLowest,
-                          foregroundColor: colors.onSurface,
-                          child: const Icon(Icons.eco_outlined, size: 23),
-                        ),
-                      ),
-                    )
-                  : AnimatedScale(
-                      scale:
-                          _pressed && !MediaQuery.disableAnimationsOf(context)
-                          ? 1.025
-                          : 1,
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      child: Image.memory(
-                        snapshot.data!,
-                        fit: BoxFit.cover,
-                        cacheWidth: _decodeWidth(context, constraints.maxWidth),
-                      ),
-                    ),
-            ),
+            child:
+                widget.picture ??
+                AnimatedScale(
+                  scale: _pressed && !MediaQuery.disableAnimationsOf(context)
+                      ? 1.025
+                      : 1,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  child: RecipeImage(
+                    api: widget.api,
+                    filename: widget.recipe['image_file'],
+                    full: widget.detail,
+                  ),
+                ),
           ),
           SizedBox(height: max(constraints.maxWidth / 1.8, badgeHeight)),
           if (duration != null || portions != null)
@@ -172,24 +142,19 @@ class _RecipeCardState extends State<RecipeCard> {
               bottom: AppSpacing.tight,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: duration == null
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.spaceBetween,
                 spacing: AppSpacing.tight,
                 children: [
-                  Expanded(
-                    child: Align(
-                      alignment: AlignmentDirectional.bottomStart,
-                      child: duration == null
-                          ? null
-                          : _metadataBadge(theme, badgeStyle, duration),
+                  if (duration != null)
+                    Flexible(
+                      child: _metadataBadge(theme, badgeStyle, duration),
                     ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: AlignmentDirectional.bottomEnd,
-                      child: portions == null
-                          ? null
-                          : _metadataBadge(theme, badgeStyle, portions),
+                  if (portions != null)
+                    Flexible(
+                      child: _metadataBadge(theme, badgeStyle, portions),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -210,12 +175,6 @@ class _RecipeCardState extends State<RecipeCard> {
         ],
       ),
     );
-  }
-
-  int _decodeWidth(BuildContext context, double width) {
-    final pixels = width * MediaQuery.devicePixelRatioOf(context);
-    final sizes = widget.detail ? const [480, 720, 960] : const [240, 360, 480];
-    return sizes.firstWhere((size) => size >= pixels, orElse: () => sizes.last);
   }
 
   double _lineHeight(BuildContext context, TextStyle style) {
@@ -345,6 +304,73 @@ class _RecipeCardState extends State<RecipeCard> {
   }
 }
 
+class RecipeImage extends StatefulWidget {
+  const RecipeImage({
+    super.key,
+    required this.api,
+    required this.filename,
+    this.full = false,
+  });
+  final RezeptgartenApi api;
+  final Object? filename;
+  final bool full;
+  @override
+  State<RecipeImage> createState() => _RecipeImageState();
+}
+
+class _RecipeImageState extends State<RecipeImage> {
+  late Future<Uint8List?> image = widget.api.image(
+    widget.filename,
+    full: widget.full,
+  );
+
+  @override
+  void didUpdateWidget(RecipeImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.api != oldWidget.api ||
+        widget.filename != oldWidget.filename ||
+        widget.full != oldWidget.full) {
+      image = widget.api.image(widget.filename, full: widget.full);
+    }
+  }
+
+  int _decodeWidth(BuildContext context, double width) {
+    final pixels = width * MediaQuery.devicePixelRatioOf(context);
+    final sizes = widget.full
+        ? const [480, 720, 960]
+        : const [96, 160, 240, 360, 480];
+    return sizes.firstWhere((size) => size >= pixels, orElse: () => sizes.last);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, bounds) => FutureBuilder<Uint8List?>(
+        key: ObjectKey(image),
+        future: image,
+        builder: (context, snapshot) => snapshot.data == null
+            ? ColoredBox(
+                color: colors.tertiaryContainer,
+                child: Center(
+                  child: CircleAvatar(
+                    radius: 21,
+                    backgroundColor: colors.surfaceContainerLowest,
+                    foregroundColor: colors.onSurface,
+                    child: const Icon(Icons.eco_outlined, size: 23),
+                  ),
+                ),
+              )
+            : Image.memory(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                cacheWidth: _decodeWidth(context, bounds.maxWidth),
+              ),
+      ),
+    );
+  }
+}
+
 class RecipeCornerAction extends StatelessWidget {
   const RecipeCornerAction({
     super.key,
@@ -387,6 +413,7 @@ class CompactRecipeTile extends StatelessWidget {
     required this.actionLabel,
     required this.actionIcon,
     this.leading,
+    this.color,
     this.onTap,
     this.onAction,
   });
@@ -395,6 +422,7 @@ class CompactRecipeTile extends StatelessWidget {
   final String actionLabel;
   final IconData actionIcon;
   final Widget? leading;
+  final Color? color;
   final VoidCallback? onTap;
   final VoidCallback? onAction;
 
@@ -402,7 +430,7 @@ class CompactRecipeTile extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     shape: const StadiumBorder(),
     clipBehavior: Clip.antiAlias,
-    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+    color: color ?? Theme.of(context).colorScheme.surfaceContainerHigh,
     child: ListTile(
       contentPadding: const EdgeInsetsDirectional.only(start: AppSpacing.item),
       minTileHeight: 48,

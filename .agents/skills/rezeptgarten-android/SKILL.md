@@ -16,6 +16,7 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
 - Verwende `AppSpacing` für Seiten- und Kartenränder, Abschnitte sowie Abstände
   zwischen zusammengehörigen Bedienelementen. Verbundene Schalter und Abzeichen
   verwenden die kompakten Werte. Listenkarten erhalten ihren Abstand im Layout.
+- Prüfe zusammengehörige Aktionen auf gemeinsame Spaltenkanten. Die vier Direktzugriffe in „Deine Sammlung“ belegen je nach Platz eine, zwei oder vier Spalten. Vergleiche die Anordnung bei 332 dp mit normaler und großer Schrift. Reine Textpillen dürfen kompakt sein, antippbare Elemente brauchen auch bei kleiner sichtbarer Fläche ein 48-dp-Tippziel.
 - Bildbadges für Zeit und Portionen liegen in getrennten unteren Ecken.
   Die visuelle Kartenaktion bleibt innerhalb der Bildecke und behält ihr
   48-dp-Tippziel. Prüfe auch schmale Tagesspalten und größere Schrift.
@@ -37,6 +38,13 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
 - Bilder getrennt nach Vorschau und Original laden. Gleichzeitige Bildabrufe
   bündeln, die Cachefreigabe des Servers beachten und den Speicher begrenzen.
   Die Dekodierungsgröße an die physische Anzeigebreite anpassen.
+- Prüfe beim Öffnen und Schließen eines Rezepts die Anzahl der Abrufe. Reines Lesen
+  erhält Woche, Trefferseiten und Scrollposition. Langsame Wochenmedien und
+  Notizsymbole dürfen die Navigation nicht aufhalten. Eine geladene Notiz bleibt
+  während der Tipps- und Listenabfrage bearbeitbar. Nach bestätigtem Hinzufügen
+  eines Rezepts im Detail den Zähler über den Serverstatus abgleichen.
+- Telegram und Heimnetz verwenden dieselbe sichtbare Datumsdarstellung.
+  Einkaufszutaten in beiden Modi beim Scrollen aufbauen.
 - Prüfe die sechs Navigationsziele bei etwa 332 dp und mit großer Schrift.
   Auf Handys öffnen Rezeptfilter als Bottom Sheet und behalten dieselben
   Eingaben und Aktionen wie im größeren Fenster. Auf schmalen Rezeptlisten
@@ -56,24 +64,29 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   und Vorratskategorien zeigen dieselben getönten aufklappbaren Kopfzeilen.
   Die Listenbearbeitung zeigt vorhandene und hinzufügbare Rezepte unter
   „Alle Rezepte“ mit einer gemeinsamen Suche. Ein Plus in der oberen rechten
-  Bildecke fügt Rezepte hinzu. „Rezepte entfernen“ aktiviert das X an
-  vorhandenen Karten. Sie wackeln außer bei reduzierter Bewegung. „Fertig“
+  Bildecke fügt Rezepte hinzu. Der Papierkorb rechts neben „In dieser Liste“ aktiviert das X an
+  vorhandenen Karten. Sie wackeln außer bei reduzierter Bewegung. Das Häkchen
   beendet den Modus. Außerhalb davon öffnet die Karte die Rezeptdetails.
 - Horizontales Wischen im Hauptinhalt wechselt zum benachbarten Eintrag der
   Navigation. Der horizontale `PageView` rastet mit Flutters Seitenphysik ein.
   Die Navigationsmarkierung wechselt beim Überqueren der Seitenmitte.
+  Bei schnellen Richtungswechseln erst nach dem Einrasten den Zielbereich
+  aktivieren und vorgemerkte Aktualisierungen ausführen. Die Test-APK wird
+  im Flutter-Profilmodus mit der Paket-ID und Signatur des Testkanals gebaut.
+  Prüfe schnelle Wische in beide Richtungen auch beim Loslassen kurz vor dem
+  Ziel. Die Seite soll bis zum Ziel in Wischrichtung laufen.
   Geladene Tabs bleiben beim Wechsel bestehen und laden bei Datenänderungen
   oder auf Anforderung erneut. Tabtasten verwenden denselben `PageController`.
   Bei reduzierter Bewegung
   wechselt die Ansicht direkt. Der
   horizontale Tageswechsel und das seitliche Scrollen der Wochenablage in
   „Meine Woche“ haben in ihren Bereichen Vorrang. Die Ablage zeigt eine Reihe
-  kompakter Karten mit Rezeptbild über dem Titel und Symbolen für Platzhalter.
+  kompakter Karten mit Rezeptbild oder Platzhaltersymbol über dem Titel. Platzhalter- und Listengruppen haben dieselben Kopfzeilen und Abstände. In geöffneten Wochenlisten zeigen Rezeptpillen ein Vorschaubild und ein Plus für die Ablage.
   Einträge werden mit der vertikalen Wischgeste entfernt.
 - Rezeptdetails zeigen kontrastreiche Vorratspunkte. Die Schaltfläche über
   „Heute kochen“ fügt das Rezept über die gemeinsame Kalender-API zur Ablage der
   aktuellen Berliner Kalenderwoche hinzu. Aktionsschaltflächen zeigen ein
-  passendes Symbol links vor dem linksbündigen Text.
+  passendes Symbol und den Text als zentrierte Gruppe.
 - Der Schalter „Debug-Modus“ ist auch offline in den Einstellungen verfügbar.
   Die Debug-Rezepte verwenden unterschiedliche mitgelieferte Vorschaubilder.
   Der Modus verwendet `DebugRezeptgartenApi` mit Beispieldaten für die normalen

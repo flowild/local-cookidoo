@@ -48,7 +48,7 @@ $linuxApp = $wslPath.Trim()
 $jdk = '/home/flutterdev/android-build-setup/jdk'
 $sdk = '/home/flutterdev/android-build-setup/sdk'
 $wsl = @('-d', 'Ubuntu-24.04', '--cd', $linuxApp, '--', 'env', "JAVA_HOME=$jdk", "ANDROID_HOME=$sdk", "ANDROID_SDK_ROOT=$sdk")
-$mode = if ($Release) { 'release' } else { 'debug' }
+$mode = if ($Release) { 'release' } else { 'profile' }
 $channel = if ($Release) { 'release' } else { 'test' }
 $packageId = if ($Release) { 'de.rezeptgarten.rezeptgarten' } else { 'de.rezeptgarten.rezeptgarten.test' }
 
@@ -76,6 +76,9 @@ try {
     $abis = @($zip.Entries | Where-Object FullName -Match '^lib/[^/]+/.+\.so$' |
         ForEach-Object { $_.FullName.Split('/')[1] } | Sort-Object -Unique)
     if ($abis.Count -ne 1 -or $abis[0] -ne 'arm64-v8a') { throw 'Unerwartete APK-Architektur.' }
+    if (-not $zip.GetEntry('lib/arm64-v8a/libapp.so')) {
+        throw 'Der vorab kompilierte Flutter-App-Code fehlt in der APK.'
+    }
 } finally {
     $zip.Dispose()
 }

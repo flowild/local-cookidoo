@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
@@ -8,6 +9,7 @@ import 'spacing.dart';
 import 'appearance.dart';
 import 'ingredient_icon.dart';
 import 'pantry_view.dart';
+import 'pill_widgets.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
@@ -68,6 +70,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   ];
   RezeptgartenApi get api => widget.api;
   int area = 3;
+  late final _navigationIndex = ValueNotifier<int>(area);
   int? serverCartCount;
   bool busy = false;
   bool syncPending = false;
@@ -81,6 +84,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   int viewRefresh = 0;
   static const _retainedAreas = {1, 2, 3, 5};
   final _dirtyAreas = <int>{};
+  final _pullingAreas = <int>{};
+  int _recipeRevision = 0;
+  int _cartRevision = 0;
   final _areaRefreshes = List.filled(areas.length, 0);
   int _session = 0;
   var _pagerKey = GlobalKey<_SectionPagerState>();
@@ -123,6 +129,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           area != 3 &&
           area != 4) {
         area = 3;
+        _navigationIndex.value = area;
       }
       if (_wasLocal != _local) {
         _wasLocal = _local;
@@ -137,7 +144,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   void _resetSession() {
+    _navigationIndex.value = area;
     _session++;
+    syncGeneration++;
+    syncPoll?.cancel();
+    startupSyncAttempted = false;
+    syncRunning = false;
+    syncPending = false;
+    _pullingAreas.clear();
     _pagerKey = GlobalKey<_SectionPagerState>();
     _areaData.clear();
     _dirtyAreas.clear();
@@ -149,9 +163,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   Future<void> _startupSync() async {
     if (startupSyncAttempted || !_local) return;
     startupSyncAttempted = true;
+    final session = _session;
     try {
       final status = await api.get('/api/status', timeout: shortRead) as Json;
-      if (!mounted) return;
+      if (!mounted || session != _session) return;
       if (!_local) {
         startupSyncAttempted = false;
         return;
@@ -159,7 +174,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       _adoptStatus(status);
       if (status['connected'] == true) await _beginSync(notify: false);
     } on Exception {
-      startupSyncAttempted = false;
+      if (session == _session) startupSyncAttempted = false;
       // Normal view loading reports connection errors.
     }
   }
@@ -204,7 +219,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     ]);
     final featured = responses[0] as Json;
     final status = responses[1] as Json;
-    if (mounted && area == 0 && session == _session) _adoptStatus(status);
+    if (mounted && session == _session) _adoptStatus(status);
     return {
       ...featured,
       'stats': status['stats'],
@@ -214,8 +229,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   Future<Json> _loadCart() async {
     final session = _session;
+    final revision = ++_cartRevision;
     final cart = await api.get('/api/cart', timeout: shortRead) as Json;
-    if (mounted && area == 4 && session == _session) {
+    if (mounted && session == _session && revision == _cartRevision) {
       final count = objects(cart['items'])
           .where((item) => item['kind'] == 'recipe')
           .length;
@@ -263,11 +279,12 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         ),
       ),
     );
-    if (mounted && !busy) await _refresh();
+    if (mounted && _dirtyAreas.contains(area)) await _refresh();
   }
 
   Future<void> _beginSync({bool notify = true}) async {
     if (!_local || syncPending || syncRunning || busy) return;
+    final session = _session;
     setState(() {
       syncPending = true;
       syncGeneration++;
@@ -278,7 +295,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       notice = result['started'] == true
           ? 'Synchronisierung gestartet.'
           : 'Die Synchronisierung läuft bereits.';
-      if (mounted) {
+      if (mounted && session == _session) {
         setState(() {
           syncRunning = true;
           syncPollFailed = false;
@@ -288,7 +305,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     } on Exception catch (error) {
       notice = error.toString();
     }
-    if (!mounted) return;
+    if (!mounted || session != _session) return;
     setState(() => syncPending = false);
     if (notify || !syncRunning) {
       ScaffoldMessenger.of(context)
@@ -297,18 +314,35 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Future<void> _pullRefresh() async {
+    final requestedArea = area;
+    final session = _session;
     await _syncFromPull();
-    if (mounted) await _refresh();
+    if (!mounted || session != _session) return;
+    if (requestedArea == area) {
+      await _refresh();
+    } else {
+      _dirtyAreas.add(requestedArea);
+    }
   }
 
   Future<void> _syncFromPull() async {
-    await _beginSync();
-    final deadline = DateTime.now().add(const Duration(minutes: 10));
-    while (mounted &&
-        _local &&
-        (syncPending || syncRunning) &&
-        DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(seconds: 1));
+    final session = _session;
+    final pullArea = ModalRoute.of(context)?.isCurrent == true ? area : null;
+    if (pullArea != null) _pullingAreas.add(pullArea);
+    try {
+      await _beginSync();
+      final deadline = DateTime.now().add(const Duration(minutes: 10));
+      while (mounted &&
+          session == _session &&
+          _local &&
+          (syncPending || syncRunning) &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+    } finally {
+      if (session == _session && pullArea != null) {
+        _pullingAreas.remove(pullArea);
+      }
     }
   }
 
@@ -334,8 +368,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           );
         }
         if (wasRunning && !syncRunning) {
+          _recipeRevision++;
           _dirtyAreas.addAll([0, 1, 2, 3, 4, 5]);
-          if (ModalRoute.of(context)?.isCurrent == true) await _refresh();
+          // A section's pull handler already reloads it after the sync.
+          _dirtyAreas.removeAll(_pullingAreas);
+          if (_dirtyAreas.contains(area) &&
+              ModalRoute.of(context)?.isCurrent == true) {
+            await _refresh();
+          }
         }
       } on Exception {
         if (mounted && generation == syncGeneration) {
@@ -505,6 +545,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   @override
   void dispose() {
+    _navigationIndex.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.connection?.removeListener(_connectionChanged);
     syncPoll?.cancel();
@@ -515,6 +556,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
   Future<void> _recipe(Json recipe, {bool calendar = false}) async {
     if (recipe['id'] is! String) return;
+    final session = _session;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RecipeDetail(
@@ -522,13 +564,43 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           preview: recipe,
           calendar: calendar,
           onSync: _syncFromPull,
-          onRecipeCardsChanged: () => _dirtyAreas.addAll([0, 1, 2, 3]),
-          onWeekChanged: () => _dirtyAreas.add(3),
-          onCartChanged: () => _dirtyAreas.add(4),
+          onRecipeCardsChanged: () {
+            if (session != _session) return;
+            _recipeRevision++;
+            _dirtyAreas.addAll([0, 1, 2, 3]);
+          },
+          onWeekChanged: () {
+            if (session == _session) _dirtyAreas.add(3);
+          },
+          onCartChanged: () {
+            if (session == _session) unawaited(_cartAdded(session));
+          },
         ),
       ),
     );
-    if (mounted && _dirtyAreas.contains(area)) await _refresh();
+    if (mounted &&
+        session == _session &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        _dirtyAreas.contains(area)) {
+      await _refresh();
+    }
+  }
+
+  Future<void> _cartAdded(int session) async {
+    _dirtyAreas.add(4);
+    final revision = ++_cartRevision;
+    try {
+      final status = await api.get('/api/status', timeout: shortRead) as Json;
+      final count = status['cart_recipe_count'];
+      if (mounted &&
+          session == _session &&
+          revision == _cartRevision &&
+          count is int) {
+        setState(() => serverCartCount = count);
+      }
+    } on Exception {
+      // The add succeeded. The next cart read reconciles the count.
+    }
   }
 
   Widget _heading(String title) =>
@@ -599,15 +671,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         ),
       if (item['status'] == 'uncertain') ...[
         const Text('Bitte prüfe den Eintrag in Cookidoo.'),
-        Wrap(
-          spacing: AppSpacing.related,
-          runSpacing: AppSpacing.related,
+        ActionPillGrid(
+          minColumnWidth: 164,
           children: [
             for (final (value, label) in [
               ('done', 'Dort vorhanden'),
               ('pending', 'Dort nicht vorhanden'),
             ])
               OutlinedButton(
+                style: ActionPillGrid.buttonStyle,
                 onPressed: editable
                     ? () async {
                         if (await _confirm(
@@ -865,16 +937,20 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                   ),
               ],
             ),
-            Wrap(
-              spacing: AppSpacing.related,
-              runSpacing: AppSpacing.related,
+            ActionPillGrid(
+              minColumnWidth: 208,
               children: [
                 FilledButton.icon(
+                  style: ActionPillGrid.buttonStyle,
                   onPressed: editable ? _addCartItem : null,
                   icon: const Icon(Icons.add),
-                  label: const Text('Artikel hinzufügen'),
+                  label: const Text(
+                    'Artikel hinzufügen',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 OutlinedButton.icon(
+                  style: ActionPillGrid.buttonStyle,
                   onPressed:
                       editable &&
                           items.any((item) => item['status'] == 'pending')
@@ -886,7 +962,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                         )
                       : null,
                   icon: const Icon(Icons.shopping_cart_outlined),
-                  label: const Text('An Cookidoo übertragen'),
+                  label: const Text(
+                    'An Cookidoo übertragen',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
             ),
@@ -975,30 +1054,33 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             ),
           if (stats['last_sync'] case final String lastSync)
             Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
-          Wrap(
-            spacing: AppSpacing.related,
-            runSpacing: AppSpacing.related,
+          ActionPillGrid(
+            minColumnWidth: 130,
             children: [
-              FilledButton.tonalIcon(
-                onPressed: () => _navigate(1),
-                icon: const Icon(Icons.layers_outlined),
-                label: const Text('Alle Listen ansehen'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () => _navigate(2),
-                icon: const Icon(Icons.menu_book),
-                label: const Text('Alle Rezepte'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () => _navigate(3),
-                icon: const Icon(Icons.calendar_today_outlined),
-                label: const Text('Meine Woche'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () => _navigate(4),
-                icon: const Icon(Icons.shopping_cart_outlined),
-                label: const Text('Einkaufswagen'),
-              ),
+              for (final (area, icon, label) in [
+                (1, Icons.layers_outlined, 'Rezeptlisten'),
+                (2, Icons.menu_book, 'Alle Rezepte'),
+                (3, Icons.calendar_today_outlined, 'Meine Woche'),
+                (4, Icons.shopping_cart_outlined, 'Einkaufswagen'),
+              ])
+                FilledButton.tonal(
+                  style: ActionPillGrid.buttonStyle,
+                  onPressed: () => _navigate(area),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: AppSpacing.tight,
+                    children: [
+                      Icon(icon),
+                      Flexible(
+                        child: Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(letterSpacing: 0),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ]),
@@ -1021,6 +1103,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         openRecipe: _recipe,
         onSync: _syncFromPull,
         onChanged: () => _dirtyAreas.addAll([0, 2, 3]),
+        recipeRevision: () => _recipeRevision,
+        onManageClosed: (changed) async {
+          if (changed || _dirtyAreas.contains(1)) await _refresh();
+        },
         refreshCount: refreshCount,
       ),
       2 => RecipeBrowser(
@@ -1217,24 +1303,27 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         child: Row(
           children: [
             if (useRail)
-              NavigationRail(
-                selectedIndex: area,
-                extended: width >= 1200,
-                labelType: width >= 1200
-                    ? NavigationRailLabelType.none
-                    : NavigationRailLabelType.all,
-                useIndicator: true,
-                scrollable: true,
-                onDestinationSelected: _navigate,
-                destinations: [
-                  for (final (index, label) in areas.indexed)
-                    NavigationRailDestination(
-                      icon: Icon(icons[index]),
-                      selectedIcon: Icon(selectedIcons[index]),
-                      label: Text(label),
-                      disabled: !_local && index != 3 && index != 4,
-                    ),
-                ],
+              ValueListenableBuilder<int>(
+                valueListenable: _navigationIndex,
+                builder: (context, index, _) => NavigationRail(
+                  selectedIndex: index,
+                  extended: width >= 1200,
+                  labelType: width >= 1200
+                      ? NavigationRailLabelType.none
+                      : NavigationRailLabelType.all,
+                  useIndicator: true,
+                  scrollable: true,
+                  onDestinationSelected: _navigate,
+                  destinations: [
+                    for (final (index, label) in areas.indexed)
+                      NavigationRailDestination(
+                        icon: Icon(icons[index]),
+                        selectedIcon: Icon(selectedIcons[index]),
+                        label: Text(label),
+                        disabled: !_local && index != 3 && index != 4,
+                      ),
+                  ],
+                ),
               ),
             Expanded(
               key: const ValueKey('main-content'),
@@ -1245,6 +1334,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                 count: _local || area < 3 ? areas.length : 2,
                 swipeEnabled: !busy && (_local || area >= 3),
                 canOpen: _canOpen,
+                onPageChanged: (index) => _navigationIndex.value = index,
                 onOpen: _open,
                 builder: _local ? _localArea : _remoteArea,
               ),
@@ -1254,22 +1344,25 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       ),
       bottomNavigationBar: useRail
           ? null
-          : NavigationBar(
-              selectedIndex: area,
-              animationDuration: Duration.zero,
-              labelBehavior: hideNavigationLabels
-                  ? NavigationDestinationLabelBehavior.alwaysHide
-                  : NavigationDestinationLabelBehavior.alwaysShow,
-              onDestinationSelected: _navigate,
-              destinations: [
-                for (final (index, label) in areas.indexed)
-                  NavigationDestination(
-                    icon: Icon(icons[index]),
-                    selectedIcon: Icon(selectedIcons[index]),
-                    label: compactToolbar && index == 0 ? 'Start' : label,
-                    enabled: _local || index == 3 || index == 4,
-                  ),
-              ],
+          : ValueListenableBuilder<int>(
+              valueListenable: _navigationIndex,
+              builder: (context, index, _) => NavigationBar(
+                selectedIndex: index,
+                animationDuration: Duration.zero,
+                labelBehavior: hideNavigationLabels
+                    ? NavigationDestinationLabelBehavior.alwaysHide
+                    : NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: _navigate,
+                destinations: [
+                  for (final (index, label) in areas.indexed)
+                    NavigationDestination(
+                      icon: Icon(icons[index]),
+                      selectedIcon: Icon(selectedIcons[index]),
+                      label: compactToolbar && index == 0 ? 'Start' : label,
+                      enabled: _local || index == 3 || index == 4,
+                    ),
+                ],
+              ),
             ),
     );
   }
@@ -1313,6 +1406,7 @@ class _SectionPager extends StatefulWidget {
     required this.count,
     required this.swipeEnabled,
     required this.canOpen,
+    required this.onPageChanged,
     required this.onOpen,
     required this.builder,
   });
@@ -1322,11 +1416,53 @@ class _SectionPager extends StatefulWidget {
   final int count;
   final bool swipeEnabled;
   final bool Function(int) canOpen;
+  final ValueChanged<int> onPageChanged;
   final ValueChanged<int> onOpen;
   final Widget Function(int) builder;
 
   @override
   State<_SectionPager> createState() => _SectionPagerState();
+}
+
+// The main pager uses full-width pages. Keep Flutter's target selection and
+// slow drags, but brake a fast release according to the remaining distance.
+class _SectionScrollPhysics extends PageScrollPhysics {
+  const _SectionScrollPhysics({super.parent});
+
+  @override
+  _SectionScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _SectionScrollPhysics(parent: buildParent(ancestor));
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    final normal = super.createBallisticSimulation(position, velocity);
+    final tolerance = toleranceFor(position);
+    if (normal is! ScrollSpringSimulation ||
+        position.outOfRange ||
+        velocity.abs() <= tolerance.velocity ||
+        position.viewportDimension <= 0) {
+      return normal;
+    }
+    final width = position.viewportDimension;
+    final targetPage = (position.pixels / width + velocity.sign * 0.5).round();
+    final target = (targetPage * width).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    final distance = (target - position.pixels).abs();
+    final limit = distance * math.sqrt(spring.stiffness / spring.mass);
+    if (velocity.abs() <= limit) return normal;
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity.sign * limit,
+      tolerance: tolerance,
+    );
+  }
 }
 
 class _SectionPagerState extends State<_SectionPager> {
@@ -1378,7 +1514,7 @@ class _SectionPagerState extends State<_SectionPager> {
       return;
     }
     final page = _controller.page;
-    if (page == null) return;
+    if (page == null || (page - page.round()).abs() > 0.000001) return;
     final index = page.round() + widget.firstIndex;
     if (index == widget.index) return;
     if (widget.canOpen(index)) {
@@ -1425,13 +1561,14 @@ class _SectionPagerState extends State<_SectionPager> {
           child: PageView.builder(
             key: const ValueKey('main-pager'),
             controller: _controller,
+            pageSnapping: false,
             physics: !widget.swipeEnabled || reduceMotion
                 ? const NeverScrollableScrollPhysics()
-                : null,
+                : const _SectionScrollPhysics(),
             itemCount: widget.count,
             onPageChanged: (page) {
               final index = page + widget.firstIndex;
-              if (widget.canOpen(index)) widget.onOpen(index);
+              if (widget.canOpen(index)) widget.onPageChanged(index);
             },
             itemBuilder: (context, page) {
               final index = page + widget.firstIndex;

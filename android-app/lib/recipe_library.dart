@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'pill_widgets.dart';
 import 'expandable_list_card.dart';
 import 'spacing.dart';
 import 'recipe_card.dart';
@@ -27,6 +28,7 @@ class RecipeBrowser extends StatefulWidget {
     this.searchFocus,
     this.onSync,
     this.onCollectionChanged,
+    this.recipeRevision,
   });
 
   final RezeptgartenApi api;
@@ -36,6 +38,7 @@ class RecipeBrowser extends StatefulWidget {
   final FocusNode? searchFocus;
   final Future<void> Function()? onSync;
   final VoidCallback? onCollectionChanged;
+  final int Function()? recipeRevision;
 
   @override
   State<RecipeBrowser> createState() => _RecipeBrowserState();
@@ -280,8 +283,9 @@ class _RecipeBrowserState extends State<RecipeBrowser>
 
   Future<void> _open(Json recipe) async {
     if (_saving) return;
+    final revision = widget.recipeRevision?.call();
     await widget.openRecipe(recipe);
-    if (mounted) await _fetch();
+    if (mounted && revision != widget.recipeRevision?.call()) await _fetch();
   }
 
   Future<void> _chooseSort() async {
@@ -375,7 +379,10 @@ class _RecipeBrowserState extends State<RecipeBrowser>
                           onPressed: _chooseSort,
                           style: _searchActionStyle,
                           icon: const Icon(Icons.sort),
-                          label: Text(_sorts[_sort]!),
+                          label: Text(
+                            _sorts[_sort]!,
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                       Expanded(
@@ -385,6 +392,7 @@ class _RecipeBrowserState extends State<RecipeBrowser>
                           icon: const Icon(Icons.filter_list),
                           label: Text(
                             _filters.active ? 'Filter bearbeiten' : 'Filtern',
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -400,14 +408,14 @@ class _RecipeBrowserState extends State<RecipeBrowser>
       if (_filters.active)
         Wrap(
           spacing: AppSpacing.related,
-          runSpacing: AppSpacing.related,
+          runSpacing: AppSpacing.tight,
           children: [
             for (final ingredient in _filters.ingredients)
-              Chip(label: Text(ingredient)),
+              InfoPill(ingredient),
             if (_filters.servings case final int servings)
-              Chip(label: Text('Ab $servings Portionen')),
+              InfoPill('Ab $servings Portionen'),
             if (_filters.minutes case final int minutes)
-              Chip(label: Text('Bis $minutes Min.')),
+              InfoPill('Bis $minutes Min.'),
           ],
         ),
       if (_error != null) ...[
@@ -545,15 +553,10 @@ class _RecipeBrowserState extends State<RecipeBrowser>
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          Flexible(
-            child: FilledButton.tonal(
-              onPressed: _saving ? null : _toggleRemoving,
-              style: _searchActionStyle,
-              child: Text(
-                _removing ? 'Fertig' : 'Rezepte entfernen',
-                textAlign: TextAlign.center,
-              ),
-            ),
+          IconButton.filledTonal(
+            tooltip: _removing ? 'Fertig' : 'Rezepte entfernen',
+            onPressed: _saving ? null : _toggleRemoving,
+            icon: Icon(_removing ? Icons.check : Icons.delete_outline),
           ),
         ],
       ),
@@ -898,12 +901,16 @@ class RecipeCollections extends StatefulWidget {
     this.refreshCount = 0,
     this.onSync,
     this.onChanged,
+    this.recipeRevision,
+    this.onManageClosed,
   });
   final RezeptgartenApi api;
   final OpenRecipe openRecipe;
   final int refreshCount;
   final Future<void> Function()? onSync;
   final VoidCallback? onChanged;
+  final int Function()? recipeRevision;
+  final Future<void> Function(bool changed)? onManageClosed;
 
   @override
   State<RecipeCollections> createState() => _RecipeCollectionsState();
@@ -961,6 +968,7 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
   }
 
   Future<void> _open(Json list) async {
+    var changed = false;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RecipeBrowser(
@@ -968,11 +976,20 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
           openRecipe: widget.openRecipe,
           collection: list,
           onSync: widget.onSync,
-          onCollectionChanged: widget.onChanged,
+          recipeRevision: widget.recipeRevision,
+          onCollectionChanged: () {
+            changed = true;
+            widget.onChanged?.call();
+          },
         ),
       ),
     );
-    if (mounted) await _reload();
+    if (!mounted) return;
+    if (widget.onManageClosed case final notify?) {
+      await notify(changed);
+    } else if (changed) {
+      await _reload();
+    }
   }
 
   @override
@@ -1004,7 +1021,10 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
                   child: FilledButton.icon(
                     onPressed: _creating ? null : _create,
                     icon: const Icon(Icons.add),
-                    label: const Text('Neue Liste'),
+                    label: const Text(
+                      'Neue Liste',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
                 TextField(

@@ -283,7 +283,7 @@ void main() {
 
     final removeRice = find.byTooltip('Reis aus der Liste entfernen');
     expect(removeRice, findsNothing);
-    await tester.tap(find.text('Rezepte entfernen'));
+    await tester.tap(find.byTooltip('Rezepte entfernen'));
     await tester.pump();
     expect(removeRice, findsOneWidget);
     final rice = find.widgetWithText(RecipeCard, 'Reis');
@@ -297,7 +297,7 @@ void main() {
     expect(removeRice, findsNothing);
     expect(addRice, findsOneWidget);
 
-    await tester.tap(find.text('Fertig'));
+    await tester.tap(find.byTooltip('Fertig'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Gemüsesuppe aus der Liste entfernen'), findsNothing);
     final deleteButton = find.descendant(

@@ -58,7 +58,11 @@ den Android-Bildcache zurück. Erfolgreiche Bildantworten mit Cachefreigabe
 werden im Arbeitsspeicher wiederverwendet. Andere API-Antworten verwenden
 keinen HTTP-Cache.
 Die Übersichtskarte „Deine Sammlung“ bietet Direktzugriffe auf Rezeptlisten,
-alle Rezepte, die Woche und den Einkaufswagen.
+alle Rezepte, die Woche und den Einkaufswagen. Die vier Schaltflächen teilen
+sich gleich breite Spalten. Auf Handys steht der Einkaufswagen unten rechts,
+bei großer Schrift oder knapper Breite stehen die Ziele untereinander.
+Reine Textkennzeichen für Rezeptdaten, aktive Filter und Kalender sind kompakt.
+Aktionen behalten ein mindestens 48 dp hohes Tippziel auf Android.
 Auf schmalen Android-Displays heißt der Übersichts-Tab „Start“. Wenn für die
 Schriftgröße zu wenig Platz ist, zeigt die Navigation die sechs Symbole mit
 zugänglichen Beschriftungen. Die Rezeptbibliothek zeigt zwei Karten je Reihe,
@@ -93,8 +97,8 @@ Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Noti
 über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
 Kontrastreiche Punkte markieren den Zutatenstatus. „Zur Ablage hinzufügen“
 speichert das Rezept in der Ablage der aktuellen Berliner Kalenderwoche und
-steht direkt über „Heute kochen“. Die Aktionsschaltflächen richten Symbole
-und Beschriftungen gemeinsam links aus.
+steht direkt über „Heute kochen“. In Aktionspillen stehen Symbol und
+Beschriftung als Gruppe mittig, auch bei einem Zeilenumbruch.
 Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
 Portionen, Gesamtzeit und Sortierung. Sortieren und Filtern teilen sich die
 Reihe unter der Suche gleich breit. Lokale Listen lassen sich anlegen, nach
@@ -106,8 +110,9 @@ und Schriftgröße. Rezeptlisten und Vorratskategorien verwenden dieselbe
 getönte Kopfzeile für aufklappbare Gruppen.
 Die Listenbearbeitung zeigt unter „Alle Rezepte“ vorhandene und hinzufügbare
 Rezepte mit einer gemeinsamen Suche. Hinzufügbare Karten haben ein Plus oben rechts.
-„Rezepte entfernen“ aktiviert das X an zugeordneten Karten. Die Karten wackeln
-bei aktiver Animation. „Fertig“ beendet den Modus.
+Der Papierkorb rechts neben „In dieser Liste“ aktiviert das X an zugeordneten
+Karten. Die Karten wackeln bei aktiver Animation. Das Häkchen an derselben Stelle
+beendet den Modus.
 Das Papierkorb-Symbol oben rechts in der Titelleiste öffnet die Bestätigung
 zum Löschen der Liste.
 Der Android-Vorrat verwendet den gemeinsamen Zutatenkatalog und die gespeicherte
@@ -117,7 +122,11 @@ werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
 Die Wochenablage zeigt kompakte Rezeptkarten mit dem Bild über dem Titel in
-einer seitlich scrollbaren Reihe. Ein Wisch nach unten entfernt den Eintrag.
+einer seitlich scrollbaren Reihe. Abgelegte Platzhalter haben denselben Rahmen
+und zeigen ihr Symbol über dem Titel. Ein Wisch nach unten entfernt den Eintrag.
+Die Gruppen „Platzhalter“ und „Lokale Listen“ nutzen dieselben aufklappbaren
+Köpfe und Abstände. In lokalen Wochenlisten hat jede Rezeptzeile ein Vorschaubild
+und rechts ein Plus. Nach dem Hinzufügen zeigt sie ein Häkchen.
 Der Debug-Modus zeigt unterscheidbare mitgelieferte Rezeptbilder.
 Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo.
 Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
@@ -341,9 +350,20 @@ In Android wechselt horizontales Wischen im Inhaltsbereich zum benachbarten
 Hauptbereich. Flutter berücksichtigt beim Einrasten Zugstrecke und
 Wischgeschwindigkeit. Beim Überqueren der Bildschirmmitte wechselt die
 Markierung unten sofort. Der Tabwechsel verwendet bereits geladene Ansichten
-weiter. Änderungen an den Daten und angeforderte Aktualisierungen lösen
+weiter. Erst nach dem Einrasten wird der Zielbereich aktiv und lädt vorgemerkte
+Änderungen. Beim schnellen Loslassen kurz vor dem Ziel bremst der Hauptbereich
+über die verbleibende Strecke und rastet ohne Zurückfedern ein.
+Der Android-Testkanal verwendet vorab kompilierten Flutter-Code
+im Profilmodus. Änderungen an den Daten und angeforderte Aktualisierungen lösen
 gezielte neue Abrufe aus. Antippen eines Tabs nutzt denselben Seitencontroller.
 Bei reduzierter Bewegung wechselt die Ansicht direkt. Im Kalender von
 „Meine Woche“ blättert dieselbe Geste weiterhin zwischen den Tagen.
 Beim Aktualisieren bereits geladener Listen, Vorratskategorien und Wocheninhalte
 bleibt deren Position erhalten.
+
+Beim Öffnen eines Wochenrezepts erscheint die Detailansicht direkt. Nach reinem
+Lesen behalten Woche und Bibliothek ihren geladenen Stand. Eine geladene Notiz
+ist während des Abrufs von Tipps und Listen bearbeitbar. Bestätigtes Hinzufügen
+im Rezeptdetail aktualisiert den Rezeptzähler in der Kopfzeile. Beide Android-
+Verbindungsmodi zeigen Kalenderdaten im deutschen Format und bauen Einkaufszutaten
+beim Scrollen auf.

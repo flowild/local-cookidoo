@@ -21,15 +21,6 @@ const _placeholders = {
   'abendbrot': ('Abendbrot', '🍞'),
   'resteessen': ('Resteessen', '🍲'),
 };
-const _weekdays = [
-  'Montag',
-  'Dienstag',
-  'Mittwoch',
-  'Donnerstag',
-  'Freitag',
-  'Samstag',
-  'Sonntag',
-];
 String _dayString(DateTime value) => value.toIso8601String().substring(0, 10);
 
 class _WeekEntry {
@@ -97,6 +88,7 @@ class _WeekViewState extends State<WeekView> {
   String? _selected;
   final _gestureDistance = ValueNotifier(Offset.zero);
   Future<void>? _enrichment;
+  Completer<void>? _detailClosed;
 
   String? get _monday =>
       objects(_week?['days']).firstOrNull?['date'] as String?;
@@ -129,6 +121,8 @@ class _WeekViewState extends State<WeekView> {
 
   @override
   void dispose() {
+    _detailClosed?.complete();
+    _detailClosed = null;
     _daysController.dispose();
     _gestureDistance.dispose();
     _poll?.cancel();
@@ -279,8 +273,9 @@ class _WeekViewState extends State<WeekView> {
           mounted &&
           request == _request &&
           !_busy &&
-          !_openingRecipe &&
           !_loading) {
+        await _detailClosed?.future;
+        if (!mounted || request != _request || _busy || _loading) return;
         final batch = ids.skip(index).take(8).toList();
         index += batch.length;
         final uri = Uri(
@@ -288,11 +283,7 @@ class _WeekViewState extends State<WeekView> {
           queryParameters: {'recipe_id': batch},
         );
         final result = await widget.api.get(uri.toString()) as Json;
-        if (!mounted ||
-            request != _request ||
-            _busy ||
-            _loading ||
-            _openingRecipe) {
+        if (!mounted || request != _request || _busy || _loading) {
           return;
         }
         final badges = {
@@ -319,7 +310,8 @@ class _WeekViewState extends State<WeekView> {
     } on Exception {
       // The calendar is still usable while optional badges are unavailable.
     }
-    if (!mounted || request != _request || !_canPlaceRecipe || _openingRecipe) {
+    await _detailClosed?.future;
+    if (!mounted || request != _request || !_canPlaceRecipe) {
       return;
     }
     final unfiled =
@@ -616,13 +608,14 @@ class _WeekViewState extends State<WeekView> {
   Future<void> _openRecipe(Json recipe, bool calendar) async {
     if (_busy || _openingRecipe) return;
     _openingRecipe = true;
+    _detailClosed = Completer<void>();
     try {
-      await _enrichment;
-      if (mounted) await widget.openRecipe(recipe, calendar);
+      await widget.openRecipe(recipe, calendar);
     } finally {
       _openingRecipe = false;
+      _detailClosed?.complete();
+      _detailClosed = null;
     }
-    if (mounted && !_busy) await _load(showPrevious: true);
   }
 
   Widget _tile(_WeekEntry entry, String monday) {
@@ -644,22 +637,17 @@ class _WeekViewState extends State<WeekView> {
       }
     }
 
-    final recipe = entry.placeholder
+    final recipe = entry.placeholder && !shelf
         ? Stack(
             alignment: AlignmentDirectional.topEnd,
             children: [
               Card(
-                shape: shelf ? const StadiumBorder() : null,
                 child: ListTile(
                   leading: Text(_placeholders[entry.type]?.$2 ?? ''),
-                  title: Text(
-                    entry.name,
-                    maxLines: shelf ? 2 : null,
-                    overflow: shelf ? TextOverflow.ellipsis : null,
-                  ),
-                  contentPadding: EdgeInsetsDirectional.only(
+                  title: Text(entry.name),
+                  contentPadding: const EdgeInsetsDirectional.only(
                     start: AppSpacing.section,
-                    end: shelf ? AppSpacing.item : 48,
+                    end: 48,
                   ),
                   onTap: selected
                       ? () => setState(() => _selected = null)
@@ -671,9 +659,22 @@ class _WeekViewState extends State<WeekView> {
           )
         : RecipeCard(
             api: widget.api,
-            recipe: entry.data,
+            recipe: entry.placeholder ? {'name': entry.name} : entry.data,
+            picture: entry.placeholder
+                ? ColoredBox(
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
+                    child: Center(
+                      child: ExcludeSemantics(
+                        child: Text(
+                          _placeholders[entry.type]?.$2 ?? '🍽️',
+                          style: const TextStyle(fontSize: 32),
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
             cornerAction: action,
-            onTap: open,
+            onTap: !entry.placeholder || selected ? open : null,
             compact: shelf,
           );
     final colors = Theme.of(context).colorScheme;
@@ -885,13 +886,9 @@ class _WeekViewState extends State<WeekView> {
             ? 168.0
             : 144.0;
         final content = [
-          if (isToday)
-            const Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TodayBadge(),
-            ),
-          Text(
+          CalendarDayHeading(
             title,
+            isToday: isToday,
             style: theme.textTheme.titleMedium?.copyWith(
               color: foreground,
               fontWeight: isToday ? FontWeight.w800 : null,
@@ -956,9 +953,6 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
-  String _dayLabel(int index, String date) =>
-      '${_weekdays[index % 7]}, ${date.split('-').reversed.join('.')}';
-
   Widget _days(String monday) {
     final days = objects(_week?['days']);
     return LayoutBuilder(
@@ -973,7 +967,7 @@ class _WeekViewState extends State<WeekView> {
               for (final (index, day) in days.indexed)
                 Expanded(
                   child: _section(
-                    _dayLabel(index, text(day['date'])),
+                    calendarDayLabel(index, text(day['date'])),
                     text(day['date']),
                     monday,
                   ),
@@ -994,7 +988,7 @@ class _WeekViewState extends State<WeekView> {
                   horizontal: AppSpacing.item / 2,
                 ),
                 child: _section(
-                  _dayLabel(index, date),
+                  calendarDayLabel(index, date),
                   date,
                   monday,
                   scroll: true,
@@ -1062,6 +1056,7 @@ class _WeekViewState extends State<WeekView> {
                             child: FilledButton.tonal(
                               style: ButtonStyle(
                                 shape: _weekControlShape(),
+                                minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
                                 padding: const WidgetStatePropertyAll(
                                   EdgeInsets.symmetric(
                                     horizontal: AppSpacing.related,
@@ -1172,31 +1167,40 @@ class _WeekViewState extends State<WeekView> {
           );
   });
 
-  Widget _placeholderList(String monday) => ExpansionTile(
-    title: Text('Platzhalter', style: Theme.of(context).textTheme.titleLarge),
-    children: [
-      for (final entry in _placeholders.entries)
-        _draggable(
-          _WeekEntry('library', {'placeholder': entry.key}, placeholder: true),
-          monday,
-          _ready,
-          CompactRecipeTile(
-            leading: Text(entry.value.$2),
-            title: entry.value.$1,
-            actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
-            onAction: _ready
-                ? () => _move(
-                    _WeekEntry('library', {
-                      'placeholder': entry.key,
-                    }, placeholder: true),
-                    'shelf',
-                    monday,
-                  )
-                : null,
-            actionIcon: Icons.add,
-          ),
-        ),
-    ],
+  Widget _placeholderList(String monday) => ExpandableListCard(
+    title: 'Platzhalter',
+    body: Padding(
+      padding: AppSpacing.compactPanel,
+      child: Column(
+        spacing: AppSpacing.related,
+        children: [
+          for (final entry in _placeholders.entries)
+            _draggable(
+              _WeekEntry('library', {
+                'placeholder': entry.key,
+              }, placeholder: true),
+              monday,
+              _ready,
+              CompactRecipeTile(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                leading: Text(entry.value.$2),
+                title: entry.value.$1,
+                actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
+                onAction: _ready
+                    ? () => _move(
+                        _WeekEntry('library', {
+                          'placeholder': entry.key,
+                        }, placeholder: true),
+                        'shelf',
+                        monday,
+                      )
+                    : null,
+                actionIcon: Icons.add,
+              ),
+            ),
+        ],
+      ),
+    ),
   );
 
   @override
@@ -1206,7 +1210,7 @@ class _WeekViewState extends State<WeekView> {
       onRefresh: () async {
         if (_busy || _loading) return;
         await widget.onSync?.call();
-        if (mounted) await _load();
+        if (mounted) await _load(showPrevious: true);
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -1225,6 +1229,7 @@ class _WeekViewState extends State<WeekView> {
               _section('Ablage für diese Woche', 'shelf', monday),
               const SizedBox(height: AppSpacing.section),
               _placeholderList(monday),
+              const SizedBox(height: AppSpacing.section),
               _WeekLists(
                 key: ValueKey(monday),
                 api: widget.api,
@@ -1305,48 +1310,48 @@ class _WeekListsState extends State<_WeekLists> {
   }
 
   @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text('Lokale Listen', style: Theme.of(context).textTheme.titleLarge),
+  Widget build(BuildContext context) => ExpandableListCard(
+    title: 'Lokale Listen',
     onExpansionChanged: (expanded) {
       if (expanded && _collections == null) _load();
     },
-    children: [
-      if (_collections != null)
-        FutureBuilder<dynamic>(
-          future: _collections,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return TextButton(
-                onPressed: _load,
-                child: Text('${snapshot.error} · Erneut laden'),
-              );
-            }
-            if (!snapshot.hasData) return const LinearProgressIndicator();
-            final lists = objects((snapshot.data as Json)['items'])
-                .where((item) => item['kind'] == 'local');
-            if (lists.isEmpty) {
-              return const ListTile(
-                title: Text('Noch keine lokalen Listen vorhanden.'),
-              );
-            }
-            return Column(
-              spacing: AppSpacing.related,
-              children: [
-                for (final list in lists)
-                  _WeekList(
-                    key: ValueKey(list['id']),
-                    list: list,
-                    api: widget.api,
-                    canAdd: widget.canAdd,
-                    shelfIds: widget.shelfIds,
-                    onOpen: widget.onOpen,
-                    onAdd: widget.onAdd,
-                  ),
-              ],
+    body: Padding(
+      padding: AppSpacing.compactPanel,
+      child: FutureBuilder<dynamic>(
+        future: _collections,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return TextButton(
+              onPressed: _load,
+              child: Text('${snapshot.error} · Erneut laden'),
             );
-          },
-        ),
-    ],
+          }
+          if (!snapshot.hasData) return const LinearProgressIndicator();
+          final lists = objects((snapshot.data as Json)['items'])
+              .where((item) => item['kind'] == 'local');
+          if (lists.isEmpty) {
+            return const ListTile(
+              title: Text('Noch keine lokalen Listen vorhanden.'),
+            );
+          }
+          return Column(
+            spacing: AppSpacing.related,
+            children: [
+              for (final list in lists)
+                _WeekList(
+                  key: ValueKey(list['id']),
+                  list: list,
+                  api: widget.api,
+                  canAdd: widget.canAdd,
+                  shelfIds: widget.shelfIds,
+                  onOpen: widget.onOpen,
+                  onAdd: widget.onAdd,
+                ),
+            ],
+          );
+        },
+      ),
+    ),
   );
 }
 
@@ -1390,7 +1395,7 @@ class _WeekListState extends State<_WeekList> {
         path: '/api/recipes',
         queryParameters: {
           'collection': text(widget.list['id']),
-          'limit': '100',
+          'limit': '24',
           'offset': '${_items.length}',
         },
       );
@@ -1414,39 +1419,51 @@ class _WeekListState extends State<_WeekList> {
     onExpansionChanged: (expanded) {
       if (expanded && !_requested) unawaited(_load());
     },
-    body: Column(
-      children: [
-        for (final recipe in _items)
-          ListTile(
-            title: Text(text(recipe['name'])),
-            onTap: () => widget.onOpen(recipe),
-            trailing: IconButton(
-              tooltip: '${recipe['name']} zur Wochenablage hinzufügen',
-              onPressed:
-                  widget.canAdd && !widget.shelfIds.contains(recipe['id'])
+    body: Padding(
+      padding: AppSpacing.compactPanel,
+      child: Column(
+        spacing: AppSpacing.related,
+        children: [
+          for (final recipe in _items)
+            CompactRecipeTile(
+              key: ValueKey(recipe['id']),
+              title: text(recipe['name'], 'Rezept'),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: ClipOval(
+                child: SizedBox.square(
+                  dimension: 40,
+                  child: RecipeImage(
+                    api: widget.api,
+                    filename: recipe['image_file'],
+                  ),
+                ),
+              ),
+              onTap: () => widget.onOpen(recipe),
+              actionLabel: widget.shelfIds.contains(recipe['id'])
+                  ? '${recipe['name']} bereits in der Wochenablage'
+                  : '${recipe['name']} zur Wochenablage hinzufügen',
+              onAction: widget.canAdd && !widget.shelfIds.contains(recipe['id'])
                   ? () => widget.onAdd(recipe)
                   : null,
-              icon: Icon(
-                widget.shelfIds.contains(recipe['id'])
-                    ? Icons.check
-                    : Icons.add,
-              ),
+              actionIcon: widget.shelfIds.contains(recipe['id'])
+                  ? Icons.check
+                  : Icons.add,
             ),
-          ),
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null) ...[
-          Text(_error!),
-          TextButton(onPressed: _load, child: const Text('Erneut laden')),
-        ] else if (!_loading && _items.length < _total)
-          TextButton(
-            onPressed: _load,
-            child: const Text('Weitere Rezepte anzeigen'),
-          )
-        else if (_requested && !_loading && _items.isEmpty)
-          const ListTile(
-            title: Text('Diese Liste enthält noch keine Rezepte.'),
-          ),
-      ],
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null) ...[
+            Text(_error!),
+            TextButton(onPressed: _load, child: const Text('Erneut laden')),
+          ] else if (!_loading && _items.length < _total)
+            TextButton(
+              onPressed: _load,
+              child: const Text('Weitere Rezepte anzeigen'),
+            )
+          else if (_requested && !_loading && _items.isEmpty)
+            const ListTile(
+              title: Text('Diese Liste enthält noch keine Rezepte.'),
+            ),
+        ],
+      ),
     ),
   );
 }

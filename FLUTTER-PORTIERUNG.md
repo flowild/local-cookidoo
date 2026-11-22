@@ -2,7 +2,7 @@
 
 Ziel ist eine signierte native Flutter-APK mit dem Funktionsumfang der Rezeptgarten-Web-App und einer Android-Oberfläche in Material 3 Expressive. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 
-Rezeptgarten **1.1.0, Build 17** ist der zuletzt veröffentlichte Testbuild auf LXC 103. Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) sind getrennte Kanäle. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
+Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Download](https://192.168.184.30/android/) führen jeweils ein eigenes Update-Manifest mit dem veröffentlichten Stand. Die noch offenen Abnahmepunkte stehen am Ende dieses Dokuments.
 
 ## Architektur
 
@@ -37,11 +37,14 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 - Auf schmalen Displays heißt „Übersicht“ in der Android-Navigation „Start“. Bei zu wenig Platz für die aktuelle Schriftgröße sind die Symbole sichtbar und ihre Beschriftungen für Bildschirmleser verfügbar. Die Rezeptbibliothek zeigt bei normaler Schrift ab 332 dp zwei Spalten. Auf Handys öffnen die Rezeptfilter in einem Bottom Sheet.
 - Im Einkaufswagen sind die Zutaten vor den Rezepten sichtbar und zeilenweise antippbar. Ein Eingabeblatt erfasst zusätzliche Artikel. Im Vorrat bleibt „Zutat hinzufügen“ direkt sichtbar und das Menü bündelt die gemeinsamen Kategorieaktionen.
 - Gleich breite Rezeptkarten bleiben unabhängig von der Titellänge gleich hoch. Sie zeigen bis zu zwei Titelzeilen mit Auslassungszeichen. Die Rezeptdetails zeigen den vollständigen Namen.
-- In der Übersicht sitzt das Wechsel-Symbol am Zufallsrezept. Pillen führen zu Listen und Rezepten. Aufklappbare Listen haben eine eigene Suche. In „Alle Rezepte“ bilden Suche, Sortierung und Filter einen gemeinsamen Bereich.
+- In der Übersicht sitzt das Wechsel-Symbol am Zufallsrezept. Gleich breite Schaltflächen führen zu Rezeptlisten, Rezepten, Woche und Einkaufswagen. Sie nutzen je nach Breite und Schriftgröße eine, zwei oder vier Spalten. Rezeptmerkmale und aktive Filter verwenden kompakte Textpillen. „Heute“ steht bei ausreichender Breite neben dem Datum. Aufklappbare Listen haben eine eigene Suche. In „Alle Rezepte“ bilden Suche, Sortierung und Filter einen gemeinsamen Bereich.
 - Aufgeklappte Listen zeigen umrandete Rezeptkarten in genau zwei Spalten. Der farbige Listenkopf trennt den Titel von den Karten. Das Bearbeiten-Symbol öffnet die Verwaltung lokaler Listen. „Rezepte hinzufügen“ zeigt Rezeptkarten mit einem Plus oben rechts.
 - Die Hauptnavigation nutzt einen horizontalen `PageView` mit Flutters Seitenphysik beim Wischen und demselben Controller beim Antippen von Tabs. Bei reduzierter Bewegung wechselt die Ansicht direkt. Im Kalender von „Meine Woche“ wechselt die Geste weiterhin den Tag.
 - Bereits sichtbare Listen, Vorratskategorien und Wocheninhalte behalten beim Nachladen nach einem Seitenwechsel ihre Position.
-- In den Rezeptdetails zeigen kontrastreiche Punkte den Vorratsstatus. „Zur Ablage hinzufügen“ steht über „Heute kochen“ und verwendet die aktuelle Berliner Kalenderwoche. Die Aktionsschaltflächen zeigen Symbol und Text linksbündig.
+- Beim Überqueren der Seitenmitte aktualisiert sich die Navigation. Der Zielbereich wird erst nach dem Einrasten aktiv. Test-APKs verwenden den Flutter-Profilmodus mit vorab kompiliertem Dart-Code.
+- Nach dem Lesen eines Rezepts bleiben Trefferseiten und Woche erhalten. Die Detailansicht öffnet während laufender Wochenabfragen. Notiz, Tipps und lokale Listen werden abschnittsweise freigegeben. Der Telegram-Einkaufswagen baut die Zutatenzeilen beim Scrollen auf.
+- In den Rezeptdetails zeigen kontrastreiche Punkte den Vorratsstatus. „Zur Ablage hinzufügen“ steht über „Heute kochen“ und verwendet die aktuelle Berliner Kalenderwoche. Aktionspillen zentrieren Symbol und Beschriftung gemeinsam.
+- Abgelegte Platzhalter verwenden das kompakte Rezeptkartenlayout mit ihrem Symbol als Bild. Unter der Ablage verwenden Platzhalter und lokale Listen gemeinsame Gruppenüberschriften und Abstände. Rezeptpillen in geöffneten Wochenlisten zeigen ein Vorschaubild und ein Plus, nach dem Hinzufügen ein Häkchen. In der Listenbearbeitung schaltet der Papierkorb rechts neben „In dieser Liste“ den Entfernmodus ein.
 - In „Meine Woche“ sitzt das Einkaufssymbol neben den Datumsschaltern. Nach 250 ms Halten ist eine Kachel ausgewählt. Aufwärts sind 140 dp, abwärts 90 dp erforderlich. Die Wochenablage zeigt kleine Rezeptkarten mit Bild über dem Titel in einer seitlich scrollbaren Reihe. Ein Wisch nach unten entfernt den Eintrag.
 - Der Debug-Modus verwendet drei unterschiedliche mitgelieferte Rezeptbilder.
 - Vergleichsaufnahmen von APK und PWA mit demselben isolierten Testdatenstand erstellen. Normalzustände, leere Ansichten, lange Rezeptnamen, Lade- und Fehlerzustände sowie Hell- und Dunkelmodus prüfen.
@@ -270,6 +273,29 @@ werden. Eine echte Telegram-Anmeldung und ein Test auf einem physischen Gerät
 wurden nicht durchgeführt.
 
 ## Offene Arbeiten vor der regulären Freigabe
+
+Für Version 1.9.4 prüft ein Flutter-Test das Einrasten bei 3000 und 6000 dp/s
+in beiden Richtungen. Beim Loslassen 24 dp vor dem Ziel überschritt die
+bisherige Bewegung das Ziel um 55,5 beziehungsweise 128,3 dp. Die angepasste
+Bewegung erreicht es in beiden Fällen ohne Richtungswechsel.
+Im direkten Vergleich auf demselben warmen Android-15-Emulator wurden je
+30 horizontale Wischgesten mit 75 ms Dauer und lokalen Beispieldaten ausgeführt.
+Bei Build 45 überschritten Aufbau oder Rasterung in 258 von 542 Frames das
+60-Hz-Zeitbudget von 16,67 ms, bei Build 46 in 90 von 577. Separate Kaltläufe
+zeigten stärker schwankende Rasterzeiten. Beide Vergleichs-APKs liefen im
+Profilmodus auf x86-64.
+
+Stand der Android-Prüfung am 22.11.2026 für Version 1.9.3, Build 45. Beim
+Zurückgehen aus dem Rezeptdetail sank die Anzahl zusätzlicher Wochenabrufe
+und Suchabfragen im jeweiligen Widgettest von eins auf null. Beim manuellen
+Aktualisieren der Woche sank sie von zwei Wochenabrufen auf einen.
+Alle 57 Flutter-Tests bestanden unter Windows und in der WSL-Buildumgebung.
+
+Auf dem x86-64-Emulator mit Android 15 und lokalen Beispieldaten dauerte es
+bei vier Aufrufen im Profilmodus vom Öffnen bis zum ersten Frame mit
+Rezeptdaten im Median 69 ms. Bei vier Scrollgesten im Rezeptdetail lagen
+die 95. Perzentile für 149 gemessene Frames bei 3,4 ms für den Flutter-Aufbau
+und 27,7 ms für die Rasterung. Die Abnahme auf einem ARM64-Gerät steht aus.
 
 - **Funktionsumfang und Design abgleichen.** Jede Zeile der Funktionsliste gegen
   die aktuelle mobile PWA prüfen und fehlende Funktionen, Schnellaktionen und

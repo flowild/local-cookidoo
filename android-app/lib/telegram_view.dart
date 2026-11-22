@@ -15,15 +15,6 @@ const _placeholderNames = {
   'abendbrot': 'Abendbrot',
   'resteessen': 'Resteessen',
 };
-const _days = [
-  'Montag',
-  'Dienstag',
-  'Mittwoch',
-  'Donnerstag',
-  'Freitag',
-  'Samstag',
-  'Sonntag',
-];
 
 class TelegramView extends StatefulWidget {
   const TelegramView({
@@ -46,6 +37,7 @@ class _TelegramViewState extends State<TelegramView> {
   late Map<String, bool> checks;
   bool checksLoaded = false;
   bool initialWeek = true;
+  int _request = 0;
 
   DateTime _monday(DateTime date) =>
       DateTime.utc(date.year, date.month, date.day - date.weekday + 1);
@@ -66,6 +58,7 @@ class _TelegramViewState extends State<TelegramView> {
   }
 
   Future<Json> _load() async {
+    final request = ++_request;
     if (widget.cart && !checksLoaded) {
       try {
         checks = await widget.telegram.loadChecks();
@@ -80,7 +73,7 @@ class _TelegramViewState extends State<TelegramView> {
       widget.cart ? 'cart' : 'week',
       day: widget.cart ? null : _date(monday),
     );
-    if (!widget.cart && initialWeek) {
+    if (mounted && request == _request && !widget.cart && initialWeek) {
       initialWeek = false;
       final today = DateTime.tryParse(text(data['today']));
       if (today != null && _date(_monday(today)) != _date(monday)) {
@@ -149,7 +142,10 @@ class _TelegramViewState extends State<TelegramView> {
               child: Column(
                 children: [
                   CalendarWeekBadge(date: _date(monday), today: today),
-                  Text(_date(monday), textAlign: TextAlign.center),
+                  Text(
+                    calendarDateLabel(_date(monday)),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
@@ -191,9 +187,9 @@ class _TelegramViewState extends State<TelegramView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: AppSpacing.related,
                 children: [
-                  if (day['date'] == today) const TodayBadge(),
-                  Text(
-                    '${index < _days.length ? _days[index] : ''} · ${text(day['date'])}',
+                  CalendarDayHeading(
+                    calendarDayLabel(index, text(day['date'])),
+                    isToday: day['date'] == today,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: day['date'] == today
                           ? colors.onPrimaryContainer
@@ -230,7 +226,7 @@ class _TelegramViewState extends State<TelegramView> {
     );
   }
 
-  Widget _cart(Json data) {
+  List<Widget> _cart(Json data) {
     final rows = <Json>[];
     final items = objects(data['items']);
     final recipes = items.where((item) => item['kind'] == 'recipe').toList();
@@ -253,10 +249,9 @@ class _TelegramViewState extends State<TelegramView> {
       if (order != 0) return order;
       return text(a['category']).compareTo(text(b['category']));
     });
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    return [
+      SliverToBoxAdapter(
+        child: Row(
           spacing: AppSpacing.related,
           children: [
             Expanded(
@@ -275,70 +270,91 @@ class _TelegramViewState extends State<TelegramView> {
             ),
           ],
         ),
-        for (final (index, row) in rows.indexed) ...[
-          if (index == 0 || checked(row) != checked(rows[index - 1]))
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.section),
-              child: Text(
-                checked(row) ? 'Abgehakt' : 'Zutaten',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-          if (index == 0 ||
-              checked(row) != checked(rows[index - 1]) ||
-              text(row['category']) != text(rows[index - 1]['category']))
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.related),
-              child: Text(
-                text(row['category'], 'Sonstiges'),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: checked(row),
-            onChanged: (value) {
-              setState(() => checks[text(row['check_id'])] = value == true);
-              _saveChecks();
-            },
-            title: Row(
-              children: [
-                IngredientIcon(
-                  text(row['icon_name']),
-                  category: text(row['category']),
-                ),
-                const SizedBox(width: AppSpacing.related),
-                Expanded(child: Text(text(row['text']))),
-              ],
-            ),
-            subtitle: row['recipe'] == null ? null : Text(text(row['recipe'])),
-          ),
-        ],
-        if (rows.isEmpty) ...[
-          const SizedBox(height: AppSpacing.section),
-          const Text('Der Einkaufswagen enthält keine benötigten Zutaten.'),
-        ],
-        const SizedBox(height: AppSpacing.section),
-        ExpandableListCard(
-          title: 'Rezepte (${recipes.length})',
-          leading: const Icon(Icons.menu_book_outlined),
-          body: Column(
+      ),
+      SliverList.builder(
+        itemCount: rows.length,
+        itemBuilder: (context, index) {
+          final row = rows[index];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (recipes.isEmpty)
-                const ListTile(title: Text('Keine Rezepte im Einkaufswagen.')),
-              for (final recipe in recipes)
-                ListTile(title: Text(text(recipe['name'], 'Rezept'))),
+              if (index == 0 || checked(row) != checked(rows[index - 1]))
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.section),
+                  child: Text(
+                    checked(row) ? 'Abgehakt' : 'Zutaten',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              if (index == 0 ||
+                  checked(row) != checked(rows[index - 1]) ||
+                  text(row['category']) != text(rows[index - 1]['category']))
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.related),
+                  child: Text(
+                    text(row['category'], 'Sonstiges'),
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: checked(row),
+                onChanged: (value) {
+                  setState(() => checks[text(row['check_id'])] = value == true);
+                  _saveChecks();
+                },
+                title: Row(
+                  children: [
+                    IngredientIcon(
+                      text(row['icon_name']),
+                      category: text(row['category']),
+                    ),
+                    const SizedBox(width: AppSpacing.related),
+                    Expanded(child: Text(text(row['text']))),
+                  ],
+                ),
+                subtitle: row['recipe'] == null
+                    ? null
+                    : Text(text(row['recipe'])),
+              ),
             ],
-          ),
+          );
+        },
+      ),
+      SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (rows.isEmpty) ...[
+              const SizedBox(height: AppSpacing.section),
+              const Text('Der Einkaufswagen enthält keine benötigten Zutaten.'),
+            ],
+            const SizedBox(height: AppSpacing.section),
+            ExpandableListCard(
+              title: 'Rezepte (${recipes.length})',
+              leading: const Icon(Icons.menu_book_outlined),
+              body: Column(
+                children: [
+                  if (recipes.isEmpty)
+                    const ListTile(
+                      title: Text('Keine Rezepte im Einkaufswagen.'),
+                    ),
+                  for (final recipe in recipes)
+                    ListTile(title: Text(text(recipe['name'], 'Rezept'))),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
-    );
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Json>(
+    key: ValueKey(widget.cart),
     future: snapshot,
     builder: (context, result) => RefreshIndicator(
       onRefresh: () async {
@@ -349,28 +365,55 @@ class _TelegramViewState extends State<TelegramView> {
           /* The view shows the error. */
         }
       },
-      child: ListView(
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: AppSpacing.page,
-        children: [
-          if (widget.notice != null) ...[
-            Text(widget.notice!),
-            const SizedBox(height: AppSpacing.section),
-          ],
-          if (result.connectionState != ConnectionState.done)
-            const Center(child: CircularProgressIndicator())
-          else if (result.hasError) ...[
-            Text(
-              widget.cart && !checksLoaded
-                  ? 'Die gespeicherten Häkchen konnten nicht geladen werden.'
-                  : 'Telegram-Daten konnten nicht geladen werden.',
+        slivers: [
+          SliverPadding(
+            padding: AppSpacing.page,
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                if (widget.notice != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: AppSpacing.section,
+                      ),
+                      child: Text(widget.notice!),
+                    ),
+                  ),
+                if (result.connectionState != ConnectionState.done &&
+                    !(result.hasData &&
+                        (widget.cart ||
+                            objects(result.data?['days'])
+                                    .firstOrNull?['date'] ==
+                                _date(monday))))
+                  const SliverToBoxAdapter(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (result.hasError)
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        Text(
+                          widget.cart && !checksLoaded
+                              ? 'Die gespeicherten Häkchen konnten nicht geladen werden.'
+                              : 'Telegram-Daten konnten nicht geladen werden.',
+                        ),
+                        const SizedBox(height: AppSpacing.related),
+                        TextButton(
+                          onPressed: _refresh,
+                          child: const Text('Erneut laden'),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (widget.cart)
+                  ..._cart(result.requireData)
+                else
+                  SliverToBoxAdapter(child: _week(result.requireData)),
+              ],
             ),
-            const SizedBox(height: AppSpacing.related),
-            TextButton(onPressed: _refresh, child: const Text('Erneut laden')),
-          ] else if (widget.cart)
-            _cart(result.requireData)
-          else
-            _week(result.requireData),
+          ),
         ],
       ),
     ),

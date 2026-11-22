@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -7,6 +8,70 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/recipe_detail.dart';
 
 void main() {
+  testWidgets(
+    'late responses for a previous version cannot replace the current note and lists',
+    (tester) async {
+      final api = _VersionApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecipeDetail(
+            api: api,
+            preview: const {'id': 'v1'},
+            calendar: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      final versions = find.byType(DropdownButton<String>);
+      await tester.ensureVisible(versions);
+      await tester.tap(versions);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('Meine Kreation 1').last);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      api.oldNote.complete({'text': 'Veraltete Notiz'});
+      api.oldLists.complete({
+        'items': [
+          {'kind': 'local', 'id': 'old', 'name': 'Alte Liste'},
+        ],
+      });
+      await tester.pumpAndSettle();
+      final note = find.byType(TextField);
+      await tester.ensureVisible(note);
+      expect(tester.widget<TextField>(note).controller!.text, 'Aktuelle Notiz');
+      await tester.scrollUntilVisible(
+        find.text('Aktuelle Liste'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Alte Liste'), findsNothing);
+    },
+  );
+  testWidgets('a loaded note can be edited while lists and tips are pending', (
+    tester,
+  ) async {
+    final api = _DelayedDetailsApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'creation:r1'},
+          calendar: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    final field = find.byType(TextField);
+    await tester.ensureVisible(field);
+    expect(tester.widget<TextField>(field).readOnly, isFalse);
+    await tester.enterText(field, 'Entwurf');
+    api.tips.complete({
+      'tips': ['Später Tipp'],
+    });
+    api.lists.complete({'items': <Json>[]});
+    await tester.pump();
+    expect(tester.widget<TextField>(field).controller!.text, 'Entwurf');
+  });
   testWidgets('adds the selected recipe to the current week shelf', (
     tester,
   ) async {
@@ -48,8 +113,10 @@ void main() {
       );
       final leading = find.descendant(of: button, matching: find.byIcon(icon));
       expect(leading, findsOneWidget);
-      final left = tester.getRect(button).left;
-      expect(tester.getRect(leading).left, closeTo(left + 16, 1));
+      final group = tester
+          .getRect(leading)
+          .expandToInclude(tester.getRect(text));
+      expect(group.center.dx, closeTo(tester.getCenter(button).dx, 1));
       expect(
         tester.getRect(leading).right,
         lessThan(tester.getRect(text).left),
@@ -177,6 +244,49 @@ void main() {
       expect(tester.widget<TextField>(field).controller!.text, 'Mein Entwurf');
     },
   );
+}
+
+class _VersionApi extends _DetailApi {
+  final oldNote = Completer<Json>();
+  final oldLists = Completer<Json>();
+  var listReads = 0;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == '/api/notes/v1') return oldNote.future;
+    if (path == '/api/notes/v2') return {'text': 'Aktuelle Notiz'};
+    if (path == '/api/collections') {
+      if (++listReads == 1) return oldLists.future;
+      return {
+        'items': [
+          {'kind': 'local', 'id': 'new', 'name': 'Aktuelle Liste'},
+        ],
+      };
+    }
+    return {
+      'id': path.split('/').last,
+      'name': 'Versionsrezept',
+      'tips_json': [],
+      'versions': [
+        {'id': 'v1'},
+        {'id': 'v2', 'origin_recipe_id': 'v1'},
+      ],
+    };
+  }
+}
+
+class _DelayedDetailsApi extends _DetailApi {
+  final lists = Completer<Json>();
+  final tips = Completer<Json>();
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path == '/api/collections') return lists.future;
+    if (path.endsWith('/tips')) return tips.future;
+    final result = await super.get(path, timeout: timeout);
+    if (path.startsWith('/api/recipes/')) (result as Json).remove('tips_json');
+    return result;
+  }
 }
 
 class _DetailApi extends RezeptgartenApi {

@@ -11,6 +11,110 @@ import 'package:rezeptgarten/spacing.dart';
 import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  testWidgets(
+    'week list pills show thumbnails and add once from the trailing plus',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      String? opened;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WeekView(
+              api: DebugRezeptgartenApi(),
+              openRecipe: (recipe, _) async {
+                opened = recipe['id'] as String;
+              },
+              cartCountChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Future<void> tapVisible(Finder target) async {
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      await tapVisible(find.text('Lokale Listen'));
+      await tapVisible(find.text('Schnelle Alltagsküche'));
+      final pill = find.widgetWithText(
+        CompactRecipeTile,
+        'Linsensuppe mit Möhren',
+      );
+      final thumbnail = find.descendant(
+        of: pill,
+        matching: find.byType(RecipeImage),
+      );
+      expect(tester.widget<RecipeImage>(thumbnail).filename, 'linsensuppe.png');
+      final add = find.descendant(of: pill, matching: find.byIcon(Icons.add));
+      expect(
+        tester.getCenter(thumbnail).dx,
+        lessThan(tester.getCenter(add).dx),
+      );
+      await tapVisible(
+        find.descendant(
+          of: pill,
+          matching: find.text('Linsensuppe mit Möhren'),
+        ),
+      );
+      expect(opened, 'linsensuppe');
+      opened = null;
+      await tapVisible(add);
+      expect(opened, isNull);
+      final added = find.byTooltip(
+        'Linsensuppe mit Möhren bereits in der Wochenablage',
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(of: added, matching: find.byType(IconButton)),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+  testWidgets(
+    'opens a week recipe during a badge read and keeps the loaded week',
+    (tester) async {
+      final api = _DelayedBadgesApi();
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final closed = Completer<void>();
+      var opens = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WeekView(
+              api: api,
+              cartCountChanged: (_) {},
+              openRecipe: (_, _) {
+                opens++;
+                return closed.future;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(api.badgeReads, 1);
+      await tester.tap(find.text('Reisgericht').first);
+      await tester.pump();
+      expect(opens, 1);
+      api.badges.complete({'items': <Json>[]});
+      await tester.pump();
+      closed.complete();
+      await tester.pumpAndSettle();
+      expect(api.weekReads, 1);
+    },
+  );
   testWidgets('highlights today and the current ISO week across New Year', (
     tester,
   ) async {
@@ -318,12 +422,41 @@ void main() {
 
     await tester.tap(find.text('Platzhalter'));
     await tester.pumpAndSettle();
+    final options = find.byType(CompactRecipeTile);
+    expect(options, findsNWidgets(6));
+    expect(
+      tester.getRect(options.at(1)).top - tester.getRect(options.first).bottom,
+      AppSpacing.related,
+    );
     await tester.tap(
       find.byTooltip('Im Restaurant essen zur Wochenablage hinzufügen'),
     );
     await tester.pumpAndSettle();
     expect(api.placeholder?['create'], isTrue);
     expect(api.placeholder?['target'], 'shelf');
+    final placeholder = find.widgetWithText(RecipeCard, 'Im Restaurant essen');
+    expect(tester.widget<RecipeCard>(placeholder).compact, isTrue);
+    expect(
+      tester.getSize(placeholder),
+      tester.getSize(find.widgetWithText(RecipeCard, 'Reisgericht')),
+    );
+    expect(
+      tester
+          .getCenter(
+            find.descendant(of: placeholder, matching: find.text('🍴')),
+          )
+          .dy,
+      lessThan(
+        tester
+            .getCenter(
+              find.descendant(
+                of: placeholder,
+                matching: find.text('Im Restaurant essen'),
+              ),
+            )
+            .dy,
+      ),
+    );
 
     await tester.tap(find.byTooltip('Nächste Woche'));
     await tester.pumpAndSettle();
@@ -334,6 +467,25 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class _DelayedBadgesApi extends _WeekApi {
+  final badges = Completer<Json>();
+  int weekReads = 0;
+  int badgeReads = 0;
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) {
+    if (path == '/api/status') {
+      return Future.value({'connected': true, 'calendar_queue': queue});
+    }
+    if (path == '/api/calendar/week') weekReads++;
+    if (Uri.parse(path).path == '/api/calendar/badges') {
+      badgeReads++;
+      return badges.future;
+    }
+    return super.get(path, timeout: timeout);
+  }
 }
 
 class _WeekBoundaryApi extends _WeekApi {

@@ -8,6 +8,8 @@ import 'package:rezeptgarten/telegram_setup.dart';
 import 'package:rezeptgarten/telegram_view.dart';
 
 class FakeTelegram extends TelegramService {
+  List<Json>? cartItems;
+  Completer<void>? cartRead;
   final calls = <String>[];
   Map<String, bool> saved = {};
   Completer<Map<String, bool>>? pendingChecks;
@@ -18,6 +20,8 @@ class FakeTelegram extends TelegramService {
   Future<Json> snapshot(String kind, {String? day}) async {
     calls.add('$kind ${day ?? ''}');
     if (kind == 'cart') {
+      await cartRead?.future;
+      if (cartItems != null) return {'items': cartItems};
       return {
         'items': [
           {
@@ -120,6 +124,7 @@ void main() {
     expect(find.text('Sushi'), findsOneWidget);
     expect(find.text('Resteessen'), findsOneWidget);
     expect(telegram.calls.last, 'week 2026-01-05');
+    expect(find.text('Montag, 05.01.2026'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-01-12');
@@ -149,6 +154,51 @@ void main() {
     expect(telegram.saved, isEmpty);
     telegram.dispose();
   });
+
+  testWidgets(
+    'large Telegram cart builds visible rows and preserves position on refresh',
+    (tester) async {
+      final telegram = FakeTelegram()
+        ..cartItems = [
+          for (var index = 0; index < 300; index++)
+            {
+              'kind': 'additional',
+              'name': 'Artikel $index',
+              'check_id': 'a:$index',
+              'category': 'Vorräte',
+            },
+        ];
+      addTearDown(telegram.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: TelegramView(telegram: telegram, cart: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(CheckboxListTile).evaluate().length,
+        inInclusiveRange(1, 40),
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -510));
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      final pixels = position.pixels;
+      expect(pixels, greaterThan(0));
+      telegram.cartRead = Completer<void>();
+      final refresh = tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pump();
+      expect(position.pixels, pixels);
+      expect(find.byType(CheckboxListTile), findsWidgets);
+      telegram.cartRead!.complete();
+      await refresh;
+      await tester.pumpAndSettle();
+      expect(position.pixels, pixels);
+    },
+  );
 
   testWidgets('week navigation stays on Mondays across the time change', (
     tester,
