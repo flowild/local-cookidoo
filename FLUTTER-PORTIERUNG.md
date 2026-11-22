@@ -217,14 +217,15 @@ baut und veröffentlicht den ersten Testbuild aus der Projektwurzel. Für weiter
 Veröffentlichungen eine höhere Buildnummer als auf der Downloadseite wählen.
 
 ```powershell
-.\scripts\Android-APK-veroeffentlichen.ps1 -BuildNumber 1 -Upload
+.\scripts\Android-APK-veroeffentlichen.ps1 -BuildNumber 1
 ```
 
-Ohne `-Upload` bleibt die APK lokal unter
+Der Upload auf LXC 103 gehört standardmäßig zum Build. Bei einem ausdrücklich
+lokalen Build mit `-Upload:$false` bleibt die APK unter
 `android-app/build/app/outputs/flutter-apk/`. Der erste Build bezieht die
 öffentliche CA mit geprüftem SSH-Hostschlüssel vom Container. Der Build läuft
 in einem temporären Verzeichnis im WSL-Dateisystem. Nach einem reinen
-Uploadfehler prüft und veröffentlicht `-UseExistingBuild -Upload` die
+Uploadfehler prüft und veröffentlicht `-UseExistingBuild` die
 vorhandene, zuvor gebaute APK mit derselben Buildnummer.
 
 Der reguläre Veröffentlichungskanal verwendet die Paket-ID

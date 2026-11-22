@@ -84,7 +84,10 @@ Die native Flutter-App entsteht unter `android-app/`. Die
 [Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
-Veröffentlichungsskript prüft und überträgt die APK getrennt vom Web-Deployment.
+Veröffentlichungsskript lädt jeden neuen Test- oder Release-Build standardmäßig
+auf LXC 103 hoch und prüft den HTTPS-Download und das Update-Manifest des Kanals.
+Bei einem Uploadfehler die vorhandene APK mit derselben Buildnummer erneut
+veröffentlichen. Der APK-Upload erfolgt getrennt vom Web-Deployment.
 In den Android-Einstellungen vergleicht „Nach Updates suchen“ den installierten
 `versionCode` mit dem Manifest des eigenen Kanals. Ist ein neuerer Build
 verfügbar, wird derselbe Knopf zu „APK herunterladen und installieren“.

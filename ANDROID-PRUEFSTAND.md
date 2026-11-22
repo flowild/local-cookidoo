@@ -1,6 +1,6 @@
 # Android-App: Stand der Fehlerprüfung
 
-Stand: 20. November 2026. Die Android-Prüfung wurde fortgesetzt. Dieses Dokument
+Stand vom 22. November 2026. Die Android-Prüfung wurde fortgesetzt. Dieses Dokument
 hält die geprüften Abläufe, die lokalen Korrekturen und die ausstehende Abnahme fest.
 
 ## Bisher untersucht und bearbeitet
@@ -257,19 +257,17 @@ Paket-ID, Version, Architektur und Signatur wurden lokal geprüft.
 
 ## Noch ausstehend
 
-1. Telegram-Anmeldung und Kopplung, Android-Dateiauswahl und den In-App-Installer
-   mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
-   ist in `FLUTTER-PORTIERUNG.md` beschrieben.
-2. Die lokale Version `1.5.3` und den Android-Testkanal auf LXC 103 bereitstellen
-   und HTTPS-Download samt Manifest prüfen. Beim Prüflauf war der LXC vom
-   aktuellen WLAN aus weder über HTTPS noch über SSH erreichbar.
-
-Auf Nutzerwunsch wird Version `1.4.0` vor der LXC-Bereitstellung in
-`origin/main` gesichert.
+Telegram-Anmeldung und Kopplung, Android-Dateiauswahl und den In-App-Installer
+mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
+ist in `FLUTTER-PORTIERUNG.md` beschrieben.
 
 ## Aktueller technischer Stand
 
-- Zuletzt veröffentlichter Android-Testbuild: **1.1.0, Build 17**.
+- Am 22. November 2026 wurde **1.9.6, Build 48** auf LXC 103 veröffentlicht.
+  Die ARM64-Profil-APK hat dieselbe Signatur wie Build 17. HTTPS-Download,
+  SHA-256 und Update-Manifest wurden mit der lokalen APK abgeglichen.
+  Das Backend meldete über HTTPS Version 1.9.6. Alle 130 Backendtests
+  bestanden auf LXC 103 mit isolierten Testdaten.
 - Der pausierte Arbeitsstand (`1.1.1`, Service-Worker-Cache `v136`) ist in Commit
   `9723187` gesichert. Version `1.1.2`, Android-Testbuild **18**, wurde lokal
   gebaut und geprüft. Der Debug-Modus ist in `1.2.0` enthalten.

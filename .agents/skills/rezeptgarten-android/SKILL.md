@@ -130,8 +130,10 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   `scripts/Android-APK-veroeffentlichen.ps1`. Der WSL-Build prüft Flutter,
   führt die Widgettests aus und baut ARM64. Verwende eine steigende
   Buildnummer je Kanal und eine stabile Signatur. Test-App und Release
-  haben unterschiedliche Paket-IDs und Downloadpfade. Mit `-Upload` prüft
-  das Skript den HTTPS-Download und sein `latest.json` auf LXC 103.
+  haben unterschiedliche Paket-IDs und Downloadpfade. Das Skript lädt neue
+  Builds standardmäßig auf LXC 103 und prüft HTTPS-Download und `latest.json`.
+  Bei einem Uploadfehler mit `-UseExistingBuild` und derselben Buildnummer
+  erneut veröffentlichen. Für ausdrücklich lokale Builds gilt `-Upload:$false`.
 - Die manuelle Updateprüfung in den Einstellungen vergleicht den installierten
   `versionCode` mit `latest.json` des eigenen Kanals. Bei einem neueren Build
   wechselt derselbe Knopf zum Download und zur Installation. Die APK wird vor

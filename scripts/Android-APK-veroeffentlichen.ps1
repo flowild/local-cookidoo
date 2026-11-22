@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateRange(1, 2100000000)]
     [int]$BuildNumber,
-    [switch]$Upload,
+    [switch]$Upload = $true,
     [switch]$Release,
     [switch]$UseExistingBuild,
     [ValidatePattern('^[a-fA-F0-9]{64}$')]
