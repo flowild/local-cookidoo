@@ -32,12 +32,14 @@ class TelegramView extends StatefulWidget {
 }
 
 class _TelegramViewState extends State<TelegramView> {
+  final _todayHeading = GlobalKey();
   late DateTime monday;
   late Future<Json> snapshot;
   late Map<String, bool> checks;
   bool checksLoaded = false;
   bool initialWeek = true;
   int _request = 0;
+  int? _scrollToTodayRequest;
 
   DateTime _monday(DateTime date) =>
       DateTime.utc(date.year, date.month, date.day - date.weekday + 1);
@@ -90,6 +92,13 @@ class _TelegramViewState extends State<TelegramView> {
     });
   }
 
+  void _showToday(String today) {
+    monday = _monday(DateTime.tryParse(today) ?? DateTime.now());
+    initialWeek = true;
+    _refresh();
+    _scrollToTodayRequest = _request;
+  }
+
   void _saveChecks() {
     widget.telegram.saveChecks(checks).catchError((Object _) {
       if (mounted) {
@@ -104,11 +113,21 @@ class _TelegramViewState extends State<TelegramView> {
     });
   }
 
-  Widget _week(Json data) {
+  Widget _week(Json data, {required bool loaded}) {
     final days = objects(data['days']);
     final today = text(data['today']);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    if (loaded && _scrollToTodayRequest == _request) {
+      final request = _request;
+      _scrollToTodayRequest = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _request != request) return;
+        final heading = _todayHeading.currentContext;
+        if (heading != null) Scrollable.ensureVisible(heading);
+      });
+    }
+
     Widget? entries(Object? raw, {bool placeholders = false}) {
       final items = raw is List ? raw.whereType<String>() : const <String>[];
       if (items.isEmpty) return null;
@@ -151,12 +170,8 @@ class _TelegramViewState extends State<TelegramView> {
             ),
             Flexible(
               child: TextButton(
-                onPressed: () {
-                  monday = _monday(DateTime.now());
-                  initialWeek = true;
-                  _refresh();
-                },
-                child: const Text('Diese Woche', textAlign: TextAlign.center),
+                onPressed: () => _showToday(today),
+                child: const Text('Heute', textAlign: TextAlign.center),
               ),
             ),
             IconButton(
@@ -189,6 +204,7 @@ class _TelegramViewState extends State<TelegramView> {
                 children: [
                   CalendarDayHeading(
                     calendarDayLabel(index, text(day['date'])),
+                    key: day['date'] == today ? _todayHeading : null,
                     isToday: day['date'] == today,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: day['date'] == today
@@ -410,7 +426,12 @@ class _TelegramViewState extends State<TelegramView> {
                 else if (widget.cart)
                   ..._cart(result.requireData)
                 else
-                  SliverToBoxAdapter(child: _week(result.requireData)),
+                  SliverToBoxAdapter(
+                    child: _week(
+                      result.requireData,
+                      loaded: result.connectionState == ConnectionState.done,
+                    ),
+                  ),
               ],
             ),
           ),

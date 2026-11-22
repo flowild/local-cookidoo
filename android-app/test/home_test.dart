@@ -319,7 +319,7 @@ void main() {
 
     final body = tester.getRect(find.byKey(const ValueKey('main-content')));
     final swipeStart = Offset(body.center.dx, body.top + 32);
-    final today = find.text('Diese Woche');
+    final today = find.widgetWithText(FilledButton, 'Heute');
     final todayX = tester.getCenter(today).dx;
     final originalWeek = tester.widget<WeekView>(find.byType(WeekView));
     final shortDrag = await tester.startGesture(swipeStart);

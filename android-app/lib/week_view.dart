@@ -153,8 +153,8 @@ class _WeekViewState extends State<WeekView> {
     });
   }
 
-  Future<void> _selectDay(int index) async {
-    if (_visibleDay == index) return;
+  Future<void> _selectDay(int index, {bool force = false}) async {
+    if (_visibleDay == index && !force) return;
     _dayChanged = true;
     _visibleDay = index;
     if (widget.api.usesTestData) return;
@@ -178,7 +178,7 @@ class _WeekViewState extends State<WeekView> {
     if (count is int) widget.cartCountChanged(count);
   }
 
-  Future<void> _load({bool showPrevious = false}) async {
+  Future<void> _load({bool showPrevious = false, bool showToday = false}) async {
     final request = ++_request;
     final day = _requestedDay;
     final path = day == null
@@ -208,6 +208,14 @@ class _WeekViewState extends State<WeekView> {
         _recipes = _project(week, _queue);
         _loading = false;
       });
+      if (showToday) {
+        final index = objects(week['days']).indexWhere(
+          (day) => day['date'] == week['today'],
+        );
+        if (index >= 0) {
+          unawaited(_selectDay(index, force: true));
+        }
+      }
       _restorePage();
       if (status['connected'] == true && !_busy) {
         final work = _enrich(week, request);
@@ -391,7 +399,7 @@ class _WeekViewState extends State<WeekView> {
     } else {
       return;
     }
-    unawaited(_load());
+    unawaited(_load(showToday: offset == null));
   }
 
   void _message(String message) {
@@ -1068,7 +1076,7 @@ class _WeekViewState extends State<WeekView> {
                                   ? () => _navigate(null)
                                   : null,
                               child: const Text(
-                                'Diese Woche',
+                                'Heute',
                                 textAlign: TextAlign.center,
                               ),
                             ),

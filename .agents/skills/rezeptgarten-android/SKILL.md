@@ -29,6 +29,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
   Die Wochenansichten zeigen die ISO-Kalenderwoche an der Navigation. Die
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
+  „Heute“ zeigt den heutigen Tag der aktuellen Woche. Im Heimnetz wird der
+  Tag im Kalender ausgewählt, im Telegram-Modus scrollt die Liste zu ihm.
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit

@@ -144,7 +144,13 @@ void main() {
     final next = find.byTooltip('Nächste Woche');
     expect(current, findsOneWidget);
     expect(find.bySemanticsLabel('Aktuelle Kalenderwoche 53'), findsOneWidget);
-    expect(find.text('Heute'), findsOneWidget);
+    final todayButton = find.widgetWithText(FilledButton, 'Heute');
+    double page() => tester.widget<PageView>(find.byType(PageView)).controller!.page!;
+    expect(page(), 0);
+    await tester.tap(todayButton);
+    await tester.pumpAndSettle();
+    expect(page(), 4);
+    expect(find.text('Freitag, 01.01.2027'), findsOneWidget);
     expect(tester.getCenter(current).dy, closeTo(tester.getCenter(next).dy, 1));
     final currentColor = tester.widget<Text>(current).style?.color;
 
@@ -154,12 +160,15 @@ void main() {
     expect(other, findsOneWidget);
     expect(find.bySemanticsLabel('Kalenderwoche 1'), findsOneWidget);
     expect(tester.widget<Text>(other).style?.color, isNot(currentColor));
-    expect(find.text('Heute'), findsNothing);
+    await tester.drag(find.byType(PageView), const Offset(240, 0));
+    await tester.pumpAndSettle();
+    expect(page(), isNot(4));
 
-    await tester.tap(find.text('Diese Woche'));
+    await tester.tap(todayButton);
     await tester.pumpAndSettle();
     expect(current, findsOneWidget);
-    expect(find.text('Heute'), findsOneWidget);
+    expect(page(), 4);
+    expect(find.text('Heute'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 
@@ -183,7 +192,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(PageView), findsNothing);
-    final weekButton = tester.getCenter(find.text('Diese Woche'));
+    final weekButton = tester.getCenter(find.widgetWithText(FilledButton, 'Heute'));
     final shoppingButton = tester.getCenter(
       find.byTooltip('In den Einkaufswagen'),
     );
@@ -495,9 +504,9 @@ class _WeekBoundaryApi extends _WeekApi {
     if (uri.path != '/api/calendar/week') {
       return super.get(path, timeout: timeout);
     }
-    const today = '2026-12-28';
+    const today = '2027-01-01';
     final monday = DateTime.parse(
-      '${uri.queryParameters['day'] ?? today}T00:00:00Z',
+      "${uri.queryParameters['day'] ?? '2026-12-28'}T00:00:00Z",
     );
     return {
       'today': today,

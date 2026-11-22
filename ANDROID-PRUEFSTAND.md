@@ -263,6 +263,12 @@ ist in `FLUTTER-PORTIERUNG.md` beschrieben.
 
 ## Aktueller technischer Stand
 
+- Für Version **1.10.0** prüfen die Widgettests den Sprung mit „Heute“ auf
+  Freitag, den 1. Januar 2027, aus der laufenden Woche und der Folgewoche.
+  Im Telegram-Modus prüfen sie die sichtbare Position des heutigen Tageskopfs.
+  Alle 62 Flutter-Tests und 130 Backendtests bestanden. Testbuild **49** ist
+  auf LXC 103 veröffentlicht. HTTPS-Download und Update-Manifest stimmen
+  mit der lokal signierten APK überein.
 - Am 22. November 2026 wurde **1.9.6, Build 48** auf LXC 103 veröffentlicht.
   Die ARM64-Profil-APK hat dieselbe Signatur wie Build 17. HTTPS-Download,
   SHA-256 und Update-Manifest wurden mit der lokalen APK abgeglichen.

@@ -63,7 +63,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - „Meine Woche“ zeigt die aktuelle Berliner Kalenderwoche von Montag bis Sonntag; beim Öffnen und Wochenwechsel werden die Einträge direkt aus Cookidoo geladen und vorgemerkte Verschiebungen angezeigt. Ohne Verbindung bleiben die Tage mit einem Fehlerhinweis sichtbar.
 
-- In „Meine Woche“ stehen sieben Tage auf Desktop ohne horizontales Scrollen in einer Reihe; auf dem Handy bleibt diese seitlich scrollbar und rastet mittig auf einem Tag ein. Der zuletzt angezeigte Wochentag bleibt im Browser nach Neuladen und Wochenwechsel erhalten. Pfeile wechseln die angezeigte Woche, „Diese Woche“ springt zur aktuellen Woche; Rezeptbilder und Links sind in den Tageskacheln sichtbar.
+- In „Meine Woche“ stehen sieben Tage auf Desktop nebeneinander. Auf dem Handy rastet die seitlich scrollbare Woche mittig auf einem Tag ein. Die Pfeile wechseln die Woche und behalten den Wochentag bei. „Heute“ wechselt zum heutigen Berliner Kalendertag und merkt ihn auch für das Neuladen. Rezeptbilder und Links sind in den Tageskacheln sichtbar.
 
 - Wochen- und Ablagerezepte verwenden das Design der Rezeptlisten: Bild und ein Bereich für den vollständig umgebrochenen Namen sowie den verfügbaren Schwierigkeitsgrad. Die sieben Tage bleiben auf Desktop nebeneinander; fehlende Angaben werden bei Bedarf im Hintergrund ergänzt.
 

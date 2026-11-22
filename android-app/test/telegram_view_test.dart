@@ -54,6 +54,13 @@ class FakeTelegram extends TelegramService {
           'recipes': ['Suppe'],
           'placeholders': ['sushi'],
         },
+        for (var offset = 1; offset < 7; offset++)
+          {
+            'date': DateTime.parse('${day}T00:00:00Z')
+                .add(Duration(days: offset))
+                .toIso8601String()
+                .substring(0, 10),
+          },
       ],
       'shelf': ['Brot'],
       'shelf_placeholders': ['resteessen'],
@@ -114,6 +121,10 @@ void main() {
     tester,
   ) async {
     final telegram = FakeTelegram();
+    tester.view.physicalSize = const Size(360, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: TelegramView(telegram: telegram, cart: false)),
@@ -128,6 +139,12 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-01-12');
+    await tester.tap(find.widgetWithText(TextButton, 'Heute'));
+    await tester.pumpAndSettle();
+    expect(telegram.calls.last, 'week 2026-01-05');
+    final today = find.text('Mittwoch, 07.01.2026');
+    expect(today.hitTestable(), findsOneWidget);
+    expect(tester.getTopLeft(today).dy, lessThan(80));
     telegram.dispose();
   });
 
@@ -212,12 +229,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-30');
     expect(find.text('KW 14'), findsOneWidget);
-    expect(find.text('Heute'), findsOneWidget);
+    expect(find.text('Heute'), findsNWidgets(2));
     await tester.tap(find.byIcon(Icons.chevron_left));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-23');
     expect(find.text('KW 13'), findsOneWidget);
-    expect(find.text('Heute'), findsNothing);
+    expect(find.text('Heute'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
     expect(telegram.calls.last, 'week 2026-03-30');

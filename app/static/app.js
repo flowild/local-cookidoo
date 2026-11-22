@@ -330,7 +330,7 @@ function weekDays(week, unavailable = false) {
 }
 function weekToolbar(message, error = false) {
   const disabled = weekQueueWriting || weekSaving || weekShoppingBusy ? 'disabled' : '';
-  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Diese Woche</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary" type="button" data-action="week-shopping" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}In den Einkaufswagen</button>`}${weekQueueError && weekMoves.length ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
+  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Heute</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary" type="button" data-action="week-shopping" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}In den Einkaufswagen</button>`}${weekQueueError && weekMoves.length ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
 }
 function adoptWeekQueue(queue) {
   if (!queue || weekQueueWriting) return false;
@@ -355,6 +355,11 @@ function applyWeekMoves(week) {
     if (recipe && to && !to.recipes.some(item => item.calendar_id === move.recipe_id && item.custom === move.custom)) to.recipes.push(recipe);
   }
 }
+function rememberWeekDay(index) {
+  if (index === weekVisibleDay) return;
+  weekVisibleDay = index;
+  try { localStorage.setItem('rezeptgarten-week-visible-day', String(index)); } catch (_) {}
+}
 function restoreWeekPosition() {
   const scroll = $('.week-scroll');
   if (!scroll || !matchMedia('(max-width:700px)').matches) return;
@@ -371,9 +376,7 @@ document.addEventListener('scroll', event => {
     const rect = day.getBoundingClientRect(), previous = days[best].getBoundingClientRect();
     return Math.abs(rect.left + rect.width / 2 - center) < Math.abs(previous.left + previous.width / 2 - center) ? i : best;
   }, 0);
-  if (index === weekVisibleDay) return;
-  weekVisibleDay = index;
-  try { localStorage.setItem('rezeptgarten-week-visible-day', String(index)); } catch (_) {}
+  rememberWeekDay(index);
 }, true);
 function showWeek() {
   if (state.view !== 'meine-woche' || !$('#week-content') || !displayedWeek) return;
@@ -1451,7 +1454,23 @@ document.addEventListener('click', async event => {
         }
         case 'previous-week': weekOffset--; await renderRoute(); $('[data-action="previous-week"]')?.focus(); break;
         case 'next-week': weekOffset++; await renderRoute(); $('[data-action="next-week"]')?.focus(); break;
-        case 'current-week': weekOffset = 0; await renderRoute(); $('[data-action="current-week"]')?.focus(); break;
+        case 'current-week': {
+          weekOffset = 0;
+          const {days, today} = emptyCurrentWeek();
+          rememberWeekDay(days.findIndex(day => day.date === today));
+          if (displayedWeek?.today === today && displayedWeek.days[0].date === days[0].date) {
+            clearWeekSwipeSelection();
+            restoreWeekPosition();
+          } else {
+            await renderRoute();
+          }
+          const heading = $('.week-day[aria-current="date"] h2');
+          if (heading) {
+            heading.tabIndex = -1;
+            heading.focus({preventScroll:true});
+          }
+          break;
+        }
         case 'week-shopping': await addWeekShopping(); $('[data-action="week-shopping"]')?.focus(); break;
         case 'cart-transfer': {
           action.disabled = true;
