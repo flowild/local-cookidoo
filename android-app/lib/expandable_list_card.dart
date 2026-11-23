@@ -36,6 +36,19 @@ class ExpandableListCard extends StatelessWidget {
       ),
     );
     final label = wrapTitle?.call(text) ?? text;
+    final heading = subtitle == null
+        ? label
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              label,
+              DefaultTextStyle.merge(
+                style: theme.textTheme.bodySmall,
+                child: subtitle!,
+              ),
+            ],
+          );
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -54,14 +67,13 @@ class ExpandableListCard extends StatelessWidget {
         onExpansionChanged: onExpansionChanged,
         leading: leading,
         title: action == null
-            ? label
+            ? heading
             : Row(
                 children: [
-                  Expanded(child: label),
+                  Expanded(child: heading),
                   action!,
                 ],
               ),
-        subtitle: subtitle,
         children: [Material(color: colors.surfaceContainerLow, child: body)],
       ),
     );

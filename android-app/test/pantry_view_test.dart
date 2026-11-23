@@ -6,6 +6,46 @@ import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/pantry_view.dart';
 
 void main() {
+  testWidgets('pantry headers and ingredient names share fixed columns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(332, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _PantryApi()
+      ..categoryNames = ['Vorräte', 'Frisches Gemüse und tiefgekühlte Kräuter']
+      ..extraItems = [
+        {'id': 2, 'category_id': 1, 'name': 'Pfeffer', 'quantity': ''},
+        {'id': 3, 'category_id': 1, 'name': 'Ingwer', 'quantity': '250 g'},
+      ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(332, 900),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: PantryView(api: api, collapsed: {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    double left(String label) => tester.getTopLeft(find.text(label)).dx;
+    expect(left('Vorräte'), left(api.categoryNames[1]));
+    expect(left('Pfeffer'), left('Ingwer'));
+    expect(left('Pfeffer'), left('Vorräte'));
+    expect(
+      tester.getCenter(find.byTooltip('Aktionen für Vorräte')).dx,
+      tester
+          .getCenter(find.byTooltip('Aktionen für ${api.categoryNames[1]}'))
+          .dx,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'adds a suggested ingredient, edits it and confirms category deletion',
     (tester) async {
@@ -91,6 +131,8 @@ class _PantryApi extends RezeptgartenApi {
   _PantryApi() : super(client: HttpClient());
 
   List<int> order = [1, 2];
+  List<String> categoryNames = ['Vorräte', 'Gemüse'];
+  List<Json> extraItems = [];
   Json? item;
 
   @override
@@ -99,10 +141,9 @@ class _PantryApi extends RezeptgartenApi {
     return switch (uri.path) {
       '/api/pantry' => {
         'categories': [
-          for (final id in order)
-            {'id': id, 'name': id == 1 ? 'Vorräte' : 'Gemüse'},
+          for (final id in order) {'id': id, 'name': categoryNames[id - 1]},
         ],
-        'items': [if (item != null) item],
+        'items': [...extraItems, if (item != null) item],
       },
       '/api/ingredients/suggestions' when uri.queryParameters['q'] == 'rei' => {
         'items': [

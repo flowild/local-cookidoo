@@ -260,72 +260,93 @@ class _PantryViewState extends State<PantryView> {
   );
 
   Widget _category(Json category, List<Json> items, int index, bool enabled) {
+    const iconWidth = 36.0;
     final id = category['id'] as int;
     final name = text(category['name']);
     return Padding(
       key: ValueKey(id),
       padding: const EdgeInsets.only(bottom: AppSpacing.item),
-      child: ExpandableListCard(
-        title: name,
-        expansionKey: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
-        initiallyExpanded: _query.isNotEmpty || !widget.collapsed.contains(id),
-        onExpansionChanged: (expanded) {
-          if (_query.isNotEmpty) return;
-          if (expanded) {
-            widget.collapsed.remove(id);
-          } else {
-            widget.collapsed.add(id);
-          }
-        },
-        leading: _query.isEmpty
-            ? ReorderableDragStartListener(
-                index: index,
-                enabled: enabled,
-                child: Semantics(
-                  label: '$name verschieben',
-                  child: const Icon(Icons.drag_handle),
-                ),
-              )
-            : null,
-        action: PopupMenuButton<String>(
-          enabled: enabled,
-          tooltip: 'Aktionen für $name',
-          onSelected: (value) {
-            if (value == 'add') {
-              unawaited(_edit(categoryId: id));
+      child: ListTileTheme.merge(
+        minLeadingWidth: iconWidth,
+        horizontalTitleGap: AppSpacing.related,
+        titleAlignment: ListTileTitleAlignment.center,
+        child: ExpandableListCard(
+          title: name,
+          expansionKey: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
+          initiallyExpanded:
+              _query.isNotEmpty || !widget.collapsed.contains(id),
+          onExpansionChanged: (expanded) {
+            if (_query.isNotEmpty) return;
+            if (expanded) {
+              widget.collapsed.remove(id);
             } else {
-              unawaited(_removeCategory(category));
+              widget.collapsed.add(id);
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'add', child: Text('Zutat hinzufügen')),
-            PopupMenuItem(value: 'delete', child: Text('Kategorie löschen')),
-          ],
-        ),
-        subtitle: Text('${items.length} Zutaten'),
-        body: Column(
-          children: [
-            if (items.isEmpty)
-              const ListTile(title: Text('Noch keine Zutaten eingetragen.')),
-            for (final item in items)
-              ListTile(
-                dense: true,
-                leading: IngredientIcon(text(item['name']), category: name),
-                title: Text(text(item['name'])),
-                subtitle: text(item['quantity']).isNotEmpty
-                    ? Text(text(item['quantity']))
-                    : null,
-                onTap: enabled ? () => _edit(item: item) : null,
-                trailing: IconButton(
-                  tooltip: '${item['name']} entfernen',
-                  onPressed: enabled
-                      ? () =>
-                            _change('DELETE', '/api/pantry/items/${item['id']}')
-                      : null,
-                  icon: const Icon(Icons.close),
+          leading: SizedBox(
+            width: iconWidth,
+            child: _query.isEmpty
+                ? ReorderableDragStartListener(
+                    index: index,
+                    enabled: enabled,
+                    child: Semantics(
+                      label: '$name verschieben',
+                      child: const Icon(Icons.drag_handle),
+                    ),
+                  )
+                : null,
+          ),
+          action: PopupMenuButton<String>(
+            enabled: enabled,
+            tooltip: 'Aktionen für $name',
+            onSelected: (value) {
+              if (value == 'add') {
+                unawaited(_edit(categoryId: id));
+              } else {
+                unawaited(_removeCategory(category));
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'add', child: Text('Zutat hinzufügen')),
+              PopupMenuItem(value: 'delete', child: Text('Kategorie löschen')),
+            ],
+          ),
+          subtitle: Text('${items.length} Zutaten'),
+          body: Column(
+            children: [
+              if (items.isEmpty)
+                const ListTile(
+                  leading: SizedBox(width: iconWidth),
+                  title: Text('Noch keine Zutaten eingetragen.'),
                 ),
-              ),
-          ],
+              for (final item in items)
+                ListTile(
+                  dense: true,
+                  leading: SizedBox(
+                    width: iconWidth,
+                    child: Center(
+                      heightFactor: 1,
+                      child: IngredientIcon(text(item['name']), category: name),
+                    ),
+                  ),
+                  title: Text(text(item['name'])),
+                  subtitle: text(item['quantity']).isNotEmpty
+                      ? Text(text(item['quantity']))
+                      : null,
+                  onTap: enabled ? () => _edit(item: item) : null,
+                  trailing: IconButton(
+                    tooltip: '${item['name']} entfernen',
+                    onPressed: enabled
+                        ? () => _change(
+                            'DELETE',
+                            '/api/pantry/items/${item['id']}',
+                          )
+                        : null,
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

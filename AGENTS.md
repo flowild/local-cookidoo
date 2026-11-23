@@ -125,6 +125,8 @@ denselben Kartenrahmen und dieselben Bezeichnungen für Schwierigkeitsgrade.
 Das Raster in Übersicht, Bibliothek und Listen richtet sich nach der Breite
 und Schriftgröße. Rezeptlisten und Vorratskategorien verwenden dieselbe
 getönte Kopfzeile für aufklappbare Gruppen.
+Vorratskategorien richten Symbole, Namen und Aktionen in festen Spalten aus.
+In Android stehen die Zutatennamen auf derselben Flucht wie die Kategorienamen.
 Die Listenbearbeitung zeigt unter „Alle Rezepte“ vorhandene und hinzufügbare
 Rezepte mit einer gemeinsamen Suche. Hinzufügbare Karten haben ein Plus oben rechts.
 Der Papierkorb rechts neben „In dieser Liste“ aktiviert das X an zugeordneten
