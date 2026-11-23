@@ -55,7 +55,7 @@ def publish(channel, staging_name, version, build_number, size, sha256):
                     raise ValueError('APK versionCode must increase')
             staged.chmod(0o644)
             os.replace(staged, target)
-            title = 'Rezeptgarten Android-Testversion' if channel == 'test' else 'Rezeptgarten für Android'
+            title = 'Rezeptmix für Android – Testkanal' if channel == 'test' else 'Rezeptmix für Android'
             page = f'''<!doctype html>
 <html lang="de">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

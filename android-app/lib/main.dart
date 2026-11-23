@@ -140,7 +140,7 @@ class _RezeptgartenSessionState extends State<_RezeptgartenSession> {
         builder: (context) => AlertDialog(
           title: const Text('Heimnetz erkennen'),
           content: const Text(
-            'Android benötigt die Standortberechtigung, damit Rezeptgarten das WLAN ThomasWlan erkennen kann.',
+            'Android benötigt die Standortberechtigung, damit Rezeptmix das WLAN ThomasWlan erkennen kann.',
           ),
           actions: [
             TextButton(
@@ -211,7 +211,7 @@ class _RezeptgartenSessionState extends State<_RezeptgartenSession> {
       valueListenable: widget.appearance,
       builder: (context, current, _) => MaterialApp(
         navigatorKey: navigatorKey,
-        title: 'Rezeptgarten',
+        title: 'Rezeptmix',
         debugShowCheckedModeBanner: false,
         theme: rezeptgartenTheme(Brightness.light, current.accent),
         darkTheme: rezeptgartenTheme(Brightness.dark, current.accent),

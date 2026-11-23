@@ -499,7 +499,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ]),
                   ),
                 if (!widget.api.usesTestData)
-                  _card('Rezeptgarten für Android', [
+                  _card('Rezeptmix für Android', [
                     if (_version != null)
                       Text('Installierte Version $_version'),
                     Semantics(

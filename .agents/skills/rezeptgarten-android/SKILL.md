@@ -178,7 +178,7 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   führt die Widgettests aus und baut ARM64. Verwende eine steigende
   Buildnummer je Kanal und eine stabile Signatur. Test-App und Release
   haben unterschiedliche Paket-IDs und Downloadpfade. Auf dem Gerät heißen
-  beide „Rezeptgarten“. Der Launcher verwendet ab Android 8 das adaptive
+  beide „Rezeptmix“. Der Launcher verwendet ab Android 8 das adaptive
   `ic_launcher` mit fast schwarzem Hintergrund und einer separaten Form für
   Themensymbole. Android färbt Themensymbole nach dem Geräte-Design ein.
   Ältere Launcher und die Kopfzeile verwenden die mit

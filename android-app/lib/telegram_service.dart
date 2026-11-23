@@ -290,7 +290,7 @@ class TelegramService extends ChangeNotifier {
         'api_id': _apiId,
         'api_hash': _apiHash,
         'system_language_code': 'de',
-        'device_model': 'Rezeptgarten',
+        'device_model': 'Rezeptmix',
         'system_version': '',
         'application_version': version ?? 'unknown',
       });

@@ -205,7 +205,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       builder: (context) => AlertDialog(
         title: const Text('Heimnetz erkennen'),
         content: const Text(
-          'Android benötigt die Standortberechtigung, damit Rezeptgarten das WLAN ThomasWlan erkennen kann.',
+          'Android benötigt die Standortberechtigung, damit Rezeptmix das WLAN ThomasWlan erkennen kann.',
         ),
         actions: [
           TextButton(
@@ -1157,7 +1157,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.section,
       children: [
-        _heading('Dein Rezeptgarten'),
+        _heading('Dein Rezeptmix'),
         _section('Deine Sammlung', [
           ActionPillGrid(
             minColumnWidth: 130,
@@ -1353,7 +1353,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Rezeptgarten',
+              'Rezeptmix',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

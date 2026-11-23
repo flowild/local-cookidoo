@@ -107,7 +107,7 @@ Die native Flutter-App entsteht unter `android-app/`. Die
 [Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
-Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptgarten“. Android und
+Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptmix“. Android und
 PWA verwenden das Motiv Schale mit Keimling. Das adaptive Android-Launcher-Icon
 verwendet ein größeres Motiv auf einem fast schwarzen Hintergrund. Bei
 „Themensymbole“ bestimmt der Launcher die Farben des Motivs und des Hintergrunds.

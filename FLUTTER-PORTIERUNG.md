@@ -1,4 +1,4 @@
-# Rezeptgarten als native Android-App
+# Rezeptmix als native Android-App
 
 Ziel ist eine signierte native Flutter-APK mit dem Funktionsumfang der Rezeptgarten-Web-App und einer Android-Oberfläche in Material 3 Expressive. Die APK wird auf dem bestehenden Rezeptgarten-Container gespeichert und von dort heruntergeladen. Die reguläre APK soll sich über denselben Weg aktualisieren lassen.
 

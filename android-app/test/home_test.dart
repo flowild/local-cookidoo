@@ -513,7 +513,7 @@ void main() {
         'Listen',
         260.0,
         '/api/featured-recipe',
-        'Dein Rezeptgarten',
+        'Dein Rezeptmix',
       ),
     ]) {
       await tester.tap(find.text(target));

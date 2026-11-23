@@ -148,7 +148,7 @@ class _TelegramSetupState extends State<TelegramSetup> {
               spacing: AppSpacing.item,
               children: [
                 const Text(
-                  'Rezeptgarten nutzt Telegram für den Zugriff unterwegs und sendet dazu Anfragen an den Rezeptgarten-Bot.',
+                  'Rezeptmix nutzt Telegram für den Zugriff unterwegs und sendet dazu Anfragen an den Rezeptgarten-Bot.',
                 ),
                 if (step == TelegramStep.credentials) ...[
                   TextField(
