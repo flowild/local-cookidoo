@@ -77,8 +77,10 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Vorratssymbole, sofern sie festgelegt sind.
   Kategorie- und Zutatenzeilen verwenden eine feste Symbolspalte und eine
   gemeinsame linke Textkante. Menüs und Aufklappsymbole stehen rechts.
-- Beim Bestätigen von Einkaufs-Häkchen die Höhe vor den vorhandenen Einträgen
-  konstant halten und Warenbereiche aus der Serverantwort verwenden.
+- Einkaufs-Häkchen sofort sichtbar ändern und im Hintergrund speichern.
+  Bis zur Bestätigung die Zeile an ihrer Position halten und weitere Zutaten
+  bedienbar lassen. Den Serverstand bei Konflikten übernehmen und den
+  Cookidoo-Transfer erst nach den ausstehenden Änderungen freigeben.
 - Listentitel sind aufklappbar und durchsuchbar. Kräftige Schrift und ein eigener
   Hintergrund unterscheiden sie von den zweispaltigen Rezeptkarten.
   Langes Drücken auf einen Titel startet das Verschieben. Die Titel wackeln

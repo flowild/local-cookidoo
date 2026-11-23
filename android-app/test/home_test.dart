@@ -616,9 +616,34 @@ void main() {
     await tester.tap(ingredient.hitTestable());
     await tester.pump();
     expect(tester.getCenter(ingredient), ingredientPosition);
+    expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+    expect(api.owned, isFalse);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is IconButton &&
+                  widget.tooltip == 'An Cookidoo übertragen',
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
     write.complete();
     await tester.pumpAndSettle();
     expect(api.owned, isTrue);
+    expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+
+    final conflict = Completer<void>();
+    api.ingredientWrite = conflict.future;
+    await tester.ensureVisible(ingredient);
+    await tester.tap(ingredient.hitTestable());
+    await tester.pump();
+    expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+    api.ownedRevision++;
+    conflict.complete();
+    await tester.pumpAndSettle();
     expect(tester.widget<Checkbox>(checkbox).value, isTrue);
     final remove = find.byTooltip('Reis mit Gemüse entfernen');
     await tester.scrollUntilVisible(remove, 250, scrollable: _verticalScroll);
@@ -817,6 +842,7 @@ class _TestApi extends RezeptgartenApi {
 
   String? addedDay;
   bool owned = false;
+  int ownedRevision = 0;
   Future<void>? ingredientWrite;
   String? cartItem;
   String extraStatus = 'pending';
@@ -860,7 +886,12 @@ class _TestApi extends RezeptgartenApi {
               'name': 'Reis mit Gemüse',
               'image_file': '${'a' * 40}.webp',
               'ingredients': [
-                {'name': 'Reis', 'text': '100 g Reis', 'owned': owned},
+                {
+                  'name': 'Reis',
+                  'text': '100 g Reis',
+                  'owned': owned,
+                  'owned_revision': ownedRevision,
+                },
               ],
             },
           },
@@ -876,7 +907,12 @@ class _TestApi extends RezeptgartenApi {
         addedDay = body?['day'] as String?;
       case ('PUT', '/api/cart/cart-entry/ingredients/0'):
         await ingredientWrite;
-        owned = body?['owned'] == true;
+        if (body?['owned'] == true ||
+            body?['owned_revision'] == ownedRevision) {
+          owned = body?['owned'] == true;
+          ownedRevision++;
+        }
+        return {'ok': true, 'owned': owned, 'owned_revision': ownedRevision};
       case ('POST', '/api/cart/items'):
         cartItem = body?['name'] as String?;
       case ('POST', '/api/cart/transfer'):

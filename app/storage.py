@@ -190,6 +190,32 @@ class Database:
                        (json.dumps(data, ensure_ascii=False) if data is not None else row['data'], status or row['status'], owner, identifier))
             return True
 
+    def cart_set_owned(self, owner, identifier, position, owned, expected_revision):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT kind,data,status FROM cart_entries WHERE owner=? AND id=?',
+                             (owner, identifier)).fetchone()
+            kind = 'additional' if position is None else 'recipe'
+            if not row or row['kind'] != kind:
+                return None
+            data = json.loads(row['data'])
+            if position is None:
+                item = data
+            else:
+                ingredients = data.get('ingredients', [])
+                if not 0 <= position < len(ingredients):
+                    return None
+                item = ingredients[position]
+            if row['status'] != 'pending':
+                raise ValueError('Der Eintrag wurde bereits übertragen oder verändert.')
+            revision = item.get('owned_revision', 0)
+            if not owned and expected_revision is not None and expected_revision != revision:
+                return {'owned': bool(item.get('owned')), 'owned_revision': revision}
+            item.update(owned=owned, owned_revision=revision + 1)
+            db.execute('UPDATE cart_entries SET data=? WHERE owner=? AND id=?',
+                       (json.dumps(data, ensure_ascii=False), owner, identifier))
+            return {'owned': owned, 'owned_revision': revision + 1}
+
     def cart_delete(self, owner, identifier=None):
         with self.connect() as db:
             if identifier:

@@ -55,7 +55,11 @@ Bearbeiten-Symbol. Importierte Cookidoo-Listen zeigen an derselben Stelle
 „Zu Cookidoo“. Öffentliche Kollektionen öffnen direkt, persönliche Listen
 führen zu „Meine Rezepte“ bei Cookidoo.
 Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
-Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
+Einkaufs-Häkchen reagieren in beiden Android-Verbindungsmodi sofort. Während
+der Server die Änderung im Hintergrund speichert, bleibt die Zutatenzeile
+an ihrer Position und weitere Zutaten bleiben bedienbar. Der Cookidoo-Transfer
+wartet auf ausstehende Häkchen. Bei gleichzeitigen Änderungen hat „abgehakt“
+Vorrang. Ein erneuter Tipp auf den aktuellen Stand kann das Häkchen entfernen.
 Zusatzartikel erhalten ihren Warenbereich über denselben Serverabgleich wie
 Rezeptzutaten. Die Rezepte im Android-Einkaufswagen erscheinen als kompakte
 Zeilen mit runden Vorschaubildern wie in den Wochenlisten. Neben dem Wagentitel

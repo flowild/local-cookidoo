@@ -61,6 +61,16 @@ class TelegramApiTests(unittest.TestCase):
         lists = self.client.get('/api/collections').json()['items']
         self.assertEqual([item['name'] for item in lists], ['Testliste'])
 
+    def test_telegram_uncheck_yields_to_a_newer_web_check(self):
+        headers = {'Origin': 'http://testserver'}
+        self.client.post('/api/cart/items', json={'name': 'Testartikel'}, headers=headers)
+        item = self.client.get('/api/cart').json()['items'][0]
+        path = f"/api/cart/{item['id']}/owned"
+        checked = self.client.put(path, json={'owned': True, 'owned_revision': 0}, headers=headers).json()
+        delayed = self.post(self.envelope('PUT', path, body={'owned': False, 'owned_revision': 0}))
+        self.assertEqual(delayed['status'], 200)
+        self.assertEqual(delayed['body'], checked)
+
     def test_requires_loopback_live_pair_active_account_and_allowed_route(self):
         request = self.envelope('GET', '/api/pantry')
         external = TestClient(self.app, client=('192.0.2.1', 1234))

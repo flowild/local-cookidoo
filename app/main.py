@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import hashlib
 import json
 import json
@@ -132,6 +131,7 @@ class CartItem(BaseModel):
 
 class CartOwned(BaseModel):
     owned: bool
+    owned_revision: int | None = Field(default=None, ge=0)
 
 
 class CartResolution(BaseModel):
@@ -618,31 +618,23 @@ def create_app(directory=None, secure_cookies=None):
         database.cart_add(cart_owner(), 'additional', {'name': name, 'owned': False})
         return {'ok': True}
 
+    def set_cart_owned(entry_id, position, payload, missing):
+        cart_editable()
+        try:
+            result = database.cart_set_owned(cart_owner(), entry_id, position, payload.owned, payload.owned_revision)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        if result is None:
+            raise HTTPException(404, missing)
+        return {'ok': True, **result}
+
     @app.put('/api/cart/{entry_id}/ingredients/{position}')
     def cart_ingredient(entry_id: str, position: int, payload: CartOwned):
-        cart_editable()
-        owner = cart_owner()
-        row = next((item for item in database.cart(owner) if item['id'] == entry_id), None)
-        if not row or row['kind'] != 'recipe' or position < 0 or position >= len(row['data']['ingredients']):
-            raise HTTPException(404, 'Diese Zutat wurde nicht gefunden.')
-        original_data = copy.deepcopy(row['data'])
-        row['data']['ingredients'][position]['owned'] = payload.owned
-        if not database.cart_update(owner, entry_id, data=row['data'], expected='pending', expected_data=original_data):
-            raise HTTPException(409, 'Der Eintrag wurde bereits übertragen oder verändert.')
-        return {'ok': True}
+        return set_cart_owned(entry_id, position, payload, 'Diese Zutat wurde nicht gefunden.')
 
     @app.put('/api/cart/{entry_id}/owned')
     def cart_item_owned(entry_id: str, payload: CartOwned):
-        cart_editable()
-        owner = cart_owner()
-        row = next((item for item in database.cart(owner) if item['id'] == entry_id and item['kind'] == 'additional'), None)
-        if not row:
-            raise HTTPException(404, 'Dieser Artikel wurde nicht gefunden.')
-        original_data = copy.deepcopy(row['data'])
-        row['data']['owned'] = payload.owned
-        if not database.cart_update(owner, entry_id, data=row['data'], expected='pending', expected_data=original_data):
-            raise HTTPException(409, 'Der Eintrag wurde bereits übertragen oder verändert.')
-        return {'ok': True}
+        return set_cart_owned(entry_id, None, payload, 'Dieser Artikel wurde nicht gefunden.')
 
     @app.post('/api/cart/{entry_id}/resolve')
     def cart_resolve(entry_id: str, payload: CartResolution):

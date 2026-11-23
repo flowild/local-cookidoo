@@ -127,7 +127,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Einkaufszutaten erscheinen nach Warenbereichen gruppiert. Vorhandene Vorratszuordnungen haben Vorrang, weitere Zutaten erhalten eine passende Standardgruppe oder „Sonstiges“. Wasser wird weder bei benötigten noch bei vorhandenen Zutaten angezeigt; gespeicherte Einkaufsdaten bleiben erhalten.
 
-- Einkaufszutaten zeigen neben dem Häkchen ein kleines Symbol passend zur Zutat oder zum Warenbereich, wie im Vorrat.
+- Einkaufszutaten zeigen neben dem Häkchen ein kleines Symbol passend zur Zutat oder zum Warenbereich, wie im Vorrat. Änderungen an Zutaten und Zusatzartikeln übergeben den zuletzt geladenen Änderungsstand. Bei einem Konflikt hat „abgehakt“ Vorrang. Das Entfernen auf Basis des aktuellen Stands bleibt möglich.
 
 - Zutaten in Rezeptdetails zeigen dieselben kleinen Symbole wie im Einkaufswagen und behalten die Vorratskennzeichnung.
 

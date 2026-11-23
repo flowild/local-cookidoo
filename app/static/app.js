@@ -749,11 +749,11 @@ async function renderCart(request = state.request) {
     const quantities = items.map(({ingredient}) => ingredient.text.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|Stück)\b/i));
     const total = items.length > 1 && quantities.every(Boolean) && quantities.every(q => q[2].toLocaleLowerCase('de-DE') === quantities[0][2].toLocaleLowerCase('de-DE')) ? `${quantities.reduce((sum, q) => sum + Number(q[1].replace(',', '.')), 0).toLocaleString('de-DE')} ${quantities[0][2]}` : '';
     const heading = items.length > 1 ? `<div class="cart-ingredient-heading"><strong>${symbolPrefix(items[0].ingredient)}${escapeHTML(title)}</strong>${total ? `<span class="cart-total">${escapeHTML(total)} insgesamt</span>` : ''}</div>` : '';
-    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(ingredient.name || ingredient.text, ingredient.category, ingredient.icon)}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
+    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" data-owned-revision="${ingredient.owned_revision ?? 0}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(ingredient.name || ingredient.text, ingredient.category, ingredient.icon)}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
     }).join('')}</div></section>`).join('');
   };
   const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
-  const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(entry.data.name, entry.data.category, entry.data.icon)}</span><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
+  const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" data-owned-revision="${entry.data.owned_revision ?? 0}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(entry.data.name, entry.data.category, entry.data.icon)}</span><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
   $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3>Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" autocomplete="off" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form><div id="cart-item-suggestions" class="cart-item-suggestions" role="group" aria-label="Vorschläge aus dem Vorrat" hidden></div></section>`;
   setupCartItemSuggestions();
 }
@@ -1811,17 +1811,28 @@ document.addEventListener('change', async event => {
     if (event.target.matches('[data-cart-ingredient], [data-cart-owned]')) {
       const checkbox = event.target;
       const path = checkbox.dataset.cartIngredient ? `/api/cart/${encodeURIComponent(checkbox.dataset.cartIngredient)}/ingredients/${checkbox.dataset.position}` : `/api/cart/${encodeURIComponent(checkbox.dataset.cartOwned)}/owned`;
+      const requested = checkbox.checked;
       checkbox.disabled = true;
       try {
-        await api(path, {method:'PUT', body:JSON.stringify({owned:checkbox.checked})});
-        if (checkbox.dataset.cartIngredient && state.view === 'einkaufswagen') {
+        const saved = await api(path, {method:'PUT', body:JSON.stringify({
+          owned:requested, owned_revision:Number(checkbox.dataset.ownedRevision)
+        })});
+        checkbox.checked = saved.owned ?? requested;
+        checkbox.dataset.ownedRevision = saved.owned_revision ?? checkbox.dataset.ownedRevision;
+        if (!requested && saved.owned) toast('Der Eintrag wurde zwischenzeitlich abgehakt.');
+      }
+      catch (error) { checkbox.checked = !requested; throw error; }
+      finally { checkbox.disabled = false; }
+      if (state.view === 'einkaufswagen') {
+        if (checkbox.dataset.cartIngredient) {
           const entry = checkbox.dataset.cartIngredient, position = checkbox.dataset.position;
           await renderCart();
           document.querySelector(`[data-cart-ingredient="${CSS.escape(entry)}"][data-position="${CSS.escape(position)}"]`)?.focus({preventScroll:true});
+        } else {
+          await renderCart();
+          document.querySelector(`[data-cart-owned="${CSS.escape(checkbox.dataset.cartOwned)}"]`)?.focus({preventScroll:true});
         }
       }
-      catch (error) { checkbox.checked = !checkbox.checked; throw error; }
-      finally { checkbox.disabled = false; }
       return;
     }
     if (event.target.id === 'recipe-version') await openRecipe(event.target.value);

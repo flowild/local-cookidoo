@@ -54,6 +54,27 @@ class CartTests(unittest.TestCase):
     def cart(self):
         return self.client.get('/api/cart').json()['items']
 
+    def test_checked_wins_over_stale_uncheck_for_ingredients_and_extra_items(self):
+        self.add_recipe()
+        self.client.post('/api/cart/items', json={'name': 'Milch'}, headers=ORIGIN)
+        recipe, extra = self.cart()
+        for path in (f"/api/cart/{recipe['id']}/ingredients/1", f"/api/cart/{extra['id']}/owned"):
+            with self.subTest(path=path):
+                def check(owned, revision):
+                    response = self.client.put(path, json={'owned': owned, 'owned_revision': revision}, headers=ORIGIN)
+                    self.assertEqual(response.status_code, 200)
+                    return response.json()
+
+                self.assertEqual(check(True, 0)['owned_revision'], 1)
+                self.assertEqual(check(True, 1)['owned_revision'], 2)
+                self.assertEqual(check(False, 1), {'ok': True, 'owned': True, 'owned_revision': 2})
+                self.assertEqual(check(False, 2), {'ok': True, 'owned': False, 'owned_revision': 3})
+                self.assertEqual(check(True, 2), {'ok': True, 'owned': True, 'owned_revision': 4})
+        recipe, extra = self.cart()
+        self.assertNotIn('owned_revision', recipe['data']['ingredients'][0])
+        self.assertEqual(recipe['data']['ingredients'][1]['owned_revision'], 4)
+        self.assertTrue(extra['data']['owned'])
+
     def test_telegram_cart_is_encrypted_read_only_and_bound_to_account(self):
         self.add_recipe()
         self.client.post('/api/cart/items', json={'name': 'Milch'}, headers=ORIGIN)

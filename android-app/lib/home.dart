@@ -20,6 +20,7 @@ import 'telegram_service.dart';
 import 'connection.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
+typedef _CartCheck = ({bool owned, int revision});
 
 class RezeptgartenHome extends StatefulWidget {
   const RezeptgartenHome({
@@ -94,6 +95,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
   final _areaData = <int, Future<dynamic>>{};
+  final _pendingCartChecks = <String, bool>{};
+  final _savedCartChecks = <String, _CartCheck>{};
 
   bool get _local =>
       widget.connection == null ||
@@ -159,6 +162,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _pullingAreas.clear();
     _pagerKey = GlobalKey<_SectionPagerState>();
     _areaData.clear();
+    _pendingCartChecks.clear();
+    _savedCartChecks.clear();
     _dirtyAreas.clear();
     pantryExpanded.clear();
     cartItem.clear();
@@ -246,6 +251,70 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       }
     }
     return cart;
+  }
+
+  _CartCheck _cartCheck(String path, Json row) {
+    final saved = _savedCartChecks[path];
+    final revision = row['owned_revision'] as int? ?? 0;
+    return saved != null && saved.revision >= revision
+        ? saved
+        : (owned: row['owned'] == true, revision: revision);
+  }
+
+  void _toggleCartCheck(String path, Json row, bool owned) {
+    final saving = _pendingCartChecks.containsKey(path);
+    setState(() => _pendingCartChecks[path] = owned);
+    if (!saving) {
+      unawaited(_saveCartCheck(path, _cartCheck(path, row), _session));
+    }
+  }
+
+  Future<void> _saveCartCheck(
+    String path,
+    _CartCheck confirmed,
+    int session,
+  ) async {
+    while (mounted && session == _session) {
+      final requested = _pendingCartChecks[path]!;
+      String? message;
+      var failed = false;
+      try {
+        final result = await api.write('PUT', path, {
+          'owned': requested,
+          'owned_revision': confirmed.revision,
+        }) as Json;
+        confirmed = (
+          owned: result['owned'] as bool? ?? requested,
+          revision: result['owned_revision'] as int? ?? confirmed.revision,
+        );
+        if (!requested && confirmed.owned) {
+          message = 'Der Eintrag wurde zwischenzeitlich abgehakt.';
+        }
+      } on Exception catch (error) {
+        failed = true;
+        message = error.toString();
+      }
+      if (!mounted || session != _session) return;
+      final finished = failed || _pendingCartChecks[path] == requested;
+      setState(() {
+        if (!failed) _savedCartChecks[path] = confirmed;
+        if (finished) _pendingCartChecks.remove(path);
+      });
+      if (finished) {
+        if (message != null) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(message)));
+        }
+        if (failed) {
+          if (area == 4) {
+            unawaited(_refresh());
+          } else {
+            _dirtyAreas.add(4);
+          }
+        }
+        return;
+      }
+    }
   }
 
   void _adoptStatus(Json status, {bool authoritative = false}) {
@@ -710,12 +779,21 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     };
     String entryPath(Json item) =>
         '/api/cart/${Uri.encodeComponent(text(item['id']))}';
+    String checkPath(_CartRow item) =>
+        '${entryPath(item.entry)}/${item.position == null ? 'owned' : 'ingredients/${item.position}'}';
+    bool isSavedChecked(_CartRow item) =>
+        _cartCheck(checkPath(item), item.row).owned;
+    bool entrySaving(Json item) => _pendingCartChecks.keys.any(
+      (path) => path.startsWith('${entryPath(item)}/'),
+    );
     String removeLabel(Json item) =>
         '${text((item['data'] as Json)['name'])} entfernen';
 
     Widget remove(Json item) => IconButton(
       tooltip: removeLabel(item),
-      onPressed: editable ? () => _mutate('DELETE', entryPath(item)) : null,
+      onPressed: editable && !entrySaving(item)
+          ? () => _mutate('DELETE', entryPath(item))
+          : null,
       icon: const Icon(Icons.delete_outline),
     );
 
@@ -799,15 +877,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           : group;
     });
 
-    Widget shoppingRow(_CartRow item, bool checked) {
+    Widget shoppingRow(_CartRow item) {
       final entry = item.entry;
       final isRecipe = item.position != null;
-      final suffix = isRecipe ? 'ingredients/${item.position}' : 'owned';
+      final path = checkPath(item);
+      final checked = _pendingCartChecks[path] ?? isSavedChecked(item);
       final canCheck = editable && entry['status'] == 'pending';
       void toggle(bool? value) {
-        unawaited(
-          _mutate('PUT', '${entryPath(entry)}/$suffix', {'owned': value}),
-        );
+        if (value != null) _toggleCartCheck(path, item.row, value);
       }
 
       return Column(
@@ -901,7 +978,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     Widget shoppingSection(String title, {required bool checked}) {
       final groups = <(String, bool, String), List<_CartRow>>{};
       for (final item in rows.where(
-        (item) => (item.row['owned'] == true) == checked,
+        (item) => isSavedChecked(item) == checked,
       )) {
         final key = item.position != null
             ? text(item.row['key'], text(item.row['name'] ?? item.row['text']))
@@ -952,7 +1029,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                     first.row['icon'],
                     style: theme.textTheme.titleSmall,
                   ),
-                for (final item in group) shoppingRow(item, checked),
+                for (final item in group) shoppingRow(item),
               ],
             );
           },
@@ -975,6 +1052,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                   tooltip: 'An Cookidoo übertragen',
                   onPressed:
                       editable &&
+                          _pendingCartChecks.isEmpty &&
                           items.any((item) => item['status'] == 'pending')
                       ? () => _mutate(
                           'POST',
@@ -1001,7 +1079,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       ),
       gap,
       shoppingSection('Zutaten', checked: false),
-      if (rows.any((item) => item.row['owned'] == true)) ...[
+      if (rows.any(isSavedChecked)) ...[
         gap,
         shoppingSection('Abgehakt', checked: true),
       ],
@@ -1040,7 +1118,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                         }, calendar: true),
                         actionLabel: removeLabel(entry),
                         actionIcon: Icons.delete_outline,
-                        onAction: editable
+                        onAction: editable && !entrySaving(entry)
                             ? () => _mutate('DELETE', entryPath(entry))
                             : null,
                       ),
