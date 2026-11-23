@@ -508,19 +508,5 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
   }
 
   @override
-  Future<Uint8List> exportCollection() async => Uint8List.fromList(
-    utf8.encode(
-      jsonEncode({
-        'debug': true,
-        'recipes': _recipes.values.toList(),
-        'collections': _collections,
-        'notes': _notes,
-        'pantry': _pantry.values.toList(),
-        'cart': _shoppingCart()['items'],
-      }),
-    ),
-  );
-
-  @override
   Future<void> close() async {}
 }

@@ -21,7 +21,7 @@ Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Down
 | Meine Woche | Berliner Kalenderwoche mit Pfeilen und „Heute“ zum direkten Sprung auf den heutigen Berliner Kalendertag, einrastende Tagesansicht und gemerkter Wochentag. Tagesrezepte, lokale Ablage, sechs feste Platzhalter und aufklappbare lokale Listen. Langes Drücken und Wischen, kurzes Tippen und normales Scrollen wie mobil im Web. Rückgängig bei Rezeptentfernungen für fünf Sekunden. Vorgemerkte Verschiebungen, bestätigter Kalenderabgleich und sichtbare Fehler. Einkauf ab heute einschließlich Ablage als Momentaufnahme übernehmen. |
 | Mein Einkaufswagen | Kontobezogene Rezeptzeilen mit kleinen runden Vorschaubildern, Zusatzartikel und bearbeitbare Häkchen. Kompakte Zeilen mit Mengen, Rezeptnamen und Zutatensymbolen. Sortierung nach offenen und abgehakten Einträgen und Gruppierung nach Warenbereichen. Vorratsabgleich und ausgeblendetes Wasser wie im Web. Einträge einzeln entfernen. Symbol für den ausdrücklichen Cookidoo-Transfer neben dem Titel mit bestätigten und ungeklärten Ergebnissen sowie manueller Klärung. |
 | Mein Vorrat | Alphabetische Zutaten, Rezeptvorschläge und einklappbare Kategorien. Kategorien anlegen, sortieren und nach Bestätigung löschen. Vorratseinträge hinzufügen, bearbeiten und entfernen. Dieselben Zutaten-Aliasse, Symbole und Regeln zum Ausblenden von Wasser. |
-| Einstellungen | Cookidoo-Konto verbinden und trennen, JSON-Export, Dunkelmodus und Akzentfarbe. Der Sammlungsabgleich startet beim Öffnen der App und durch Herunterziehen einer Ansicht; ein Zeitplan existiert nicht. Der Installationsbereich zeigt die installierte Version, prüft den eigenen Aktualisierungskanal, lädt die APK und öffnet den Android-Installer. |
+| Einstellungen | Cookidoo-Konto verbinden und trennen, Dunkelmodus und Akzentfarbe. Der Sammlungsabgleich startet beim Öffnen der App und durch Herunterziehen einer Ansicht; ein Zeitplan existiert nicht. Der Installationsbereich zeigt die installierte Version, prüft den eigenen Aktualisierungskanal, lädt die APK und öffnet den Android-Installer. |
 | Debug-Modus | In den Einstellungen auch offline einschaltbar. Die sechs Hauptbereiche verwenden Beispieldaten; Teständerungen bleiben für die laufende App-Sitzung im Speicher. Beim nächsten Start bleibt der Modus ausgewählt und beginnt mit frischen Beispieldaten. |
 
 Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. Die Tabelle beschreibt das Ziel für alle Bereiche. Vor der Freigabe werden auch seit Projektstart hinzugekommene Webfunktionen anhand des dann aktuellen Webstands abgeglichen. Die fachlichen Details zu Kalender, Notizen, Einkaufswagen, Telegram und Datenhaltung stehen in [AGENTS.md](AGENTS.md).
@@ -206,7 +206,7 @@ Platzhalter, die Übernahme aus lokalen Listen und fünf Sekunden Rückgängig
 bei Rezeptentfernungen. Auf schmalen Displays rasten die Tage ein. Die
 Übersicht zeigt Sammlungsstatistik und Rezeptvorschauen. Android bietet
 Einstellungen für Cookidoo, Dunkelmodus
-und Akzentfarbe. Der JSON-Export verwendet die Android-Dateiauswahl. In den
+und Akzentfarbe. In den
 Einstellungen steht die installierte Version mit einem Update-Button für den
 passenden Downloadkanal. Die Tabelle oben beschreibt die Anforderungen für die vollständige
 Portierung.

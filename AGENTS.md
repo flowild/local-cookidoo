@@ -159,7 +159,7 @@ Lesefehler wird angezeigt und der Abruf kann wiederholt werden. Der frühere
 zeitgesteuerte Sammlungsabgleich ist serverweit entfernt, bestehende Intervalle
 haben keine Wirkung. Die separate Warteschlange für Wochenänderungen bleibt
 aktiv. Dunkelmodus und Akzentfarbe
-werden lokal gespeichert. Der JSON-Export öffnet die Android-Dateiauswahl.
+werden lokal gespeichert.
 Android nutzt bei verbundenem WLAN `ThomasWlan` und erreichbarem Server den
 lokalen HTTPS-Zugang. Für die WLAN-Namenerkennung fordert Android beide
 Standortberechtigungen gemeinsam an, auch beim Wechsel von ungefährer zu

@@ -257,7 +257,7 @@ Paket-ID, Version, Architektur und Signatur wurden lokal geprüft.
 
 ## Noch ausstehend
 
-Telegram-Anmeldung und Kopplung, Android-Dateiauswahl und den In-App-Installer
+Telegram-Anmeldung und Kopplung sowie den In-App-Installer
 mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
 ist in `FLUTTER-PORTIERUNG.md` beschrieben.
 

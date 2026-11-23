@@ -38,7 +38,6 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   static const _update = MethodChannel('de.rezeptgarten/update');
-  static const _documents = MethodChannel('de.rezeptgarten/documents');
   static const _preferences = MethodChannel('de.rezeptgarten/preferences');
 
   Json? _status;
@@ -290,14 +289,6 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _export() => _perform(() async {
-    if (!_local) throw const ApiException('Heimnetz nicht verbunden.');
-    final bytes = await widget.api.exportCollection();
-    if (!mounted) return;
-    final saved = await _documents.invokeMethod<bool>('saveCollection', bytes);
-    if (saved == true) _message('Die Sammlung wurde als JSON gespeichert.');
-  });
-
   String _hex(int accent) =>
       '#${(accent & 0x00ffffff).toRadixString(16).padLeft(6, '0')}';
 
@@ -404,16 +395,6 @@ class _SettingsViewState extends State<SettingsView> {
               child: const Text('Verbindung trennen'),
             ),
         ]),
-      _card('Deine Sammlung', [
-        FilledButton.icon(
-          onPressed: _busy ? null : _export,
-          icon: const Icon(Icons.save_alt),
-          label: const Text(
-            'Sammlung als JSON exportieren',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ]),
     ];
   }
 

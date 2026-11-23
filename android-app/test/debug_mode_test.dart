@@ -62,7 +62,7 @@ void main() {
     expect(api.calls, greaterThan(calls));
   });
 
-  test('sample edits are isolated and exported as test data', () async {
+  test('sample edits are isolated between sessions', () async {
     final first = DebugRezeptgartenApi();
     final second = DebugRezeptgartenApi();
     const note = '/api/notes/zitronenpasta';
@@ -91,10 +91,6 @@ void main() {
     expect(
       (await first.get('/api/cart') as Json)['items'],
       hasLength(greaterThan(1)),
-    );
-    expect(
-      jsonDecode(utf8.decode(await first.exportCollection()))['debug'],
-      isTrue,
     );
   });
 }

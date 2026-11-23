@@ -145,7 +145,7 @@ void main() {
   });
 
   testWidgets(
-    'saves appearance, account settings and a JSON document in Android',
+    'saves appearance and account settings without a JSON export action',
     (tester) async {
       tester.view.physicalSize = const Size(412, 1500);
       tester.view.devicePixelRatio = 1;
@@ -155,9 +155,7 @@ void main() {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       const prefs = MethodChannel('de.rezeptgarten/preferences');
-      const documents = MethodChannel('de.rezeptgarten/documents');
       final changes = <Map<dynamic, dynamic>>[];
-      Uint8List? exported;
       messenger.setMockMethodCallHandler(prefs, (call) async {
         switch (call.method) {
           case 'appearance':
@@ -171,14 +169,8 @@ void main() {
         }
         return null;
       });
-      messenger.setMockMethodCallHandler(documents, (call) async {
-        expect(call.method, 'saveCollection');
-        exported = call.arguments as Uint8List;
-        return true;
-      });
       addTearDown(() {
         messenger.setMockMethodCallHandler(prefs, null);
-        messenger.setMockMethodCallHandler(documents, null);
       });
 
       await tester.pumpWidget(RezeptgartenApp(api: api));
@@ -213,9 +205,7 @@ void main() {
       expect(find.text('Synchronisierung'), findsNothing);
       expect(find.text('Automatischer Abgleich'), findsNothing);
 
-      await tester.tap(find.text('Sammlung als JSON exportieren'));
-      await tester.pumpAndSettle();
-      expect(exported, orderedEquals([123, 125]));
+      expect(find.text('Sammlung als JSON exportieren'), findsNothing);
       final version = find.text('Installierte Version 0.14.0-test');
       await tester.scrollUntilVisible(version, 280);
       expect(version, findsOneWidget);
@@ -248,9 +238,6 @@ class _SettingsApi extends RezeptgartenApi {
     },
     _ => throw StateError('Unexpected path: $path'),
   };
-
-  @override
-  Future<Uint8List> exportCollection() async => Uint8List.fromList([123, 125]);
 
   @override
   Future<dynamic> write(String method, String path, [Json? body]) async {

@@ -25,7 +25,7 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`
-hat keinen Node-Build. Detailansichten und JSON-Export sind vorhanden. Der
+hat keinen Node-Build. Detailansichten sind vorhanden. Der
 zeitgesteuerte Sammlungsabgleich ist entfernt; die Web-App bietet weiter
 den manuellen Abgleich. Gespeicherte alte Intervalle haben keine Wirkung.
 Die separate Warteschlange für Wochenänderungen bleibt aktiv.
