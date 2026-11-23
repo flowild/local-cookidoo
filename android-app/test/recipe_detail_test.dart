@@ -38,7 +38,7 @@ void main() {
   });
 
   testWidgets(
-    'late responses for a previous version cannot replace the current note and lists',
+    'a late note for a previous version cannot replace the current note',
     (tester) async {
       final api = _VersionApi();
       await tester.pumpWidget(
@@ -59,24 +59,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
       api.oldNote.complete({'text': 'Veraltete Notiz'});
-      api.oldLists.complete({
-        'items': [
-          {'kind': 'local', 'id': 'old', 'name': 'Alte Liste'},
-        ],
-      });
       await tester.pumpAndSettle();
       final note = find.byType(TextField);
       await tester.ensureVisible(note);
       expect(tester.widget<TextField>(note).controller!.text, 'Aktuelle Notiz');
-      await tester.scrollUntilVisible(
-        find.text('Aktuelle Liste'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('Alte Liste'), findsNothing);
     },
   );
-  testWidgets('a loaded note can be edited while lists and tips are pending', (
+  testWidgets('a loaded note can be edited while tips are pending', (
     tester,
   ) async {
     final api = _DelayedDetailsApi();
@@ -97,10 +86,58 @@ void main() {
     api.tips.complete({
       'tips': ['Später Tipp'],
     });
-    api.lists.complete({'items': <Json>[]});
     await tester.pump();
     expect(tester.widget<TextField>(field).controller!.text, 'Entwurf');
   });
+
+  testWidgets(
+    'opens local memberships in a bottom sheet and saves each change',
+    (tester) async {
+      final api = _ListMembershipApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecipeDetail(
+            api: api,
+            preview: const {'id': 'creation:r1'},
+            calendar: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.text('Zu lokalen Listen hinzufügen');
+      await tester.scrollUntilVisible(
+        button,
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(api.listReads, 0);
+      expect(find.byType(CheckboxListTile), findsNothing);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      final quick = find.widgetWithText(CheckboxListTile, 'Schnell');
+      final guests = find.widgetWithText(CheckboxListTile, 'Für Gäste');
+      expect(tester.widget<CheckboxListTile>(quick).value, isTrue);
+      expect(tester.widget<CheckboxListTile>(guests).value, isFalse);
+      expect(find.text('Importiert'), findsNothing);
+
+      await tester.tap(guests);
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(guests).value, isTrue);
+      expect(api.membershipWrites, [true]);
+      await tester.tap(find.byTooltip('Schließen'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(guests).value, isTrue);
+      await tester.tap(guests);
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(guests).value, isFalse);
+      expect(api.membershipWrites, [true, false]);
+    },
+  );
   testWidgets('plans the selected days from the recipe detail', (tester) async {
     final api = _DetailApi();
     await tester.pumpWidget(
@@ -113,7 +150,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final plan = find.text('Diese Woche kochen');
+    final plan = find
+        .widgetWithText(FilledButton, 'Diese Woche kochen')
+        .hitTestable();
     await tester.scrollUntilVisible(
       plan,
       150,
@@ -330,21 +369,11 @@ class _PendingRecipeApi extends _DetailApi {
 
 class _VersionApi extends _DetailApi {
   final oldNote = Completer<Json>();
-  final oldLists = Completer<Json>();
-  var listReads = 0;
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
     if (path == '/api/notes/v1') return oldNote.future;
     if (path == '/api/notes/v2') return {'text': 'Aktuelle Notiz'};
-    if (path == '/api/collections') {
-      if (++listReads == 1) return oldLists.future;
-      return {
-        'items': [
-          {'kind': 'local', 'id': 'new', 'name': 'Aktuelle Liste'},
-        ],
-      };
-    }
     return {
       'id': path.split('/').last,
       'name': 'Versionsrezept',
@@ -358,16 +387,42 @@ class _VersionApi extends _DetailApi {
 }
 
 class _DelayedDetailsApi extends _DetailApi {
-  final lists = Completer<Json>();
   final tips = Completer<Json>();
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
-    if (path == '/api/collections') return lists.future;
     if (path.endsWith('/tips')) return tips.future;
     final result = await super.get(path, timeout: timeout);
     if (path.startsWith('/api/recipes/')) (result as Json).remove('tips_json');
     return result;
+  }
+}
+
+class _ListMembershipApi extends _DetailApi {
+  int listReads = 0;
+  final membershipWrites = <bool>[];
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    if (path != '/api/collections') return super.get(path, timeout: timeout);
+    listReads++;
+    return {
+      'items': [
+        {'id': 'local:l1', 'kind': 'local', 'name': 'Schnell'},
+        {'id': 'local:l2', 'kind': 'local', 'name': 'Für Gäste'},
+        {'id': 'imported', 'kind': 'managed', 'name': 'Importiert'},
+      ],
+    };
+  }
+
+  @override
+  Future<dynamic> write(String method, String path, [Json? body]) async {
+    if (method == 'PUT' &&
+        path == '/api/local-collections/local%3Al2/recipes/creation%3Ar1') {
+      membershipWrites.add(body!['present'] as bool);
+      return {'ok': true};
+    }
+    return super.write(method, path, body);
   }
 }
 

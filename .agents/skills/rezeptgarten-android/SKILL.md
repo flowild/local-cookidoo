@@ -124,6 +124,9 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   aktuellen Berliner Kalenderwoche hinzu. Aktionsschaltflächen zeigen ein
   passendes Symbol und den Text als zentrierte Gruppe.
   „Diese Woche kochen“ bietet mehrere Termine von heute bis Sonntag zur Auswahl.
+  „Zu lokalen Listen hinzufügen“ öffnet ein scrollbares Fenster von unten,
+  lädt darin die lokalen Listen und aktualisiert nach Serverbestätigung die
+  Auswahl und die Listenzuordnungen über dem Rezepttitel.
 - Der Schalter „Debug-Modus“ ist auch offline in den Einstellungen verfügbar.
   Die Debug-Rezepte verwenden unterschiedliche mitgelieferte Vorschaubilder.
   Der Modus verwendet `DebugRezeptgartenApi` mit Beispieldaten für die normalen

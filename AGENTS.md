@@ -126,7 +126,10 @@ Ein fehlgeschlagener Abruf bleibt als Fehler sichtbar und kann wiederholt werden
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
-über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
+über die gemeinsamen APIs. „Zu lokalen Listen hinzufügen“ öffnet die
+Listenauswahl von unten. Die Liste wird beim Öffnen geladen und jede Änderung
+nach Serverbestätigung in der Auswahl und den Rezeptdetails angezeigt.
+Ein Notizkonflikt erhält den Entwurf im Feld.
 Kontrastreiche Punkte markieren den Zutatenstatus. „Zur Ablage hinzufügen“
 speichert das Rezept in der Ablage der aktuellen Berliner Kalenderwoche und
 steht direkt über „Diese Woche kochen“. In Aktionspillen stehen Symbol und

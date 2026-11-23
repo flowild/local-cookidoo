@@ -249,11 +249,10 @@ void main() {
       await tester.pumpAndSettle();
       final add = find.text('Zum Einkaufswagen hinzufügen');
       await tester.scrollUntilVisible(
-        add,
+        add.hitTestable(),
         260,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.ensureVisible(add);
       for (var attempt = 0; attempt < 2; attempt++) {
         await tester.tap(add.hitTestable());
         await tester.pumpAndSettle();

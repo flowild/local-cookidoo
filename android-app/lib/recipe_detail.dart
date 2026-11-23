@@ -52,16 +52,13 @@ class _RecipeDetailState extends State<RecipeDetail> {
   late String _id = text(widget.preview['id']);
   late Json _preview = widget.preview;
   Json? _recipe;
-  List<Json> _localLists = [];
   List<String>? _tips;
   String? _error;
   String? _noteStatus;
   String? _tipsError;
-  String? _listError;
   String? _original;
   Future<bool>? _saving;
   bool _noteLoading = false;
-  bool _listsLoading = false;
   bool _tipsLoading = false;
   int _loadGeneration = 0;
   bool _working = false;
@@ -104,13 +101,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
         _recipe = null;
         _original = null;
         _tips = null;
-        _localLists = [];
         _note.clear();
       }
       _noteStatus = null;
       _tipsError = null;
-      _listError = null;
-      _listsLoading = false;
       _tipsLoading = false;
       _noteLoading = false;
       _working = true;
@@ -124,7 +118,6 @@ class _RecipeDetailState extends State<RecipeDetail> {
         _working = false;
       });
       unawaited(_loadNote());
-      if (!_calendarRecipe) unawaited(_loadLists());
       unawaited(_loadTips());
     } on Exception catch (error) {
       if (mounted && generation == _loadGeneration) {
@@ -197,29 +190,6 @@ class _RecipeDetailState extends State<RecipeDetail> {
     } finally {
       if (mounted && generation == _loadGeneration && _tipsLoading) {
         setState(() => _tipsLoading = false);
-      }
-    }
-  }
-
-  Future<void> _loadLists() async {
-    final generation = _loadGeneration;
-    setState(() => _listsLoading = true);
-    try {
-      final result = await widget.api.get('/api/collections') as Json;
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _listError = null;
-        _localLists = objects(result['items'])
-            .where((list) => list['kind'] == 'local')
-            .toList();
-      });
-    } on Exception catch (error) {
-      if (mounted && generation == _loadGeneration) {
-        setState(() => _listError = error.toString());
-      }
-    } finally {
-      if (mounted && generation == _loadGeneration) {
-        setState(() => _listsLoading = false);
       }
     }
   }
@@ -329,6 +299,53 @@ class _RecipeDetailState extends State<RecipeDetail> {
   void _message(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _editLocalLists() async {
+    Future<void>? pending;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _LocalListsSheet(
+        api: widget.api,
+        memberships: {
+          for (final item in objects(_recipe?['collections'])) text(item['id']),
+        },
+        onChanged: (list, present) {
+          final write = _setLocalMembership(list, present);
+          pending = write;
+          return write.whenComplete(() => pending = null);
+        },
+      ),
+    );
+    // A dismissed sheet can still have a write in progress.
+    await pending;
+  }
+
+  Future<void> _setLocalMembership(Json list, bool present) async {
+    final id = text(list['id']);
+    final listId = Uri.encodeComponent(id);
+    final recipeId = Uri.encodeComponent(_id);
+    await widget.api.write(
+      'PUT',
+      '/api/local-collections/$listId/recipes/$recipeId',
+      {'present': present},
+    );
+    if (!mounted) return;
+    final recipe = _recipe!;
+    setState(() {
+      _recipe = {
+        ...recipe,
+        'collections': [
+          for (final membership in objects(recipe['collections']))
+            if (membership['id'] != id) membership,
+          if (present) list,
+        ],
+      };
+    });
+    widget.onRecipeCardsChanged?.call();
   }
 
   Future<void> _planWeek() async {
@@ -601,7 +618,6 @@ class _RecipeDetailState extends State<RecipeDetail> {
     final loaded = _recipe != null;
     final canAct = loaded && !_working;
     final lists = objects(recipe['collections']);
-    final memberships = lists.map((list) => list['id']).toSet();
     final difficulty = recipeDifficulty(recipe['difficulty']);
     final versions = objects(recipe['versions']);
     final showVersions =
@@ -692,60 +708,20 @@ class _RecipeDetailState extends State<RecipeDetail> {
           icon: const Icon(Icons.refresh),
           label: const Text('Tipps erneut laden', textAlign: TextAlign.center),
         ),
-      if (loaded && !_calendarRecipe)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: AppSpacing.related,
-          children: [
-            Text(
-              'Zu lokalen Listen hinzufügen',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (_listsLoading)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Rezeptlisten werden geladen',
-              )
-            else if (_listError != null)
-              TextButton.icon(
-                onPressed: _working ? null : _loadLists,
-                style: _buttonStyle,
-                icon: const Icon(Icons.refresh),
-                label: const Text(
-                  'Listen erneut laden',
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else if (!_working && _localLists.isEmpty)
-              const Text(
-                'Erstelle zuerst eine lokale Rezeptliste unter „Listen“.',
-              ),
-            for (final list in _localLists)
-              CheckboxListTile(
-                value: memberships.contains(list['id']),
-                title: SymbolLabel(text(list['name']), list['icon']),
-                controlAffinity: ListTileControlAffinity.leading,
-                onChanged: _working
-                    ? null
-                    : (present) => _action(() async {
-                        final listId = Uri.encodeComponent(text(list['id']));
-                        final recipeId = Uri.encodeComponent(_id);
-                        await widget.api.write(
-                          'PUT',
-                          '/api/local-collections/$listId/recipes/$recipeId',
-                          {'present': present},
-                        );
-                        if (mounted) widget.onRecipeCardsChanged?.call();
-                        final refreshed =
-                            await widget.api.get(_recipePath) as Json;
-                        if (mounted) setState(() => _recipe = refreshed);
-                      }),
-              ),
-          ],
-        ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: AppSpacing.related,
         children: [
+          if (loaded && !_calendarRecipe)
+            OutlinedButton.icon(
+              onPressed: canAct ? () => _action(_editLocalLists) : null,
+              style: _buttonStyle,
+              icon: const Icon(Icons.playlist_add),
+              label: const Text(
+                'Zu lokalen Listen hinzufügen',
+                textAlign: TextAlign.center,
+              ),
+            ),
           FilledButton.icon(
             onPressed: canAct ? () => _action(_addToShelf) : null,
             style: _buttonStyle,
@@ -838,6 +814,134 @@ class _RecipeDetailState extends State<RecipeDetail> {
         title: Text(text(_recipe?['name'] ?? _preview['name'], 'Rezept')),
       ),
       body: SafeArea(child: _content(_recipe ?? _preview)),
+    ),
+  );
+}
+
+class _LocalListsSheet extends StatefulWidget {
+  const _LocalListsSheet({
+    required this.api,
+    required this.memberships,
+    required this.onChanged,
+  });
+
+  final RezeptgartenApi api;
+  final Set<String> memberships;
+  final Future<void> Function(Json list, bool present) onChanged;
+
+  @override
+  State<_LocalListsSheet> createState() => _LocalListsSheetState();
+}
+
+class _LocalListsSheetState extends State<_LocalListsSheet> {
+  late Future<List<Json>> _lists = _loadLists();
+  late final _memberships = {...widget.memberships};
+  bool _saving = false;
+  String? _error;
+
+  Future<List<Json>> _loadLists() async {
+    final result = await widget.api.get('/api/collections') as Json;
+    return objects(result['items'])
+        .where((list) => list['kind'] == 'local')
+        .toList();
+  }
+
+  Future<void> _toggle(Json list, bool present) async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onChanged(list, present);
+      if (!mounted) return;
+      final id = text(list['id']);
+      setState(() {
+        if (present) {
+          _memberships.add(id);
+        } else {
+          _memberships.remove(id);
+        }
+      });
+    } on Exception catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .75,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.section),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Lokale Listen',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Schließen',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: FutureBuilder<List<Json>>(
+              future: _lists,
+              builder: (context, snapshot) {
+                final lists = snapshot.data;
+                return ListView(
+                  padding: AppSpacing.panel,
+                  shrinkWrap: true,
+                  children: [
+                    if (_saving ||
+                        snapshot.connectionState != ConnectionState.done)
+                      const LinearProgressIndicator()
+                    else if (snapshot.hasError) ...[
+                      Text(snapshot.error.toString()),
+                      TextButton(
+                        onPressed: () => setState(() => _lists = _loadLists()),
+                        child: const Text('Listen erneut laden'),
+                      ),
+                    ] else if (lists?.isEmpty == true)
+                      const Text(
+                        'Erstelle zuerst eine lokale Rezeptliste unter „Listen“.',
+                      ),
+                    if (_error case final String error)
+                      Text(
+                        error,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    for (final list in lists ?? <Json>[])
+                      CheckboxListTile(
+                        value: _memberships.contains(list['id']),
+                        title: SymbolLabel(text(list['name']), list['icon']),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: _saving
+                            ? null
+                            : (present) => _toggle(list, present == true),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
