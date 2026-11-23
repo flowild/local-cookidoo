@@ -69,6 +69,11 @@ Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Tabwechsel
 ihren Zustand. Konto- und Verbindungswechsel setzen Ansichten und Bildcache
 im Arbeitsspeicher zurück. Wiederholte Netzmeldungen im selben Heim-WLAN
 erhalten die sichtbare Ansicht, ihre Bedienbarkeit und den laufenden Abgleich.
+Android zeigt Titel, Navigation, Suche und verfügbare Aktionen schon beim
+ersten Abruf. Auf Start erscheinen Statistik, Zufallsrezept und Vorschauen
+unabhängig voneinander. Der Einkaufswagen zeigt seine Kopfzeile, die Woche ihre
+Tage und Rezeptdetails die vorhandene Vorschau sofort. Bereits geladene Inhalte
+bleiben während der Aktualisierung sichtbar.
 Android speichert freigegebene Rezeptbilder kontobezogen im privaten, von
 Backups ausgeschlossenen Speicher. Beim Öffnen im Heimnetz und nach dem
 Sammlungsabgleich lädt Android die Vorschaubilder der Sammlung im Hintergrund.

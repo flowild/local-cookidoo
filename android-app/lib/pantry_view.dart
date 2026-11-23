@@ -73,7 +73,9 @@ class _PantryViewState extends State<PantryView> {
         _loaded = true;
         _categories = objects(result['categories']);
         _items = objects(result['items']);
-        final categoryIds = {for (final category in _categories) category['id']};
+        final categoryIds = {
+          for (final category in _categories) category['id'],
+        };
         widget.expandedCategories.retainAll(categoryIds);
       });
     } on Exception catch (error) {
@@ -220,35 +222,36 @@ class _PantryViewState extends State<PantryView> {
             ),
         ],
       ),
-      if (_categories.isNotEmpty)
-        TextField(
-          controller: _searchField,
-          maxLength: 100,
-          onChanged: (value) =>
-              setState(() => _query = value.trim().toLowerCase()),
-          decoration: InputDecoration(
-            labelText: 'Vorrat durchsuchen',
-            prefixIcon: const Icon(Icons.search),
-            counterText: '',
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Suche leeren',
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      _searchField.clear();
-                      setState(() => _query = '');
-                    },
-                  ),
-          ),
+      TextField(
+        controller: _searchField,
+        maxLength: 100,
+        onChanged: (value) =>
+            setState(() => _query = value.trim().toLowerCase()),
+        decoration: InputDecoration(
+          labelText: 'Vorrat durchsuchen',
+          prefixIcon: const Icon(Icons.search),
+          counterText: '',
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Suche leeren',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchField.clear();
+                    setState(() => _query = '');
+                  },
+                ),
         ),
+      ),
       FilledButton.icon(
         onPressed: enabled
             ? () => _edit(newCategory: _categories.isEmpty)
             : null,
         icon: const Icon(Icons.add),
         label: Text(
-          _categories.isEmpty ? 'Neue Kategorie' : 'Zutat hinzufügen',
+          _loaded && _categories.isEmpty
+              ? 'Neue Kategorie'
+              : 'Zutat hinzufügen',
         ),
       ),
       if ((_loading && !_loaded) || _writing) const LinearProgressIndicator(),
@@ -396,7 +399,7 @@ class _PantryViewState extends State<PantryView> {
           ),
           child: _toolbar(enabled),
         ),
-        footer: _query.isNotEmpty && categories.isEmpty
+        footer: _loaded && _query.isNotEmpty && categories.isEmpty
             ? const Text('Keine passenden Zutaten gefunden.')
             : null,
         buildDefaultDragHandles: false,

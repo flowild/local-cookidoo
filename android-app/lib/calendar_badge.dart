@@ -15,7 +15,8 @@ String calendarDayLabel(int index, String date) {
     'Samstag',
     'Sonntag',
   ];
-  return '${days[index % 7]}, ${calendarDateLabel(date)}';
+  final weekday = days[index % 7];
+  return date.isEmpty ? weekday : '$weekday, ${calendarDateLabel(date)}';
 }
 
 class CalendarWeekBadge extends StatelessWidget {

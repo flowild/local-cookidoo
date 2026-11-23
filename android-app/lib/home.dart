@@ -87,6 +87,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   final _pullingAreas = <int>{};
   int _recipeRevision = 0;
   int _cartRevision = 0;
+  int _overviewRevision = 0;
   final _areaRefreshes = List.filled(areas.length, 0);
   int _session = 0;
   var _pagerKey = GlobalKey<_SectionPagerState>();
@@ -95,6 +96,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
   final _areaData = <int, Future<dynamic>>{};
+  Json? _featured;
+  Json? _overviewStats;
+  List<Json> _overviewPreviews = [];
+  Json? _lastCart;
   final _pendingCartChecks = <String, bool>{};
   final _savedCartChecks = <String, _CartCheck>{};
 
@@ -162,6 +167,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _pullingAreas.clear();
     _pagerKey = GlobalKey<_SectionPagerState>();
     _areaData.clear();
+    _featured = null;
+    _overviewStats = null;
+    _overviewPreviews = [];
+    _lastCart = null;
     _pendingCartChecks.clear();
     _savedCartChecks.clear();
     _dirtyAreas.clear();
@@ -221,21 +230,28 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           _ => null,
         };
 
-  Future<Json> _loadOverview() async {
+  Future<void> _loadOverview() async {
     final session = _session;
-    final responses = await Future.wait<dynamic>([
-      api.get('/api/featured-recipe', timeout: shortRead),
-      api.get('/api/status', timeout: shortRead),
-      api.get('/api/recipes?limit=8', timeout: shortRead),
+    final revision = ++_overviewRevision;
+    Future<void> read(String path, void Function(Json) apply) async {
+      final result = await api.get(path, timeout: shortRead) as Json;
+      if (mounted && session == _session && revision == _overviewRevision) {
+        apply(result);
+      }
+    }
+
+    await Future.wait<void>([
+      read('/api/featured-recipe', (result) {
+        setState(() => _featured = result);
+      }),
+      read('/api/status', (status) {
+        _adoptStatus(status);
+        setState(() => _overviewStats = status['stats'] as Json?);
+      }),
+      read('/api/recipes?limit=8', (result) {
+        setState(() => _overviewPreviews = objects(result['items']));
+      }),
     ]);
-    final featured = responses[0] as Json;
-    final status = responses[1] as Json;
-    if (mounted && session == _session) _adoptStatus(status);
-    return {
-      ...featured,
-      'stats': status['stats'],
-      'previews': (responses[2] as Json)['items'],
-    };
   }
 
   Future<Json> _loadCart() async {
@@ -243,6 +259,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     final revision = ++_cartRevision;
     final cart = await api.get('/api/cart', timeout: shortRead) as Json;
     if (mounted && session == _session && revision == _cartRevision) {
+      _lastCart = cart;
       final count = objects(cart['items'])
           .where((item) => item['kind'] == 'recipe')
           .length;
@@ -1039,44 +1056,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
 
     const gap = SliverToBoxAdapter(child: SizedBox(height: AppSpacing.section));
     return [
-      SliverToBoxAdapter(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: AppSpacing.item,
-          children: [
-            Row(
-              spacing: AppSpacing.related,
-              children: [
-                Expanded(child: _heading('Mein Einkaufswagen')),
-                IconButton.filledTonal(
-                  tooltip: 'An Cookidoo übertragen',
-                  onPressed:
-                      editable &&
-                          _pendingCartChecks.isEmpty &&
-                          items.any((item) => item['status'] == 'pending')
-                      ? () => _mutate(
-                          'POST',
-                          '/api/cart/transfer',
-                          null,
-                          'Einkaufswagen an Cookidoo übertragen.',
-                        )
-                      : null,
-                  icon: const Icon(Icons.upload_outlined, size: 20),
-                ),
-              ],
-            ),
-            FilledButton.icon(
-              style: ActionPillGrid.buttonStyle,
-              onPressed: editable ? _addCartItem : null,
-              icon: const Icon(Icons.add),
-              label: const Text(
-                'Artikel hinzufügen',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
       gap,
       shoppingSection('Zutaten', checked: false),
       if (rows.any(isSavedChecked)) ...[
@@ -1135,39 +1114,51 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     ];
   }
 
-  Widget _overview(Object? result) {
-    final map = result is Json ? result : <String, dynamic>{};
-    final stats = map['stats'] is Json
-        ? map['stats'] as Json
-        : <String, dynamic>{};
-    final previews = objects(map['previews']);
+  Widget _cartHeader(Json? cart) {
+    final editable = !busy && cart?['transferring'] != true;
+    final pending = objects(cart?['items'])
+        .any((item) => item['status'] == 'pending');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.item,
+      children: [
+        Row(
+          spacing: AppSpacing.related,
+          children: [
+            Expanded(child: _heading('Mein Einkaufswagen')),
+            IconButton.filledTonal(
+              tooltip: 'An Cookidoo übertragen',
+              onPressed: editable && _pendingCartChecks.isEmpty && pending
+                  ? () => _mutate(
+                      'POST',
+                      '/api/cart/transfer',
+                      null,
+                      'Einkaufswagen an Cookidoo übertragen.',
+                    )
+                  : null,
+              icon: const Icon(Icons.upload_outlined, size: 20),
+            ),
+          ],
+        ),
+        FilledButton.icon(
+          style: ActionPillGrid.buttonStyle,
+          onPressed: editable ? _addCartItem : null,
+          icon: const Icon(Icons.add),
+          label: const Text('Artikel hinzufügen', textAlign: TextAlign.center),
+        ),
+      ],
+    );
+  }
+
+  Widget _overview() {
+    final featured = _featured;
+    final stats = _overviewStats;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.section,
       children: [
         _heading('Dein Rezeptgarten'),
-        if ((map['recipe'] ?? map['featured']) case final Json recipe) ...[
-          RecipeCard(
-            api: api,
-            recipe: recipe,
-            onTap: () => _recipe(recipe),
-            cornerAction: RecipeCornerAction(
-              tooltip: 'Anderes Rezept',
-              onPressed: busy || map['can_shuffle'] == false
-                  ? null
-                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
-              icon: Icons.shuffle,
-            ),
-          ),
-        ] else
-          const Text('Kein Zufallsrezept vorhanden.'),
         _section('Deine Sammlung', [
-          if (stats.isNotEmpty)
-            Text(
-              '${stats['collections'] ?? 0} Rezeptlisten · ${stats['recipes'] ?? 0} gespeicherte Rezepte',
-            ),
-          if (stats['last_sync'] case final String lastSync)
-            Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
           ActionPillGrid(
             minColumnWidth: 130,
             children: [
@@ -1197,13 +1188,39 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                 ),
             ],
           ),
+          if (stats != null && stats.isNotEmpty)
+            Text(
+              '${stats['collections'] ?? 0} Rezeptlisten · ${stats['recipes'] ?? 0} gespeicherte Rezepte',
+            ),
+          if (stats?['last_sync'] case final String lastSync)
+            Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
         ]),
-        if (previews.isNotEmpty) ...[
+        if ((featured?['recipe'] ?? featured?['featured'])
+            case final Json recipe)
+          RecipeCard(
+            api: api,
+            recipe: recipe,
+            onTap: () => _recipe(recipe),
+            cornerAction: RecipeCornerAction(
+              tooltip: 'Anderes Rezept',
+              onPressed: busy || featured?['can_shuffle'] == false
+                  ? null
+                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+              icon: Icons.shuffle,
+            ),
+          )
+        else if (featured != null)
+          const Text('Kein Zufallsrezept vorhanden.'),
+        if (_overviewPreviews.isNotEmpty) ...[
           Text(
             'Ein Blick in deine Sammlung',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          RecipePreviewGrid(api: api, recipes: previews, onOpen: _recipe),
+          RecipePreviewGrid(
+            api: api,
+            recipes: _overviewPreviews,
+            onOpen: _recipe,
+          ),
         ],
       ],
     );
@@ -1263,6 +1280,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     future: _areaData.putIfAbsent(index, () => _load(index)),
     builder: (context, snapshot) {
       final waiting = snapshot.connectionState != ConnectionState.done;
+      final cart = index == 4 ? snapshot.data as Json? ?? _lastCart : null;
       return RefreshIndicator(
         onRefresh: _pullRefresh,
         child: CustomScrollView(
@@ -1273,30 +1291,30 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               padding: AppSpacing.page,
               sliver: SliverMainAxisGroup(
                 slivers: [
-                  if (waiting && !snapshot.hasData)
-                    const SliverToBoxAdapter(child: LinearProgressIndicator()),
-                  if (snapshot.hasError && !waiting)
+                  SliverToBoxAdapter(
+                    child: index == 4 ? _cartHeader(cart) : _overview(),
+                  ),
+                  if ((waiting && cart == null) ||
+                      (!waiting && snapshot.hasError))
                     SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: AppSpacing.related,
-                        children: [
-                          _heading(
-                            index == 4 ? 'Mein Einkaufswagen' : areas[index],
-                          ),
-                          Text(snapshot.error.toString()),
-                          OutlinedButton(
-                            onPressed: busy ? null : _refresh,
-                            child: const Text('Erneut laden'),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.section),
+                        child: waiting
+                            ? const LinearProgressIndicator()
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                spacing: AppSpacing.related,
+                                children: [
+                                  Text(snapshot.error.toString()),
+                                  OutlinedButton(
+                                    onPressed: busy ? null : _refresh,
+                                    child: const Text('Erneut laden'),
+                                  ),
+                                ],
+                              ),
                       ),
-                    )
-                  else if (snapshot.hasData)
-                    if (index == 4)
-                      ..._cart(snapshot.data as Json)
-                    else
-                      SliverToBoxAdapter(child: _overview(snapshot.data)),
+                    ),
+                  if (cart != null) ..._cart(cart),
                 ],
               ),
             ),

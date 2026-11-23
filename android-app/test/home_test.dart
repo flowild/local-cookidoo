@@ -14,6 +14,44 @@ import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  testWidgets('start and cart show controls before their data arrives', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _DelayedStartApi();
+    await tester.pumpWidget(RezeptgartenApp(api: api));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Übersicht').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('Deine Sammlung'), findsOneWidget);
+    expect(find.text('Kein Zufallsrezept vorhanden.'), findsNothing);
+    api.previews.complete({
+      'items': [
+        {'id': 'r1', 'name': 'Frühe Vorschau'},
+      ],
+    });
+    await tester.pump();
+    expect(find.text('Frühe Vorschau'), findsOneWidget);
+    expect(api.featured.isCompleted, isFalse);
+    api.featured.complete({});
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('Mein Einkaufswagen'), findsOneWidget);
+    expect(find.text('Artikel hinzufügen'), findsOneWidget);
+    expect(find.text('Noch keine Rezepte im Einkaufswagen.'), findsNothing);
+    api.cart.complete({'items': <Json>[]});
+    await tester.pumpAndSettle();
+    expect(find.text('Noch keine Rezepte im Einkaufswagen.'), findsOneWidget);
+  });
+
   for (final (width, scale, columns) in [
     (332.0, 1.0, 2),
     (332.0, 1.6, 1),
@@ -748,6 +786,20 @@ final _verticalScroll = find.byWidgetPredicate(
   (widget) =>
       widget is Scrollable && widget.axisDirection == AxisDirection.down,
 );
+
+class _DelayedStartApi extends DebugRezeptgartenApi {
+  final featured = Completer<Json>();
+  final previews = Completer<Json>();
+  final cart = Completer<Json>();
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) => switch (path) {
+    '/api/featured-recipe' => featured.future,
+    '/api/recipes?limit=8' => previews.future,
+    '/api/cart' => cart.future,
+    _ => super.get(path, timeout: timeout),
+  };
+}
 
 class _LargeCartApi extends _TestApi {
   @override

@@ -41,6 +41,11 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Identische Android-Netzmeldungen im bestätigten Heimnetz überspringen.
   Bei der Rückkehr zur App die Verbindung im Hintergrund prüfen und den
   Sammlungsabgleich einmal anstoßen. Die lokale Ansicht bleibt dabei bedienbar.
+  Titel, Suche und datenunabhängige Aktionen sofort anzeigen und die einzelnen
+  Antworten in die sichtbare Ansicht einsetzen. Start zeigt Sammlung und
+  Rezeptantworten unabhängig. Im Kalender darf der Warteschlangenstatus
+  die Anzeige der Termine nicht blockieren. Änderungen am Kalender brauchen
+  den bestätigten Stand. Beim Laden keine falschen leeren Ergebnisse anzeigen.
 - Bilder getrennt nach Vorschau und Original laden. Gleichzeitige Bildabrufe
   bündeln, die Cachefreigabe des Servers beachten und den Speicher begrenzen.
   Die Dekodierungsgröße an die physische Anzeigebreite anpassen. Freigegebene

@@ -139,32 +139,32 @@ class _RecipeBrowserState extends State<RecipeBrowser>
       _loading = true;
       _error = null;
     });
-    try {
-      final [recipes, available] = await Future.wait<Json?>([
-        if (load != _RecipeLoad.moreAvailable)
-          _loadPage(available: false, offset: first ? 0 : _recipes.length)
-        else
-          Future.value(),
-        if (_local && load != _RecipeLoad.moreRecipes)
-          _loadPage(available: true, offset: first ? 0 : _available.length)
-        else
-          Future.value(),
-      ]);
+    Future<void> loadPage({required bool available}) async {
+      final items = available ? _available : _recipes;
+      final result = await _loadPage(
+        available: available,
+        offset: first ? 0 : items.length,
+      );
       if (!mounted || request != _request) return;
       setState(() {
-        if (recipes != null) {
-          if (first) _recipes.clear();
-          _recipes.addAll(objects(recipes['items']));
-          _total = recipes['total'] as int;
-          _matched = recipes['match_total'] as int;
-        }
-        if (available != null) {
-          if (first) _available.clear();
-          _available.addAll(objects(available['items']));
-          _availableTotal = available['total'] as int;
+        if (first) items.clear();
+        items.addAll(objects(result['items']));
+        if (available) {
+          _availableTotal = result['total'] as int;
+        } else {
+          _total = result['total'] as int;
+          _matched = result['match_total'] as int;
         }
       });
       _updateWiggle();
+    }
+
+    try {
+      await Future.wait<void>([
+        if (load != _RecipeLoad.moreAvailable) loadPage(available: false),
+        if (_local && load != _RecipeLoad.moreRecipes)
+          loadPage(available: true),
+      ]);
     } on Exception catch (error) {
       if (mounted && request == _request) {
         setState(() {
@@ -954,6 +954,7 @@ class _RecipeCollectionsState extends State<RecipeCollections>
     with SingleTickerProviderStateMixin {
   static const _preferences = MethodChannel('de.rezeptgarten/preferences');
   late Future<dynamic> _lists = widget.api.get('/api/collections');
+  Json? _lastLists;
   final _searchField = TextEditingController();
   late final _wiggle = AnimationController(
     vsync: this,
@@ -1121,10 +1122,9 @@ class _RecipeCollectionsState extends State<RecipeCollections>
   Widget build(BuildContext context) => FutureBuilder<dynamic>(
     future: _lists,
     builder: (context, snapshot) {
-      final result = snapshot.data;
+      if (snapshot.data case final Json result) _lastLists = result;
       final byId = {
-        for (final list in objects(result is Json ? result['items'] : null))
-          list['id']: list,
+        for (final list in objects(_lastLists?['items'])) list['id']: list,
       };
       final ordered = [
         for (final id in _listOrder) ?byId.remove(id),
@@ -1201,7 +1201,7 @@ class _RecipeCollectionsState extends State<RecipeCollections>
                   ),
                 ),
                 if (_creating ||
-                    (!snapshot.hasData &&
+                    (_lastLists == null &&
                         snapshot.connectionState != ConnectionState.done))
                   const LinearProgressIndicator(),
                 if (snapshot.hasError) ...[

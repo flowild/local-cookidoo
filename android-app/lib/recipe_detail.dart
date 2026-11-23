@@ -50,6 +50,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
   final _note = TextEditingController();
   final _noteFocus = FocusNode();
   late String _id = text(widget.preview['id']);
+  late Json _preview = widget.preview;
   Json? _recipe;
   List<Json> _localLists = [];
   List<String>? _tips;
@@ -88,20 +89,30 @@ class _RecipeDetailState extends State<RecipeDetail> {
 
   Future<void> _load(String id) async {
     final generation = ++_loadGeneration;
+    final keepContent = id == _id && _recipe != null;
     setState(() {
+      if (id != _id) {
+        _preview =
+            objects(_recipe?['versions'])
+                .where((version) => version['id'] == id)
+                .firstOrNull ??
+            {'id': id, 'name': _recipe?['name'] ?? _preview['name']};
+      }
       _id = id;
       _error = null;
-      _recipe = null;
-      _original = null;
+      if (!keepContent) {
+        _recipe = null;
+        _original = null;
+        _tips = null;
+        _localLists = [];
+        _note.clear();
+      }
       _noteStatus = null;
       _tipsError = null;
       _listError = null;
-      _tips = null;
-      _localLists = [];
       _listsLoading = false;
       _tipsLoading = false;
       _noteLoading = false;
-      _note.clear();
       _working = true;
     });
     try {
@@ -112,9 +123,9 @@ class _RecipeDetailState extends State<RecipeDetail> {
         _recipe = recipe;
         _working = false;
       });
-      // Collections are local. Give the live note priority over remote tips.
+      unawaited(_loadNote());
       if (!_calendarRecipe) unawaited(_loadLists());
-      unawaited(_loadNoteAndTips(recipe, generation));
+      unawaited(_loadTips());
     } on Exception catch (error) {
       if (mounted && generation == _loadGeneration) {
         setState(() {
@@ -125,15 +136,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
     }
   }
 
-  Future<void> _loadNoteAndTips(Json recipe, int generation) async {
-    final note = _loadNote();
-    if (recipe['tips_json'] == null) await note;
-    if (mounted && generation == _loadGeneration) await _loadTips();
-  }
-
   Future<void> _loadNote() async {
     if (_noteLoading) return;
     final generation = _loadGeneration;
+    final original = _original;
     setState(() {
       _noteLoading = true;
       _noteStatus = 'Notiz wird geladen …';
@@ -142,6 +148,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
       final result = await widget.api.get(_notePath) as Json;
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        if (_dirty || _original != original || _saving != null) {
+          if (_noteLoading && _saving == null) _noteStatus = null;
+          return;
+        }
         _original = result['text'] as String;
         _note.text = _original!;
         _noteStatus = null;
@@ -570,7 +580,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         ),
       ),
       if (_noteStatus != null) Text(_noteStatus!),
-      if (_original == null && !_noteLoading && !_working)
+      if (_recipe != null && _original == null && !_noteLoading && !_working)
         TextButton.icon(
           onPressed: _loadNote,
           style: _buttonStyle,
@@ -588,6 +598,8 @@ class _RecipeDetailState extends State<RecipeDetail> {
   );
 
   Widget _content(Json recipe) {
+    final loaded = _recipe != null;
+    final canAct = loaded && !_working;
     final lists = objects(recipe['collections']);
     final memberships = lists.map((list) => list['id']).toSet();
     final difficulty = recipeDifficulty(recipe['difficulty']);
@@ -609,6 +621,19 @@ class _RecipeDetailState extends State<RecipeDetail> {
         text(recipe['name'], 'Rezept'),
         style: Theme.of(context).textTheme.headlineMedium,
       ),
+      if (!loaded && _error == null) const LinearProgressIndicator(),
+      if (_error case final String error)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(error),
+            TextButton.icon(
+              onPressed: _working ? null : () => _load(_id),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Erneut laden'),
+            ),
+          ],
+        ),
       if (showVersions)
         InputDecorator(
           decoration: const InputDecoration(labelText: 'Rezeptversion'),
@@ -667,7 +692,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
           icon: const Icon(Icons.refresh),
           label: const Text('Tipps erneut laden', textAlign: TextAlign.center),
         ),
-      if (!_calendarRecipe)
+      if (loaded && !_calendarRecipe)
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: AppSpacing.related,
@@ -722,7 +747,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         spacing: AppSpacing.related,
         children: [
           FilledButton.icon(
-            onPressed: _working ? null : () => _action(_addToShelf),
+            onPressed: canAct ? () => _action(_addToShelf) : null,
             style: _buttonStyle,
             icon: const Icon(Icons.playlist_add),
             label: const Text(
@@ -731,7 +756,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
             ),
           ),
           FilledButton.icon(
-            onPressed: _working ? null : () => _action(_planWeek),
+            onPressed: canAct ? () => _action(_planWeek) : null,
             style: _buttonStyle,
             icon: const Icon(Icons.calendar_today_outlined),
             label: const Text(
@@ -740,7 +765,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
             ),
           ),
           FilledButton.icon(
-            onPressed: _working
+            onPressed: !canAct
                 ? null
                 : () => _action(() async {
                     final result = await widget.api.write(
@@ -768,7 +793,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
           ),
           if (recipe['source_url'] case final String url)
             OutlinedButton.icon(
-              onPressed: _working
+              onPressed: !canAct
                   ? null
                   : () => _action(() async {
                       await _links.invokeMethod<void>('openCookidoo', url);
@@ -810,33 +835,9 @@ class _RecipeDetailState extends State<RecipeDetail> {
     child: Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: _close),
-        title: Text(text(_recipe?['name'] ?? widget.preview['name'], 'Rezept')),
+        title: Text(text(_recipe?['name'] ?? _preview['name'], 'Rezept')),
       ),
-      body: SafeArea(
-        child: switch (_recipe) {
-          final Json recipe => _content(recipe),
-          null when _error == null => const Center(
-            child: CircularProgressIndicator(),
-          ),
-          null => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!),
-                TextButton.icon(
-                  onPressed: _working ? null : () => _load(_id),
-                  style: _buttonStyle,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text(
-                    'Erneut laden',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        },
-      ),
+      body: SafeArea(child: _content(_recipe ?? _preview)),
     ),
   );
 }

@@ -5,9 +5,38 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
+import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/recipe_detail.dart';
 
 void main() {
+  testWidgets('opens the recipe preview before the detail response', (
+    tester,
+  ) async {
+    final api = _PendingRecipeApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'creation:r1', 'name': 'In der Vorschau'},
+          calendar: false,
+        ),
+      ),
+    );
+    expect(find.byType(RecipeCard), findsOneWidget);
+    expect(find.text('In der Vorschau'), findsWidgets);
+    expect(find.text('Zutaten'), findsNothing);
+    api.detail.complete(
+      await _DetailApi().get('/api/recipes/creation%3Ar1') as Json,
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Zutaten'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Zutaten'), findsOneWidget);
+  });
+
   testWidgets(
     'late responses for a previous version cannot replace the current note and lists',
     (tester) async {
@@ -287,6 +316,16 @@ void main() {
       expect(tester.widget<TextField>(field).controller!.text, 'Mein Entwurf');
     },
   );
+}
+
+class _PendingRecipeApi extends _DetailApi {
+  final detail = Completer<Json>();
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) =>
+      path == '/api/recipes/creation%3Ar1'
+      ? detail.future
+      : super.get(path, timeout: timeout);
 }
 
 class _VersionApi extends _DetailApi {

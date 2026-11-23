@@ -77,6 +77,7 @@ class _WeekViewState extends State<WeekView> {
   String? _requestedDay;
   String? _error;
   bool _loading = true;
+  bool _queueReady = false;
   bool _busy = false;
   bool _openingRecipe = false;
   int _request = 0;
@@ -92,7 +93,7 @@ class _WeekViewState extends State<WeekView> {
 
   String? get _monday =>
       objects(_week?['days']).firstOrNull?['date'] as String?;
-  bool get _ready => !_loading && !_busy && _monday != null;
+  bool get _ready => !_loading && _queueReady && !_busy && _monday != null;
   bool get _canPlaceRecipe =>
       _ready && !['error', 'processing'].contains(_queue['phase']);
 
@@ -148,7 +149,7 @@ class _WeekViewState extends State<WeekView> {
   void _restorePage() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_daysController.hasClients) return;
-      final count = objects(_week?['days']).length;
+      final count = _calendarDates().length;
       if (count > 0) _daysController.jumpToPage(min(_visibleDay, count - 1));
     });
   }
@@ -178,7 +179,10 @@ class _WeekViewState extends State<WeekView> {
     if (count is int) widget.cartCountChanged(count);
   }
 
-  Future<void> _load({bool showPrevious = false, bool showToday = false}) async {
+  Future<void> _load({
+    bool showPrevious = false,
+    bool showToday = false,
+  }) async {
     final request = ++_request;
     final day = _requestedDay;
     final path = day == null
@@ -186,37 +190,53 @@ class _WeekViewState extends State<WeekView> {
         : '/api/calendar/week?day=$day';
     setState(() {
       _loading = true;
+      _queueReady = false;
       _error = null;
       _selected = null;
       if (!showPrevious) {
         _week = null;
         _queue = {};
+        _recipes = {};
       }
     });
+    _restorePage();
+    final weekRead = widget.api.get(path);
+    final statusRead = _status().then<Json?>(
+      (status) {
+        if (mounted && request == _request) _cartCount(status);
+        return status;
+      },
+      onError: (Object error) {
+        if (mounted && request == _request && _error == null) {
+          setState(() => _error = error.toString());
+        }
+        return null;
+      },
+    );
     try {
-      await _enrichment;
+      final week = await weekRead as Json;
       if (!mounted || request != _request) return;
-      final status = await _status();
-      if (!mounted || request != _request) return;
-      _cartCount(status);
-      final week = await widget.api.get(path) as Json;
-      if (!mounted || request != _request) return;
-      final queue = status['calendar_queue'];
       setState(() {
         _week = week;
-        _queue = queue is Json ? queue : {};
         _recipes = _project(week, _queue);
         _loading = false;
       });
       if (showToday) {
-        final index = objects(week['days']).indexWhere(
-          (day) => day['date'] == week['today'],
-        );
+        final index = objects(week['days'])
+            .indexWhere((day) => day['date'] == week['today']);
         if (index >= 0) {
           unawaited(_selectDay(index, force: true));
         }
       }
       _restorePage();
+      final status = await statusRead;
+      if (!mounted || request != _request || status == null) return;
+      final queue = status['calendar_queue'];
+      setState(() {
+        _queue = queue is Json ? queue : {};
+        _recipes = _project(week, _queue);
+        _queueReady = true;
+      });
       if (status['connected'] == true && !_busy) {
         final work = _enrich(week, request);
         _enrichment = work;
@@ -229,7 +249,6 @@ class _WeekViewState extends State<WeekView> {
     } on Exception catch (error) {
       if (mounted && request == _request) {
         setState(() {
-          _week = null;
           _error = error.toString();
         });
       }
@@ -244,6 +263,7 @@ class _WeekViewState extends State<WeekView> {
     if (!widget.active ||
         _busy ||
         _loading ||
+        (!_queueReady && _error == null) ||
         _openingRecipe ||
         _week == null) {
       return;
@@ -260,7 +280,8 @@ class _WeekViewState extends State<WeekView> {
       }
       final queue = status['calendar_queue'];
       _cartCount(status);
-      if (queue is Json && jsonEncode(queue) != jsonEncode(_queue)) {
+      if (!_queueReady ||
+          (queue is Json && jsonEncode(queue) != jsonEncode(_queue))) {
         await _load(showPrevious: true);
       }
     } on Exception {
@@ -388,8 +409,8 @@ class _WeekViewState extends State<WeekView> {
   }
 
   void _navigate(int? offset) {
-    if (_busy || _loading) return;
-    final base = _monday ?? _requestedDay;
+    if (_busy) return;
+    final base = _requestedDay ?? _monday;
     if (offset == null) {
       _requestedDay = null;
     } else if (base != null) {
@@ -902,7 +923,7 @@ class _WeekViewState extends State<WeekView> {
               fontWeight: isToday ? FontWeight.w800 : null,
             ),
           ),
-          if (entries.isEmpty)
+          if (entries.isEmpty && _queueReady)
             Text(
               target == 'shelf'
                   ? 'Rezepte hier ablegen, wenn der Tag noch offen ist.'
@@ -962,7 +983,7 @@ class _WeekViewState extends State<WeekView> {
   }
 
   Widget _days(String monday) {
-    final days = objects(_week?['days']);
+    final dates = _calendarDates();
     return LayoutBuilder(
       builder: (context, constraints) {
         // Leave room for both controls in each card before showing all seven columns.
@@ -972,13 +993,9 @@ class _WeekViewState extends State<WeekView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: AppSpacing.item,
             children: [
-              for (final (index, day) in days.indexed)
+              for (final (index, date) in dates.indexed)
                 Expanded(
-                  child: _section(
-                    calendarDayLabel(index, text(day['date'])),
-                    text(day['date']),
-                    monday,
-                  ),
+                  child: _section(calendarDayLabel(index, date), date, monday),
                 ),
             ],
           );
@@ -987,10 +1004,10 @@ class _WeekViewState extends State<WeekView> {
           height: (MediaQuery.sizeOf(context).height * .46).clamp(250.0, 460.0),
           child: PageView.builder(
             controller: _daysController,
-            itemCount: days.length,
+            itemCount: dates.length,
             onPageChanged: _selectDay,
             itemBuilder: (context, index) {
-              final date = text(days[index]['date']);
+              final date = dates[index];
               return Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.item / 2,
@@ -1009,6 +1026,17 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
+  List<String> _calendarDates() {
+    if (_week != null) {
+      return [for (final day in objects(_week?['days'])) text(day['date'])];
+    }
+    final monday = DateTime.tryParse('${_requestedDay ?? ''}T12:00:00Z');
+    return [
+      for (var index = 0; index < 7; index++)
+        monday == null ? '' : _dayString(monday.add(Duration(days: index))),
+    ];
+  }
+
   Widget _toolbar() {
     final queueError = _queue['phase'] == 'error';
     final state = switch (_queue['phase']) {
@@ -1020,9 +1048,9 @@ class _WeekViewState extends State<WeekView> {
       ),
       _ => '',
     };
-    final canNavigate = !_busy && !_loading;
+    final canNavigate = !_busy && (!_loading || _requestedDay != null);
     final canStep = canNavigate && (_monday != null || _requestedDay != null);
-    final monday = _monday;
+    final monday = _monday ?? _requestedDay;
     final weekBadge = monday == null
         ? null
         : CalendarWeekBadge(date: monday, today: text(_week?['today']));
@@ -1064,7 +1092,9 @@ class _WeekViewState extends State<WeekView> {
                             child: FilledButton.tonal(
                               style: ButtonStyle(
                                 shape: _weekControlShape(),
-                                minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+                                minimumSize: const WidgetStatePropertyAll(
+                                  Size(48, 48),
+                                ),
                                 padding: const WidgetStatePropertyAll(
                                   EdgeInsets.symmetric(
                                     horizontal: AppSpacing.related,
@@ -1120,7 +1150,7 @@ class _WeekViewState extends State<WeekView> {
         if (_error != null) ...[
           Text(_error!),
           TextButton(
-            onPressed: canNavigate ? _load : null,
+            onPressed: canNavigate ? () => _load(showPrevious: true) : null,
             child: const Text('Erneut laden'),
           ),
         ],
@@ -1182,30 +1212,31 @@ class _WeekViewState extends State<WeekView> {
       child: Column(
         spacing: AppSpacing.related,
         children: [
-          for (final entry in _placeholders.entries)
-            _draggable(
-              _WeekEntry('library', {
-                'placeholder': entry.key,
-              }, placeholder: true),
-              monday,
-              _ready,
-              CompactRecipeTile(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                leading: Text(entry.value.$2),
-                title: entry.value.$1,
-                actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
-                onAction: _ready
-                    ? () => _move(
-                        _WeekEntry('library', {
-                          'placeholder': entry.key,
-                        }, placeholder: true),
-                        'shelf',
-                        monday,
-                      )
-                    : null,
-                actionIcon: Icons.add,
+          if (_week != null)
+            for (final entry in _placeholders.entries)
+              _draggable(
+                _WeekEntry('library', {
+                  'placeholder': entry.key,
+                }, placeholder: true),
+                monday,
+                _ready,
+                CompactRecipeTile(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  leading: Text(entry.value.$2),
+                  title: entry.value.$1,
+                  actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
+                  onAction: _ready
+                      ? () => _move(
+                          _WeekEntry('library', {
+                            'placeholder': entry.key,
+                          }, placeholder: true),
+                          'shelf',
+                          monday,
+                        )
+                      : null,
+                  actionIcon: Icons.add,
+                ),
               ),
-            ),
         ],
       ),
     ),
@@ -1214,6 +1245,7 @@ class _WeekViewState extends State<WeekView> {
   @override
   Widget build(BuildContext context) {
     final monday = _monday;
+    final displayedMonday = monday ?? _requestedDay ?? '';
     return RefreshIndicator(
       onRefresh: () async {
         if (_busy || _loading) return;
@@ -1230,13 +1262,13 @@ class _WeekViewState extends State<WeekView> {
           padding: AppSpacing.page,
           children: [
             _toolbar(),
+            const SizedBox(height: AppSpacing.section),
+            _days(displayedMonday),
+            const SizedBox(height: AppSpacing.section),
+            _section('Ablage für diese Woche', 'shelf', displayedMonday),
+            const SizedBox(height: AppSpacing.section),
+            _placeholderList(displayedMonday),
             if (monday != null) ...[
-              const SizedBox(height: AppSpacing.section),
-              _days(monday),
-              const SizedBox(height: AppSpacing.section),
-              _section('Ablage für diese Woche', 'shelf', monday),
-              const SizedBox(height: AppSpacing.section),
-              _placeholderList(monday),
               const SizedBox(height: AppSpacing.section),
               _WeekLists(
                 key: ValueKey(monday),

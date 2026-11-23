@@ -12,6 +12,32 @@ import 'package:rezeptgarten/week_view.dart';
 
 void main() {
   testWidgets(
+    'week shows its layout and recipes while queue status is pending',
+    (tester) async {
+      final api = _DelayedWeekApi();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WeekView(
+              api: api,
+              openRecipe: (_, _) async {},
+              cartCountChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Montag'), findsOneWidget);
+      expect(find.text('Noch nichts geplant'), findsNothing);
+      api.calendar.complete(await _WeekApi().get('/api/calendar/week') as Json);
+      await tester.pump();
+      expect(find.text('Reisgericht'), findsOneWidget);
+      expect(api.status.isCompleted, isFalse);
+      api.status.complete({'calendar_queue': <String, dynamic>{}});
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
     'week list pills show thumbnails and add once from the trailing plus',
     (tester) async {
       tester.view.physicalSize = const Size(390, 1000);
@@ -151,7 +177,8 @@ void main() {
     expect(current, findsOneWidget);
     expect(find.bySemanticsLabel('Aktuelle Kalenderwoche 53'), findsOneWidget);
     final todayButton = find.widgetWithText(FilledButton, 'Heute');
-    double page() => tester.widget<PageView>(find.byType(PageView)).controller!.page!;
+    double page() =>
+        tester.widget<PageView>(find.byType(PageView)).controller!.page!;
     expect(page(), 0);
     await tester.tap(todayButton);
     await tester.pumpAndSettle();
@@ -198,7 +225,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(PageView), findsNothing);
-    final weekButton = tester.getCenter(find.widgetWithText(FilledButton, 'Heute'));
+    final weekButton = tester.getCenter(
+      find.widgetWithText(FilledButton, 'Heute'),
+    );
     final shoppingButton = tester.getCenter(
       find.byTooltip('In den Einkaufswagen'),
     );
@@ -482,6 +511,18 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class _DelayedWeekApi extends _WeekApi {
+  final status = Completer<Json>();
+  final calendar = Completer<Json>();
+
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) => switch (path) {
+    '/api/status' => status.future,
+    '/api/calendar/week' => calendar.future,
+    _ => super.get(path, timeout: timeout),
+  };
 }
 
 class _DelayedBadgesApi extends _WeekApi {
