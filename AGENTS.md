@@ -370,6 +370,8 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 
 „Zutat hinzufügen“ nutzt in Android und Web-App die volle Inhaltsbreite
 der Vorratsansicht einschließlich der üblichen Seitenabstände.
+Vorratskategorien starten in Android und Web eingeklappt und merken ihren
+Zustand für die laufende Sitzung. Die Suche zeigt passende Zutaten direkt an.
 
 Die Symbolauswahl für Zutaten, Vorratskategorien und lokale Rezeptlisten enthält
 auch Lebensmittel und Haushaltsartikel wie Kartoffeln und Toilettenpapier.

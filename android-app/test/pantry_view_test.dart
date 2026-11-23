@@ -27,11 +27,13 @@ void main() {
             textScaler: TextScaler.linear(1.5),
           ),
           child: Scaffold(
-            body: PantryView(api: api, collapsed: {}),
+            body: PantryView(api: api, expandedCategories: {}),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vorräte'));
     await tester.pumpAndSettle();
     final add = tester.getRect(
       find.ancestor(
@@ -66,7 +68,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: PantryView(api: api, collapsed: {}),
+            body: PantryView(api: api, expandedCategories: {}),
           ),
         ),
       );
@@ -93,6 +95,9 @@ void main() {
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
       expect(api.item?['ingredient_id'], 11);
+      expect(find.text('Reis'), findsNothing);
+      await tester.tap(find.text('Vorräte'));
+      await tester.pumpAndSettle();
       expect(find.text('250 g'), findsOneWidget);
       expect(api.item?['icon'], '🍎');
       expect(find.text('🍎'), findsOneWidget);
@@ -153,6 +158,52 @@ void main() {
       expect(find.text('Vorräte'), findsNothing);
     },
   );
+
+  testWidgets('pantry expansion lasts for the current session', (tester) async {
+    final api = _PantryApi()
+      ..extraItems = [
+        {'id': 2, 'category_id': 1, 'name': 'Pfeffer', 'quantity': ''},
+        {'id': 3, 'category_id': 2, 'name': 'Möhre', 'quantity': ''},
+      ];
+    final expanded = <int>{};
+    Future<void> openPantry(Set<int> categories) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PantryView(api: api, expandedCategories: categories),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await openPantry(expanded);
+    expect(find.text('Pfeffer'), findsNothing);
+    expect(find.text('Möhre'), findsNothing);
+    await tester.tap(find.text('Vorräte'));
+    await tester.pumpAndSettle();
+    await openPantry(expanded);
+    expect(find.text('Pfeffer'), findsOneWidget);
+    expect(find.text('Möhre'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'Möh');
+    await tester.pumpAndSettle();
+    expect(find.text('Möhre'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.text('Pfeffer'), findsOneWidget);
+    expect(find.text('Möhre'), findsNothing);
+
+    await tester.tap(find.text('Vorräte'));
+    await tester.pumpAndSettle();
+    await openPantry(expanded);
+    expect(find.text('Pfeffer'), findsNothing);
+    await tester.tap(find.text('Vorräte'));
+    await tester.pumpAndSettle();
+    await openPantry(<int>{});
+    expect(find.text('Pfeffer'), findsNothing);
+  });
 }
 
 class _PantryApi extends RezeptgartenApi {

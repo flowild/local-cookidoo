@@ -92,7 +92,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   int _session = 0;
   var _pagerKey = GlobalKey<_SectionPagerState>();
   late bool _wasLocal;
-  final pantryCollapsed = <int>{};
+  final pantryExpanded = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
   final _areaData = <int, Future<dynamic>>{};
@@ -162,7 +162,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _pagerKey = GlobalKey<_SectionPagerState>();
     _areaData.clear();
     _dirtyAreas.clear();
-    pantryCollapsed.clear();
+    pantryExpanded.clear();
     cartItem.clear();
     api.clearImageCache();
   }
@@ -1175,7 +1175,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       5 => PantryView(
         api: api,
         onSync: _syncFromPull,
-        collapsed: pantryCollapsed,
+        expandedCategories: pantryExpanded,
         refreshCount: refreshCount,
         onChanged: () => _dirtyAreas.add(4),
       ),

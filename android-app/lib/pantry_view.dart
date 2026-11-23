@@ -12,14 +12,14 @@ class PantryView extends StatefulWidget {
   const PantryView({
     super.key,
     required this.api,
-    required this.collapsed,
+    required this.expandedCategories,
     this.refreshCount = 0,
     this.onSync,
     this.onChanged,
   });
 
   final RezeptgartenApi api;
-  final Set<int> collapsed;
+  final Set<int> expandedCategories;
   final int refreshCount;
   final Future<void> Function()? onSync;
   final VoidCallback? onChanged;
@@ -73,6 +73,8 @@ class _PantryViewState extends State<PantryView> {
         _loaded = true;
         _categories = objects(result['categories']);
         _items = objects(result['items']);
+        final categoryIds = {for (final category in _categories) category['id']};
+        widget.expandedCategories.retainAll(categoryIds);
       });
     } on Exception catch (error) {
       if (mounted && request == _request) {
@@ -165,10 +167,9 @@ class _PantryViewState extends State<PantryView> {
 
   void _expandAll(bool expand) {
     setState(() {
+      widget.expandedCategories.clear();
       if (expand) {
-        widget.collapsed.clear();
-      } else {
-        widget.collapsed.addAll(
+        widget.expandedCategories.addAll(
           _categories.map((category) => category['id'] as int),
         );
       }
@@ -279,13 +280,13 @@ class _PantryViewState extends State<PantryView> {
           title: name,
           expansionKey: ValueKey((id, _expansionVersion, _query.isNotEmpty)),
           initiallyExpanded:
-              _query.isNotEmpty || !widget.collapsed.contains(id),
+              _query.isNotEmpty || widget.expandedCategories.contains(id),
           onExpansionChanged: (expanded) {
             if (_query.isNotEmpty) return;
             if (expanded) {
-              widget.collapsed.remove(id);
+              widget.expandedCategories.add(id);
             } else {
-              widget.collapsed.add(id);
+              widget.expandedCategories.remove(id);
             }
           },
           leading: SizedBox(

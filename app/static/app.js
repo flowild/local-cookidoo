@@ -19,9 +19,8 @@ let weekBadgesBusy = false, weekBadgesTimer = null, weekBadgesDone = Promise.res
 let inlineNote = null, recipeNoteRequest = 0;
 let previewNoteCache = new Map(), previewNotePending = new Set(), previewNoteObserved = new Set();
 let previewNoteObserver = null, previewNoteTimer = null, previewNoteBusy = false, previewNoteDone = Promise.resolve(), previewShelfBusy = false, previewInteractionBusy = false, previewAccount = null, previewAccountVersion = 0;
-let collapsedPantry = new Set();
+const expandedPantry = new Set();
 let pantryDrag = null, pantryReordering = false;
-try { const saved = JSON.parse(localStorage.getItem('rezeptgarten-pantry-collapsed') || '[]'); if (Array.isArray(saved)) collapsedPantry = new Set(saved.filter(Number.isInteger)); } catch (_) {}
 
 function toast(message) {
   const node = $('#toast');
@@ -836,20 +835,20 @@ function pantryIcon(name, category, selected) {
   return fallback[category] || '🥣';
 }
 function pantryCategoryCard(group, query) {
-  const collapsed = collapsedPantry.has(group.id);
+  const collapsed = !query && !expandedPantry.has(group.id);
   const disabled = query || pantryReordering ? 'disabled' : '';
   const list = group.items.length ? `<ul class="pantry-items">${group.items.map(item => `<li><span class="pantry-item-icon" aria-hidden="true">${escapeHTML(item.icon || pantryIcon(item.name, group.name))}</span><div class="pantry-item-text"><strong>${escapeHTML(item.name)}</strong>${item.quantity ? `<span>${escapeHTML(item.quantity)}</span>` : ''}</div><button class="pantry-edit" data-pantry-edit="${item.id}" aria-label="${escapeHTML(item.name)} bearbeiten">Bearbeiten</button><button class="pantry-remove" data-pantry-remove="${item.id}" aria-label="${escapeHTML(item.name)} entfernen">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="pantry-empty">Noch keine Zutaten eingetragen.</p>';
-  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${symbolPrefix(group)}${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-edit" type="button" data-pantry-edit-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} bearbeiten" title="Kategorie bearbeiten">${icon('edit')}</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
+  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" ${query ? 'disabled' : ''} aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${symbolPrefix(group)}${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-edit" type="button" data-pantry-edit-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} bearbeiten" title="Kategorie bearbeiten">${icon('edit')}</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
 }
 function renderPantry() {
   if (state.view !== 'vorrat') return;
   const query = state.pantryFilter.toLocaleLowerCase('de-DE');
   const groups = state.pantry.categories.map(category => ({...category, items:state.pantry.items.filter(item => item.category_id === category.id && item.name.toLocaleLowerCase('de-DE').includes(query))}));
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">DEINE KÜCHE, DEIN ÜBERBLICK</span><h1>Mein Vorrat</h1><p>Halte fest, welche Zutaten du zu Hause hast. Deine Angaben bleiben lokal gespeichert.</p></div><div class="pantry-toolbar"><button class="button button-primary" data-action="pantry-add">Zutat hinzufügen</button><button class="button" data-action="pantry-category">Neue Kategorie</button><button class="button" data-action="pantry-collapse-all">Alle einklappen</button><button class="button" data-action="pantry-expand-all">Alle ausklappen</button></div><label class="pantry-search">Vorrat durchsuchen<input id="pantry-search" type="search" maxlength="100" placeholder="Zutat suchen" value="${escapeHTML(state.pantryFilter)}"></label>${query ? '<p class="pantry-reorder-hint">Zum Sortieren die Suche leeren.</p>' : '<p class="pantry-reorder-hint">Kategorien am Griff ziehen und sortieren.</p>'}<div class="pantry-grid">${groups.filter(group => !query || group.items.length).map(group => pantryCategoryCard(group, query)).join('')}</div>${query && !groups.some(group => group.items.length) ? '<p class="pantry-no-results">Keine passenden Zutaten gefunden.</p>' : ''}`;
+  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">DEINE KÜCHE, DEIN ÜBERBLICK</span><h1>Mein Vorrat</h1><p>Halte fest, welche Zutaten du zu Hause hast. Deine Angaben bleiben lokal gespeichert.</p></div><div class="pantry-toolbar"><button class="button button-primary" data-action="pantry-add">Zutat hinzufügen</button><button class="button" data-action="pantry-category">Neue Kategorie</button><button class="button" data-action="pantry-collapse-all" ${query ? 'disabled' : ''}>Alle einklappen</button><button class="button" data-action="pantry-expand-all" ${query ? 'disabled' : ''}>Alle ausklappen</button></div><label class="pantry-search">Vorrat durchsuchen<input id="pantry-search" type="search" maxlength="100" placeholder="Zutat suchen" value="${escapeHTML(state.pantryFilter)}"></label>${query ? '<p class="pantry-reorder-hint">Zum Sortieren die Suche leeren.</p>' : '<p class="pantry-reorder-hint">Kategorien am Griff ziehen und sortieren.</p>'}<div class="pantry-grid">${groups.filter(group => !query || group.items.length).map(group => pantryCategoryCard(group, query)).join('')}</div>${query && !groups.some(group => group.items.length) ? '<p class="pantry-no-results">Keine passenden Zutaten gefunden.</p>' : ''}`;
 }
 function setAllPantryCollapsed(collapsed) {
-  collapsedPantry = collapsed ? new Set(state.pantry.categories.map(category => category.id)) : new Set();
-  try { localStorage.setItem('rezeptgarten-pantry-collapsed', JSON.stringify([...collapsedPantry])); } catch (_) {}
+  expandedPantry.clear();
+  if (!collapsed) state.pantry.categories.forEach(category => expandedPantry.add(category.id));
   renderPantry();
 }
 function showPantryDialog(item = null, categoryId = null) {
@@ -1513,7 +1512,7 @@ document.addEventListener('click', async event => {
       const category = state.pantry.categories.find(item => item.id === Number(deletePantryCategory.dataset.pantryDeleteCategory));
       if (category && confirm(`Vorratskategorie „${category.name}“ löschen? Alle darin enthaltenen Vorratseinträge werden ebenfalls gelöscht.`)) {
         deletePantryCategory.disabled = true;
-        try { await api(`/api/pantry/categories/${category.id}`, {method:'DELETE'}); collapsedPantry.delete(category.id); await refreshPantry(); toast('Vorratskategorie gelöscht.'); }
+        try { await api(`/api/pantry/categories/${category.id}`, {method:'DELETE'}); expandedPantry.delete(category.id); await refreshPantry(); toast('Vorratskategorie gelöscht.'); }
         finally { deletePantryCategory.disabled = false; }
       }
       return;
@@ -1523,8 +1522,7 @@ document.addEventListener('click', async event => {
     if (event.target.closest('#recipe-note-preview') && event.target.id !== 'recipe-note-text') $('#recipe-note-text')?.focus();
     if (pantryToggle) {
       const id = Number(pantryToggle.dataset.pantryToggle);
-      if (collapsedPantry.has(id)) collapsedPantry.delete(id); else collapsedPantry.add(id);
-      try { localStorage.setItem('rezeptgarten-pantry-collapsed', JSON.stringify([...collapsedPantry])); } catch (_) {}
+      if (expandedPantry.has(id)) expandedPantry.delete(id); else expandedPantry.add(id);
       renderPantry();
       $(`[data-pantry-toggle="${id}"]`)?.focus();
     }
