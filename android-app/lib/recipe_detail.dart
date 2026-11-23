@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'calendar_badge.dart';
 import 'pill_widgets.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
@@ -319,6 +320,71 @@ class _RecipeDetailState extends State<RecipeDetail> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _planWeek() async {
+    final options = await widget.api.get('/api/calendar/cooking-days') as Json;
+    if (!mounted) return;
+    final days = (options['days'] as List).cast<String>();
+    final selected = <String>{};
+    final chosen = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Diese Woche kochen'),
+          scrollable: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final day in days)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    calendarDayLabel(DateTime.parse(day).weekday - 1, day),
+                  ),
+                  value: selected.contains(day),
+                  onChanged: (checked) => setDialogState(() {
+                    if (checked == true) {
+                      selected.add(day);
+                    } else {
+                      selected.remove(day);
+                    }
+                  }),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(
+                      context,
+                      days.where(selected.contains).toList(),
+                    ),
+              child: const Text('Einplanen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final result = await widget.api.write(
+      'POST',
+      '$_recipePath/plan-week${_calendarRecipe ? '?calendar=true' : ''}',
+      {'days': chosen},
+    ) as Json;
+    if (!mounted) return;
+    widget.onWeekChanged?.call();
+    final unconfirmed = (result['unconfirmed'] as List).cast<String>();
+    _message(
+      unconfirmed.isEmpty
+          ? 'Im Cookidoo-Kalender eingeplant.'
+          : 'Nicht bestätigt für ${unconfirmed.map(calendarDateLabel).join(', ')}. Bitte prüfe den Cookidoo-Kalender.',
+    );
+  }
+
   Future<void> _addToShelf() async {
     final id = _id;
     final week = await widget.api.get('/api/calendar/week') as Json;
@@ -529,9 +595,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
         Wrap(
           spacing: AppSpacing.related,
           runSpacing: AppSpacing.tight,
-          children: [
-            for (final list in lists) InfoPill(text(list['name'])),
-          ],
+          children: [for (final list in lists) InfoPill(text(list['name']))],
         ),
       Text(
         text(recipe['name'], 'Rezept'),
@@ -659,23 +723,13 @@ class _RecipeDetailState extends State<RecipeDetail> {
             ),
           ),
           FilledButton.icon(
-            onPressed: _working
-                ? null
-                : () => _action(() async {
-                    final result = await widget.api.write(
-                      'POST',
-                      '$_recipePath/plan-today${_calendarRecipe ? '?calendar=true' : ''}',
-                    ) as Json;
-                    if (mounted) {
-                      widget.onWeekChanged?.call();
-                      _message(
-                        result['verified'] == true ? 'Für heute eingeplant.' : 'Die Planung konnte nicht bestätigt werden. Bitte prüfe den Kalender in Cookidoo.',
-                      );
-                    }
-                  }),
+            onPressed: _working ? null : () => _action(_planWeek),
             style: _buttonStyle,
             icon: const Icon(Icons.calendar_today_outlined),
-            label: const Text('Heute kochen', textAlign: TextAlign.center),
+            label: const Text(
+              'Diese Woche kochen',
+              textAlign: TextAlign.center,
+            ),
           ),
           FilledButton.icon(
             onPressed: _working

@@ -72,6 +72,49 @@ void main() {
     await tester.pump();
     expect(tester.widget<TextField>(field).controller!.text, 'Entwurf');
   });
+  testWidgets('plans the selected days from the recipe detail', (tester) async {
+    final api = _DetailApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'creation:r1'},
+          calendar: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final plan = find.text('Diese Woche kochen');
+    await tester.scrollUntilVisible(
+      plan,
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(plan);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(CheckboxListTile),
+      ),
+      findsNWidgets(3),
+    );
+    expect(find.text('Donnerstag, 19.11.2026'), findsNothing);
+    final submit = find.widgetWithText(FilledButton, 'Einplanen');
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    await tester.tap(find.text('Freitag, 20.11.2026'));
+    await tester.pump();
+    await tester.tap(find.text('Sonntag, 22.11.2026'));
+    await tester.pump();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(api.planned, ['2026-11-20', '2026-11-22']);
+    expect(
+      find.textContaining('Nicht bestätigt für 22.11.2026'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('adds the selected recipe to the current week shelf', (
     tester,
   ) async {
@@ -88,17 +131,17 @@ void main() {
     await tester.pumpAndSettle();
     final add = find.text('Zur Ablage hinzufügen');
     await tester.scrollUntilVisible(
-      find.text('Heute kochen'),
+      find.text('Diese Woche kochen'),
       150,
       scrollable: find.byType(Scrollable).first,
     );
     expect(
       tester.getCenter(add).dy,
-      lessThan(tester.getCenter(find.text('Heute kochen')).dy),
+      lessThan(tester.getCenter(find.text('Diese Woche kochen')).dy),
     );
     for (final (label, icon, type) in [
       ('Zur Ablage hinzufügen', Icons.playlist_add, FilledButton),
-      ('Heute kochen', Icons.calendar_today_outlined, FilledButton),
+      ('Diese Woche kochen', Icons.calendar_today_outlined, FilledButton),
       ('Zum Einkaufswagen hinzufügen', Icons.add_shopping_cart, FilledButton),
       ('In Cookidoo öffnen', Icons.open_in_new, OutlinedButton),
     ]) {
@@ -294,6 +337,7 @@ class _DetailApi extends RezeptgartenApi {
 
   final writes = <Json>[];
   final placements = <Json>[];
+  Object? planned;
   bool changedElsewhere = false;
 
   @override
@@ -325,11 +369,21 @@ class _DetailApi extends RezeptgartenApi {
         if (placements.isNotEmpty) {'id': 'creation:r1'},
       ],
     },
+    '/api/calendar/cooking-days' => {
+      'days': ['2026-11-20', '2026-11-21', '2026-11-22'],
+    },
     _ => throw StateError('Unexpected API path: $path'),
   };
 
   @override
   Future<dynamic> write(String method, String path, [Json? body]) async {
+    if (method == 'POST' && path == '/api/recipes/creation%3Ar1/plan-week') {
+      planned = body?['days'];
+      return {
+        'confirmed': ['2026-11-20'],
+        'unconfirmed': ['2026-11-22'],
+      };
+    }
     if (method == 'POST' && path == '/api/calendar/placement' && body != null) {
       placements.add(body);
       return {

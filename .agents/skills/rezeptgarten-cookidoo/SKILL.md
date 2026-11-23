@@ -13,7 +13,7 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   erneuten Freigabe zu.
   Die Android-Rezeptdetails speichern Notizen mit der zuletzt geladenen Fassung
   als Vergleichswert. Bei einem Fehler bleibt der eingegebene Entwurf erhalten.
-  „Heute kochen“ meldet unbestätigte Cookidoo-Ergebnisse ausdrücklich.
+  „Diese Woche kochen“ meldet unbestätigte Cookidoo-Ergebnisse ausdrücklich.
   Die Android-Wochenansicht übernimmt vorgemerkte Tagesänderungen und die
   serverseitig geführte Ablage. Platzhalter bleiben lokale Einträge. Bei
   fehlgeschlagenem Wochenwechsel sind weitere Änderungen gesperrt, bis die
@@ -55,8 +55,8 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
 - `recipe_action` verwendet den bestehenden Client und denselben Lock wie der Sync.
   Interne IDs eigener Kreationen beginnen mit `creation:`; für Cookidoo den Präfix
   entfernen und die Methoden für eigene Kreationen verwenden.
-- „Heute kochen“ schreibt das ausgewählte Rezept für das heutige Datum in Berlin in
-  den Cookidoo-Kalender und liest zur Bestätigung den Kalender erneut. Rezepte und
+- „Diese Woche kochen“ plant ein Rezept für einen oder mehrere gewählte Tage von heute bis Sonntag nach Berliner Zeit in
+  den Cookidoo-Kalender ein. Der Server prüft die gewählten Daten, überspringt vorhandene Einträge und bestätigt die Planung anhand eines erneuten Kalenderabrufs. Rezepte und
   Zusatzartikel werden zunächst lokal im kontobezogenen Einkaufswagen gesammelt.
   Erst ein ausdrücklicher Knopfdruck überträgt sie nach Cookidoo. Es gibt keine
   allgemeine bidirektionale Synchronisierung.

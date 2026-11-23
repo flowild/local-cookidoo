@@ -73,6 +73,18 @@ class AppTests(unittest.TestCase):
         self.assertEqual(items['custom']['source_url'], 'https://cookidoo.ch/organize/de-CH/my-recipes')
         self.assertNotIn('source_url', items['local'])
 
+    def test_week_plan_uses_calendar_identity_and_validated_dates(self):
+        service = self.app.state.sync
+        selected = self.client.get('/api/calendar/cooking-days').json()['days']
+        service.plan_recipe_days = AsyncMock(return_value={'confirmed': selected, 'unconfirmed': []})
+        route = '/api/recipes/creation:own/plan-week'
+        self.assertEqual(self.client.post(route, json={'days': selected}, headers=ORIGIN).status_code, 404)
+        self.assertEqual(self.client.post(route + '?calendar=true', json={'days': []}, headers=ORIGIN).status_code, 422)
+        response = self.client.post(route + '?calendar=true', json={'days': selected}, headers=ORIGIN)
+        self.assertEqual(response.json(), {'confirmed': selected, 'unconfirmed': []})
+        service.plan_recipe_days.assert_awaited_once()
+        self.assertEqual([day.isoformat() for day in service.plan_recipe_days.await_args.args[1]], selected)
+
     def test_telegram_server_token_is_encrypted_and_origin_protected(self):
         token = '123456789:' + 'a' * 35
         self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])
@@ -1394,6 +1406,26 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.service.recipe_action('r1', 'shopping')
         client.add_ingredient_items_for_recipes.assert_not_awaited()
+
+    async def test_week_plan_skips_existing_days_and_reports_partial_confirmation(self):
+        from datetime import date
+        friday = date(2026, 11, 20)
+        saturday = friday + timedelta(days=1)
+        sunday = friday + timedelta(days=2)
+        already_planned = NS(id=str(friday), recipes=[], customer_recipe_ids=['own'])
+        added = NS(id=str(sunday), recipes=[], customer_recipe_ids=['own'])
+        self.service.client = NS(
+            get_recipes_in_calendar_week=AsyncMock(side_effect=[[already_planned], [already_planned, added]]),
+            add_custom_recipes_to_calendar=AsyncMock(side_effect=[OSError(), None]),
+        )
+        with patch('app.sync.cooking_days', return_value=[friday, saturday, sunday]):
+            with self.assertRaises(ValueError):
+                await self.service.plan_recipe_days('creation:own', [sunday, sunday + timedelta(days=1)])
+            self.service.client.get_recipes_in_calendar_week.assert_not_awaited()
+            result = await self.service.plan_recipe_days('creation:own', [sunday, friday, saturday, sunday])
+        self.assertEqual(result, {'confirmed': [str(friday), str(sunday)], 'unconfirmed': [str(saturday)]})
+        self.assertEqual([call.args for call in self.service.client.add_custom_recipes_to_calendar.await_args_list],
+                         [(saturday, ['own']), (sunday, ['own'])])
 
     async def test_all_pages_saved_and_recipe_details_deduplicated(self):
         calls = []

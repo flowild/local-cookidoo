@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from .security import Vault
 from .storage import Database
-from .sync import REGIONS, SyncService, friendly_error
+from .sync import REGIONS, SyncService, cooking_days, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
 from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, shopping_category
 from .version import APP_VERSION
@@ -743,11 +743,20 @@ def create_app(directory=None, secure_cookies=None):
             logging.getLogger(__name__).warning('Cookidoo recipe tips unavailable: %s', type(error).__name__)
             raise HTTPException(502, 'Die Tipps konnten nicht geladen werden. Bitte versuche es erneut.') from None
 
-    async def cookidoo_recipe_action(recipe_id: str, action: str, calendar: bool = False):
+    class WeekPlan(BaseModel):
+        days: list[date] = Field(min_length=1, max_length=7)
+
+    @app.get('/api/calendar/cooking-days')
+    def available_cooking_days():
+        return {'days': cooking_days()}
+
+    async def cookidoo_recipe_action(recipe_id: str, calendar: bool, days=None):
         if database.recipe(recipe_id) is None and not (calendar and re.fullmatch(r'(?:creation:)?[A-Za-z0-9_-]{1,120}', recipe_id)):
             raise HTTPException(404, 'Dieses Rezept wurde nicht gefunden.')
         try:
-            return await service.recipe_action(recipe_id, action)
+            if days is not None:
+                return await service.plan_recipe_days(recipe_id, days)
+            return await service.recipe_action(recipe_id, 'plan')
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         except Exception as error:
@@ -756,7 +765,11 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.post('/api/recipes/{recipe_id}/plan-today')
     async def plan_today(recipe_id: str, calendar: bool = False):
-        return await cookidoo_recipe_action(recipe_id, 'plan', calendar)
+        return await cookidoo_recipe_action(recipe_id, calendar)
+
+    @app.post('/api/recipes/{recipe_id}/plan-week')
+    async def plan_week(recipe_id: str, payload: WeekPlan, calendar: bool = False):
+        return await cookidoo_recipe_action(recipe_id, calendar, payload.days)
 
     @app.post('/api/recipes/{recipe_id}/shopping')
     async def add_to_shopping(recipe_id: str, calendar: bool = False):

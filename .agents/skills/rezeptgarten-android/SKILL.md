@@ -96,9 +96,10 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   kompakter Karten mit Rezeptbild oder Platzhaltersymbol über dem Titel. Platzhalter- und Listengruppen haben dieselben Kopfzeilen und Abstände. In geöffneten Wochenlisten zeigen Rezeptpillen ein Vorschaubild und ein Plus für die Ablage.
   Einträge werden mit der vertikalen Wischgeste entfernt.
 - Rezeptdetails zeigen kontrastreiche Vorratspunkte. Die Schaltfläche über
-  „Heute kochen“ fügt das Rezept über die gemeinsame Kalender-API zur Ablage der
+  „Diese Woche kochen“ fügt das Rezept über die gemeinsame Kalender-API zur Ablage der
   aktuellen Berliner Kalenderwoche hinzu. Aktionsschaltflächen zeigen ein
   passendes Symbol und den Text als zentrierte Gruppe.
+  „Diese Woche kochen“ bietet mehrere Termine von heute bis Sonntag zur Auswahl.
 - Der Schalter „Debug-Modus“ ist auch offline in den Einstellungen verfügbar.
   Die Debug-Rezepte verwenden unterschiedliche mitgelieferte Vorschaubilder.
   Der Modus verwendet `DebugRezeptgartenApi` mit Beispieldaten für die normalen

@@ -1083,7 +1083,7 @@ async function openRecipe(id, fromWeek = false) {
   const difficulty = {easy:'Einfach',medium:'Mittel',advanced:'Anspruchsvoll',hard:'Anspruchsvoll'}[recipe.difficulty?.toLowerCase()];
   const versions = recipe.versions || [];
   const selector = versions.length > 1 ? `<label class="version-select">Rezeptversion<select id="recipe-version">${versions.map((version, index) => `<option value="${escapeHTML(version.id)}" ${version.id === recipe.id ? 'selected' : ''}>${version.origin_recipe_id ? `Meine Kreation${versions.filter(v => v.origin_recipe_id).length > 1 ? ` ${index}` : ''}` : 'Cookidoo-Original'}${version.servings ? ` · ${escapeHTML(version.servings)} Portionen` : ''}</option>`).join('')}</select></label>` : '';
-  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}<div id="recipe-tips-container"></div>${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-today" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Heute kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
+  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}<div id="recipe-tips-container"></div>${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-week" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Diese Woche kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
   if (!$('#recipe-dialog').open) $('#recipe-dialog').showModal();
   inlineNote = {id:recipe.id, original:'', draft:'', loaded:false, loading:false, saving:null, requested:false};
   const currentNote = inlineNote;
@@ -1121,6 +1121,38 @@ document.addEventListener('keydown', event => {
     event.target.blur();
   }
 });
+async function planRecipeWeek(action) {
+  const {days} = await api('/api/calendar/cooking-days');
+  if (!$('#recipe-dialog').open || !action.isConnected) return;
+  const dialog = $('#cooking-dialog');
+  const form = dialog.querySelector('form');
+  const submit = $('#cooking-submit');
+  const format = new Intl.DateTimeFormat('de-DE', {
+    weekday:'long', day:'2-digit', month:'2-digit', timeZone:'UTC',
+  });
+  $('#cooking-days').innerHTML = days.map(day =>
+    `<label class="membership-option"><input type="checkbox" name="day" value="${escapeHTML(day)}">${format.format(new Date(day + 'T12:00:00Z'))}</label>`
+  ).join('');
+  submit.disabled = true;
+  form.onchange = () => { submit.disabled = !form.querySelector('input:checked'); };
+  dialog.returnValue = '';
+  const closed = new Promise(resolve => dialog.addEventListener('close', resolve, {once:true}));
+  dialog.showModal();
+  await closed;
+  if (dialog.returnValue !== 'plan') return;
+  const selected = new FormData(form).getAll('day');
+  if (!selected.length) return;
+  const query = action.dataset.actionCalendar === 'true' ? '?calendar=true' : '';
+  const result = await post(`/api/recipes/${encodeURIComponent(action.dataset.actionRecipe)}/plan-week${query}`, {days:selected});
+  if (state.view === 'meine-woche') {
+    if ($('#recipe-dialog').open) weekQueueRefreshPending = true;
+    else await renderRoute();
+  }
+  toast(result.unconfirmed.length
+    ? `Nicht bestätigt für ${result.unconfirmed.map(day => format.format(new Date(day + 'T12:00:00Z'))).join(', ')}. Bitte prüfe den Cookidoo-Kalender.`
+    : 'Im Cookidoo-Kalender eingeplant.');
+}
+
 async function closeRecipeSafely() {
   if (document.activeElement?.id === 'recipe-note-text') document.activeElement.blur();
   if (!await ensureInlineNoteSaved()) return false;
@@ -1426,15 +1458,18 @@ document.addEventListener('click', async event => {
     if (event.target.closest('.install-trigger')) await install();
     if (action) {
       switch (action.dataset.action) {
-        case 'plan-today':
+        case 'plan-week':
         case 'add-shopping': {
           if (!await ensureInlineNoteSaved()) break;
           action.disabled = true;
           try {
-            const planning = action.dataset.action === 'plan-today';
-            const result = await post(`/api/recipes/${encodeURIComponent(action.dataset.actionRecipe)}/${planning ? 'plan-today' : 'shopping'}${action.dataset.actionCalendar === 'true' ? '?calendar=true' : ''}`);
-            if (!planning) refreshCartCount().catch(() => {});
-            toast(planning ? (result.verified ? 'Für heute im Cookidoo-Kalender eingeplant.' : 'Cookidoo hat die Anfrage angenommen, aber der Kalendereintrag konnte nicht bestätigt werden. Bitte prüfe den Kalender, bevor du es erneut versuchst.') : result.added ? 'Zum Einkaufswagen hinzugefügt.' : 'Dieses Rezept steht bereits im Einkaufswagen.');
+            if (action.dataset.action === 'plan-week') {
+              await planRecipeWeek(action);
+            } else {
+              const result = await post(`/api/recipes/${encodeURIComponent(action.dataset.actionRecipe)}/shopping${action.dataset.actionCalendar === 'true' ? '?calendar=true' : ''}`);
+              refreshCartCount().catch(() => {});
+              toast(result.added ? 'Zum Einkaufswagen hinzugefügt.' : 'Dieses Rezept steht bereits im Einkaufswagen.');
+            }
           } finally { action.disabled = false; }
           break;
         }

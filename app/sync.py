@@ -40,6 +40,11 @@ class NoteRequestError(RuntimeError):
         self.status = status
 
 
+def cooking_days():
+    today = datetime.now(ZoneInfo('Europe/Berlin')).date()
+    return [today + timedelta(days=offset) for offset in range(7 - today.weekday())]
+
+
 def seconds(value):
     if isinstance(value, timedelta):
         return max(0, int(value.total_seconds()))
@@ -916,6 +921,48 @@ class SyncService:
                 raise ValueError('Die Wochenplanung wurde gerade geändert. Bitte versuche es erneut.')
             added = self.database.cart_add_recipes(self.cart_owner(), recipes)
             return {'status': 'ok', 'added': added, 'existing': len(recipes) - added}
+
+    async def plan_recipe_days(self, recipe_id, requested_days):
+        if self.lock.locked() or self.state['running']:
+            raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        async with self.lock:
+            available = cooking_days()
+            if not requested_days or any(day not in available for day in requested_days):
+                raise ValueError('Bitte wähle Tage von heute bis Sonntag dieser Woche.')
+            if not self.client:
+                raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
+            days = sorted(set(requested_days))
+            custom = recipe_id.startswith('creation:')
+            identifier = recipe_id.removeprefix('creation:')
+            method = self.client.add_custom_recipes_to_calendar if custom else self.client.add_recipes_to_calendar
+
+            async def present():
+                entries = await self.client.get_recipes_in_calendar_week(available[0])
+                return {
+                    str(entry.id) for entry in entries
+                    if any(str(recipe.id) == identifier and bool(getattr(recipe, 'is_custom', False)) == custom
+                           for recipe in entry.recipes)
+                    or (custom and identifier in map(str, entry.customer_recipe_ids))
+                }
+
+            confirmed = await present()
+            missing = [day for day in days if day.isoformat() not in confirmed]
+            for day in missing:
+                try:
+                    await method(day, [identifier])
+                except Exception as error:
+                    logger.warning('Cookidoo calendar write failed: %s', type(error).__name__)
+            if missing:
+                try:
+                    confirmed.update(await present())
+                except Exception as error:
+                    logger.warning('Calendar verification failed: %s', type(error).__name__)
+
+            results = {'confirmed': [], 'unconfirmed': []}
+            for day in days:
+                iso = day.isoformat()
+                results['confirmed' if iso in confirmed else 'unconfirmed'].append(iso)
+            return results
 
     async def recipe_action(self, recipe_id, action):
         if action != 'plan':

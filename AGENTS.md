@@ -111,8 +111,11 @@ Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Noti
 über die gemeinsamen Server-APIs. Ein Notizkonflikt erhält den Entwurf im Feld.
 Kontrastreiche Punkte markieren den Zutatenstatus. „Zur Ablage hinzufügen“
 speichert das Rezept in der Ablage der aktuellen Berliner Kalenderwoche und
-steht direkt über „Heute kochen“. In Aktionspillen stehen Symbol und
+steht direkt über „Diese Woche kochen“. In Aktionspillen stehen Symbol und
 Beschriftung als Gruppe mittig, auch bei einem Zeilenumbruch.
+„Diese Woche kochen“ öffnet in Android und der Web-App eine Mehrfachauswahl
+von heute bis Sonntag nach Berliner Zeit. Cookidoo bestätigt jeden gewählten
+Tag einzeln. Unbestätigte Tage werden angezeigt.
 Die Android-Rezeptbibliothek unterstützt Titel- und Zutatensuche, Zutatenfilter,
 Portionen, Gesamtzeit und Sortierung. Sortieren und Filtern teilen sich die
 Reihe unter der Suche gleich breit. Lokale Listen lassen sich anlegen, nach

@@ -299,6 +299,12 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
             .where((entry) => entry['kind'] == 'recipe')
             .length,
       },
+      ['api', 'calendar', 'cooking-days'] => {
+        'days': objects(_calendar(_today)['days'])
+            .map((day) => text(day['date']))
+            .where((day) => day.compareTo(_today) >= 0)
+            .toList(),
+      },
       ['api', 'recipes'] => _browse(uri),
       ['api', 'recipes', final id] when _recipes.containsKey(id) => _detail(id),
       ['api', 'notes', final id] => {'text': _notes[id] ?? ''},
@@ -364,10 +370,12 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
         } else {
           _lists[id]?.remove(recipe);
         }
-      case ('POST', ['api', 'recipes', final id, 'plan-today']):
-        final today = _today;
-        (_week(_monday(today))[today] ??= {}).add(id);
-        return {'verified': true};
+      case ('POST', ['api', 'recipes', final id, 'plan-week']):
+        final days = (data['days'] as List).cast<String>();
+        for (final day in days) {
+          (_week(_monday(day))[day] ??= {}).add(id);
+        }
+        return {'confirmed': days, 'unconfirmed': <String>[]};
       case ('POST', ['api', 'calendar', 'placement']):
         return _placeRecipe(data);
       case ('POST', ['api', 'calendar', 'undo-removal']):

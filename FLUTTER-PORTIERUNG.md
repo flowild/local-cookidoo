@@ -43,7 +43,7 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 - Bereits sichtbare Listen, Vorratskategorien und Wocheninhalte behalten beim Nachladen nach einem Seitenwechsel ihre Position.
 - Beim Überqueren der Seitenmitte aktualisiert sich die Navigation. Der Zielbereich wird erst nach dem Einrasten aktiv. Test-APKs verwenden den Flutter-Profilmodus mit vorab kompiliertem Dart-Code.
 - Nach dem Lesen eines Rezepts bleiben Trefferseiten und Woche erhalten. Die Detailansicht öffnet während laufender Wochenabfragen. Notiz, Tipps und lokale Listen werden abschnittsweise freigegeben. Der Telegram-Einkaufswagen baut die Zutatenzeilen beim Scrollen auf.
-- In den Rezeptdetails zeigen kontrastreiche Punkte den Vorratsstatus. „Zur Ablage hinzufügen“ steht über „Heute kochen“ und verwendet die aktuelle Berliner Kalenderwoche. Aktionspillen zentrieren Symbol und Beschriftung gemeinsam.
+- In den Rezeptdetails zeigen kontrastreiche Punkte den Vorratsstatus. „Zur Ablage hinzufügen“ steht über „Diese Woche kochen“ und verwendet die aktuelle Berliner Kalenderwoche. Aktionspillen zentrieren Symbol und Beschriftung gemeinsam.
 - Abgelegte Platzhalter verwenden das kompakte Rezeptkartenlayout mit ihrem Symbol als Bild. Unter der Ablage verwenden Platzhalter und lokale Listen gemeinsame Gruppenüberschriften und Abstände. Rezeptpillen in geöffneten Wochenlisten zeigen ein Vorschaubild und ein Plus, nach dem Hinzufügen ein Häkchen. In der Listenbearbeitung schaltet der Papierkorb rechts neben „In dieser Liste“ den Entfernmodus ein.
 - In „Meine Woche“ sitzt das Einkaufssymbol neben den Datumsschaltern. Nach 250 ms Halten ist eine Kachel ausgewählt. Aufwärts sind 140 dp, abwärts 90 dp erforderlich. Die Wochenablage zeigt kleine Rezeptkarten mit Bild über dem Titel in einer seitlich scrollbaren Reihe. Ein Wisch nach unten entfernt den Eintrag.
 - Der Debug-Modus verwendet drei unterschiedliche mitgelieferte Rezeptbilder.
@@ -192,7 +192,7 @@ Rezepte lassen sich auch über ihre Detailansicht hinzufügen. Dort zeigt die AP
 Rezeptversionen, Listenzuordnungen, Zutaten mit Vorratsstatus, Zubereitung und
 Tipps. Persönliche Notizen werden beim Abschluss der Eingabe oder beim
 Verlassen gespeichert. Bei einem Cookidoo-Konflikt bleibt der Entwurf im Feld.
-„Heute kochen“ meldet, ob Cookidoo die Planung verifizieren konnte. Die
+„Diese Woche kochen“ meldet, ob Cookidoo die Planung verifizieren konnte. Die
 Rezeptbibliothek unterstützt paginierte Titel- und Zutatensuche,
 Mehrfach-Zutatenfilter, Portionen, Gesamtzeit, Sortierung und ausgegraute
 Listeneinträge außerhalb der Filter. Lokale Listen lassen sich anlegen, löschen

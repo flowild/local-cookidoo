@@ -80,6 +80,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 - Nicht zugeordnete Katalogrezepte aus angesehenen Wochen werden nach Prüfung in einer eigenen Cookidoo-Liste gesammelt; eigene Kreationen bleiben in „Meine Kreationen“.
 
 - Rezeptdetails zeigen Listen-Pillen über dem Titel und vorhandene Cookidoo-Notizen direkt an; das Notizfeld ist direkt bearbeitbar und erlaubt auch das Hinzufügen neuer Notizen. Zutaten sind standardmäßig aufgeklappt, die Zubereitung eingeklappt; beide Bereiche sind unabhängig bedienbar. Verfügbarkeitsfarben bleiben an den Zutaten erkennbar.
+- „Diese Woche kochen“ öffnet in den Rezeptdetails einen Dialog mit Mehrfachauswahl von heute bis Sonntag. Die Tage kommen vom Server und verwenden die Berliner Zeitzone.
 
 - Bildkacheln verwenden lokal erzeugte WebP-Vorschauen bis 480 Pixel, die Detailansicht das Bild bis 960 Pixel. Erfolgreiche Bildantworten sind einen Tag privat im Browser cachebar; andere persönliche API-Antworten und der Service-Worker-Cache bleiben davon ausgeschlossen.
 
