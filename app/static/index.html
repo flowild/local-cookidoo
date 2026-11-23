@@ -8,9 +8,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Rezeptgarten · Deine Rezeptsammlung</title>
-  <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="icon" href="/static/brand.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="manifest" href="/static/manifest.webmanifest?v=2">
+  <link rel="icon" href="/static/icon-192.png?v=2" type="image/png">
+  <link rel="apple-touch-icon" href="/static/icon-192.png?v=2">
   <script src="/static/theme.js?v=31"></script>
   <link rel="stylesheet" href="/static/style.css?v=133">
   <script src="/static/app.js?v=141" defer></script>
@@ -47,7 +47,7 @@
 <div id="offline-banner" class="offline-banner" hidden>Du bist offline. Zum Laden deiner Sammlung brauchst du eine Verbindung zu deinem Server.</div>
 <div class="app-shell">
   <aside class="sidebar" aria-label="Hauptnavigation">
-    <a class="brand" href="#uebersicht"><img src="/static/brand.svg" width="40" height="40" alt=""><span>rezeptgarten<span class="brand-caption">Dein persönliches Rezeptregal</span></span></a>
+    <a class="brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="40" height="40" alt=""><span>rezeptgarten<span class="brand-caption">Dein persönliches Rezeptregal</span></span></a>
     <div class="nav-label">DEINE SAMMLUNG</div>
     <nav class="desktop-nav">
       <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg>Übersicht</a>
@@ -66,7 +66,7 @@
   </aside>
   <div class="workspace">
     <header class="topbar">
-      <a class="mobile-brand" href="#uebersicht"><img src="/static/brand.svg" width="32" height="32" alt="">rezeptgarten</a>
+      <a class="mobile-brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="32" height="32" alt="">rezeptgarten</a>
       <label class="search-box"><svg><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"><kbd>Suche</kbd></label>
       <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="mobile-settings" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a><button id="sync-button" class="button button-primary" aria-label="Synchronisieren"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
     </header>

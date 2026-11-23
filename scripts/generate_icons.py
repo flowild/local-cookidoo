@@ -1,18 +1,23 @@
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageOps
 
-directory = Path(__file__).resolve().parents[1] / 'app/static'
-for size, maskable in ((192, False), (512, False), (512, True)):
-    scale = 4
-    canvas = Image.new('RGB', (size * scale, size * scale), '#234d3c')
-    draw = ImageDraw.Draw(canvas)
-    def points(values):
-        factor = size * scale / 64
-        return tuple(round(value * factor) for value in values)
-    # Original code-native bowl/leaf identity, with generous maskable safe area.
-    draw.pieslice(points((15, 19, 49, 52)), 0, 180, fill='#f7f3e8')
-    draw.ellipse(points((28, 13, 46, 29)), fill='#b4cb82')
-    draw.line(points((28, 31, 41, 18)), fill='#234d3c', width=max(2, round(size * scale / 28)))
-    draw.line(points((24, 53, 40, 53)), fill='#f7f3e8', width=max(2, round(size * scale / 24)))
-    canvas.resize((size, size), Image.Resampling.LANCZOS).save(directory / (f'icon-maskable-{size}.png' if maskable else f'icon-{size}.png'))
+root = Path(__file__).resolve().parents[1]
+static = root / 'app/static'
+with Image.open(static / 'icon-512.png') as source:
+    icon = source.convert('RGB')
+
+icon.resize((192, 192), Image.Resampling.LANCZOS).save(static / 'icon-192.png', optimize=True)
+maskable = icon.resize((472, 472), Image.Resampling.LANCZOS)
+ImageOps.expand(maskable, border=20, fill=icon.getpixel((0, 0))).save(
+    static / 'icon-maskable-512.png', optimize=True,
+)
+
+android = root / 'android-app'
+if android.is_dir():
+    icon.resize((192, 192), Image.Resampling.LANCZOS).save(android / 'assets/icon.png', optimize=True)
+    resources = android / 'android/app/src/main/res'
+    for density, size in (('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)):
+        icon.resize((size, size), Image.Resampling.LANCZOS).save(
+            resources / f'mipmap-{density}/ic_launcher.png', optimize=True,
+        )

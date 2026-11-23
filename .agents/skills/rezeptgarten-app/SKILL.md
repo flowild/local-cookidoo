@@ -68,6 +68,8 @@ Die separate Warteschlange für Wochenänderungen bleibt aktiv.
 - Bei Änderungen versionierter statischer Dateien URLs in `index.html` und `sw.js`
   und die Service-Worker-Cacheversion zusammen aktualisieren. Nur die öffentliche
   App-Hülle darf in den Service-Worker-Cache; keine persönlichen API-Antworten.
+  Das gemeinsame Icon für Android und PWA ist `app/static/icon-512.png`.
+  `scripts/generate_icons.py` erzeugt die PNG-Größen sowie das maskierbare Icon.
 
 Backendtests: `python -m unittest discover -s tests -v`; produktive Daten nicht mit
 Fixtures befüllen. Für Server- und Browserprüfungen den Skill `rezeptgarten-betrieb`

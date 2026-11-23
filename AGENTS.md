@@ -107,6 +107,9 @@ Die native Flutter-App entsteht unter `android-app/`. Die
 [Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
+Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptgarten“. Android und
+PWA verwenden dieselbe Schale mit Keimling aus `app/static/icon-512.png`.
+`scripts/generate_icons.py` erzeugt daraus die weiteren Größen. Das
 Veröffentlichungsskript lädt jeden neuen Test- oder Release-Build standardmäßig
 auf LXC 103 hoch und prüft den HTTPS-Download und das Update-Manifest des Kanals.
 Bei einem Uploadfehler die vorhandene APK mit derselben Buildnummer erneut
