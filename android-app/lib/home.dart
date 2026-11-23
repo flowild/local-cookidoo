@@ -1081,6 +1081,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     return switch (index) {
       1 => RecipeCollections(
         api: api,
+        active: area == 1,
         openRecipe: _recipe,
         onSync: _syncFromPull,
         onChanged: () => _dirtyAreas.addAll([0, 2, 3]),

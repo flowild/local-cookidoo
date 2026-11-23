@@ -24,10 +24,25 @@ class MainActivity : FlutterActivity() {
                 else result.notImplemented()
             }
         val preferences = getPreferences(MODE_PRIVATE)
+        val collectionPreferences = getSharedPreferences("collection_order", MODE_PRIVATE)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.rezeptgarten/preferences")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "weekDay" -> result.success(preferences.getInt("weekDay", 0))
+                    "collectionOrder" -> {
+                        val key = if (call.arguments == true) "debugCollectionOrder" else "collectionOrder"
+                        result.success(collectionPreferences.getString(key, null))
+                    }
+                    "setCollectionOrder" -> {
+                        val key = if (call.argument<Boolean>("debug") == true) "debugCollectionOrder" else "collectionOrder"
+                        val order = call.argument<String>("order")
+                        if (order == null) {
+                            result.error("invalid_order", "Die Listenreihenfolge ist ungültig.", null)
+                        } else {
+                            collectionPreferences.edit().putString(key, order).apply()
+                            result.success(null)
+                        }
+                    }
                     "debugMode" -> result.success(preferences.getBoolean("debugMode", false))
                     "setDebugMode" -> {
                         val enabled = call.arguments as? Boolean

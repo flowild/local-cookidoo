@@ -63,8 +63,11 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
 - Beim Bestätigen von Einkaufs-Häkchen die Höhe vor den vorhandenen Einträgen
   konstant halten und Warenbereiche aus der Serverantwort verwenden.
 - Listentitel sind aufklappbar und durchsuchbar. Kräftige Schrift und ein eigener
-  Hintergrund unterscheiden sie von den zweispaltigen Rezeptkarten. Lokale
-  Listen werden über das Bearbeiten-Symbol verwaltet. Sortierung und Filter sind in
+  Hintergrund unterscheiden sie von den zweispaltigen Rezeptkarten.
+  Langes Drücken auf einen Titel startet das Verschieben. Die Titel wackeln
+  bei aktiven Animationen und zeigen einen Griff. Android speichert die
+  Reihenfolge nach Listen-ID in den Geräteeinstellungen.
+  Lokale Listen werden über das Bearbeiten-Symbol verwaltet. Sortierung und Filter sind in
   der globalen Rezeptansicht zusammen mit der Suche erreichbar.
 - Rahmen umfassen Bild, Titel und Schwierigkeit aller Rezeptvorschauen.
   Übersicht, Bibliothek und Listen teilen sich das adaptive Raster. Rezeptlisten

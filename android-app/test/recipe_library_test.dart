@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
@@ -326,6 +327,69 @@ void main() {
     expect(find.text('Abendessen'), findsNothing);
   });
 
+  testWidgets('long press reorders lists and restores the device order', (
+    tester,
+  ) async {
+    const preferences = MethodChannel('de.rezeptgarten/preferences');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    String? saved;
+    messenger.setMockMethodCallHandler(preferences, (call) async {
+      if (call.method == 'collectionOrder') return saved;
+      expect(call.method, 'setCollectionOrder');
+      saved = (call.arguments as Map)['order'] as String;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(preferences, null));
+    final api = _LibraryApi()
+      ..name = 'Abendessen'
+      ..moreLists = true;
+
+    Future<void> openLists() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RecipeCollections(api: api, openRecipe: (_) async {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await openLists();
+    final dinner = find.text('Abendessen');
+    final breakfast = find.text('Frühstück');
+    final start = tester.getCenter(dinner);
+    final end = tester.getCenter(breakfast);
+    expect(start.dy, lessThan(end.dy));
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 650));
+    expect(find.byTooltip('Reihenfolge fertig'), findsOneWidget);
+    for (var step = 1; step <= 5; step++) {
+      await gesture.moveTo(
+        Offset.lerp(start, end + const Offset(0, 70), step / 5)!,
+      );
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byTooltip('Reihenfolge fertig'));
+    await tester.pumpAndSettle();
+    expect(saved, '["cookidoo:breakfast","local:meals"]');
+    expect(
+      tester.getCenter(breakfast).dy,
+      lessThan(tester.getCenter(dinner).dy),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await openLists();
+    expect(
+      tester.getCenter(breakfast).dy,
+      lessThan(tester.getCenter(dinner).dy),
+    );
+  });
+
   testWidgets('opened lists show two recipe cards per row below their title', (
     tester,
   ) async {
@@ -366,6 +430,7 @@ class _LibraryApi extends RezeptgartenApi {
   Map<String, List<String>> lastRecipeQuery = {};
   String? name;
   bool present = false;
+  bool moreLists = false;
   Future<void>? searchPending;
 
   @override
@@ -405,6 +470,8 @@ class _LibraryApi extends RezeptgartenApi {
                 'kind': 'local',
                 'recipe_count': present ? 1 : 0,
               },
+            if (moreLists)
+              {'id': 'cookidoo:breakfast', 'name': 'Frühstück', 'kind': 'list'},
           ],
         };
       case '/api/collections/local:meals/filter-options':

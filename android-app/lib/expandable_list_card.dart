@@ -10,6 +10,7 @@ class ExpandableListCard extends StatelessWidget {
     this.subtitle,
     this.initiallyExpanded = false,
     this.onExpansionChanged,
+    this.wrapTitle,
     required this.body,
   });
 
@@ -20,19 +21,21 @@ class ExpandableListCard extends StatelessWidget {
   final Widget? subtitle;
   final bool initiallyExpanded;
   final ValueChanged<bool>? onExpansionChanged;
+  final Widget Function(Widget)? wrapTitle;
   final Widget body;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final label = Text(
+    final text = Text(
       title,
       style: theme.textTheme.titleMedium?.copyWith(
         fontWeight: FontWeight.w700,
         color: colors.onSecondaryContainer,
       ),
     );
+    final label = wrapTitle?.call(text) ?? text;
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
@@ -410,8 +412,7 @@ class _RecipeBrowserState extends State<RecipeBrowser>
           spacing: AppSpacing.related,
           runSpacing: AppSpacing.tight,
           children: [
-            for (final ingredient in _filters.ingredients)
-              InfoPill(ingredient),
+            for (final ingredient in _filters.ingredients) InfoPill(ingredient),
             if (_filters.servings case final int servings)
               InfoPill('Ab $servings Portionen'),
             if (_filters.minutes case final int minutes)
@@ -898,6 +899,7 @@ class RecipeCollections extends StatefulWidget {
     super.key,
     required this.api,
     required this.openRecipe,
+    this.active = true,
     this.refreshCount = 0,
     this.onSync,
     this.onChanged,
@@ -906,6 +908,7 @@ class RecipeCollections extends StatefulWidget {
   });
   final RezeptgartenApi api;
   final OpenRecipe openRecipe;
+  final bool active;
   final int refreshCount;
   final Future<void> Function()? onSync;
   final VoidCallback? onChanged;
@@ -916,11 +919,100 @@ class RecipeCollections extends StatefulWidget {
   State<RecipeCollections> createState() => _RecipeCollectionsState();
 }
 
-class _RecipeCollectionsState extends State<RecipeCollections> {
+class _RecipeCollectionsState extends State<RecipeCollections>
+    with SingleTickerProviderStateMixin {
+  static const _preferences = MethodChannel('de.rezeptgarten/preferences');
   late Future<dynamic> _lists = widget.api.get('/api/collections');
   final _searchField = TextEditingController();
+  late final _wiggle = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 390),
+  );
+  List<String> _listOrder = [];
+  bool _orderLoaded = false;
+  bool _sorting = false;
   bool _creating = false;
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreOrder());
+  }
+
+  Future<void> _restoreOrder() async {
+    try {
+      final saved = await _preferences.invokeMethod<String>(
+        'collectionOrder',
+        widget.api.usesTestData,
+      );
+      if (saved != null) {
+        final order = jsonDecode(saved);
+        if (order is List) _listOrder = order.whereType<String>().toList();
+      }
+    } on Exception {
+      // The server's original order is the default.
+    }
+    if (mounted) setState(() => _orderLoaded = true);
+  }
+
+  void _setSorting(bool sorting) {
+    if (_sorting == sorting) return;
+    if (sorting) FocusScope.of(context).unfocus();
+    setState(() => _sorting = sorting);
+    _updateWiggle();
+  }
+
+  void _updateWiggle() {
+    if (_sorting && !MediaQuery.disableAnimationsOf(context)) {
+      if (!_wiggle.isAnimating) _wiggle.repeat();
+    } else if (_wiggle.isAnimating) {
+      _wiggle.reset();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateWiggle();
+  }
+
+  Future<void> _reorder(
+    List<Json> all,
+    List<Json> visible,
+    int from,
+    int to,
+  ) async {
+    if (from == to) return;
+    final reordered = List<Json>.of(visible);
+    reordered.insert(to, reordered.removeAt(from));
+    final visibleIds = visible.map((list) => list['id']).toSet();
+    final remaining = reordered.iterator;
+    setState(() {
+      _listOrder = [
+        for (final list in all)
+          if (visibleIds.contains(list['id']))
+            (remaining..moveNext()).current['id'] as String
+          else
+            list['id'] as String,
+      ];
+    });
+    try {
+      await _preferences.invokeMethod<void>('setCollectionOrder', {
+        'order': jsonEncode(_listOrder),
+        'debug': widget.api.usesTestData,
+      });
+    } on Exception {
+      if (mounted) {
+        _showError(
+          context,
+          const ApiException(
+            'Die Listenreihenfolge konnte nicht gespeichert werden.',
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _reload() async {
     final lists = widget.api.get('/api/collections');
@@ -937,11 +1029,13 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
   @override
   void didUpdateWidget(RecipeCollections oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.active) _setSorting(false);
     if (oldWidget.refreshCount != widget.refreshCount) unawaited(_reload());
   }
 
   @override
   void dispose() {
+    _wiggle.dispose();
     _searchField.dispose();
     super.dispose();
   }
@@ -997,24 +1091,52 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
     future: _lists,
     builder: (context, snapshot) {
       final result = snapshot.data;
-      final lists = objects(result is Json ? result['items'] : null)
-          .where((list) => text(list['name']).toLowerCase().contains(_query));
+      final byId = {
+        for (final list in objects(result is Json ? result['items'] : null))
+          list['id']: list,
+      };
+      final ordered = [
+        for (final id in _listOrder) ?byId.remove(id),
+        ...byId.values,
+      ];
+      final lists = ordered
+          .where((list) => text(list['name']).toLowerCase().contains(_query))
+          .toList();
       return RefreshIndicator(
         onRefresh: () async {
           await widget.onSync?.call();
           if (mounted) await _reload();
         },
-        child: ListView(
+        child: ReorderableListView.builder(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: AppSpacing.page,
-          children: [
-            Column(
+          buildDefaultDragHandles: false,
+          onReorderStart: (_) => _setSorting(true),
+          onReorderItem: (from, to) => _reorder(ordered, lists, from, to),
+          itemCount: lists.length,
+          header: Padding(
+            padding: EdgeInsets.only(
+              bottom: lists.isEmpty ? 0 : AppSpacing.section,
+            ),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: AppSpacing.section,
               children: [
-                Text(
-                  'Deine Rezeptlisten',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Deine Rezeptlisten',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                    if (_sorting)
+                      IconButton(
+                        tooltip: 'Reihenfolge fertig',
+                        onPressed: () => _setSorting(false),
+                        icon: const Icon(Icons.check),
+                      ),
+                  ],
                 ),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -1057,24 +1179,36 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
                     onPressed: _reload,
                     child: const Text('Erneut laden'),
                   ),
-                ] else if (snapshot.hasData) ...[
-                  if (lists.isEmpty)
-                    const Text('Keine passenden Listen gefunden.'),
-                  for (final list in lists)
-                    _CollectionPreview(
-                      key: ValueKey(list['id']),
-                      api: widget.api,
-                      list: list,
-                      refreshCount: widget.refreshCount,
-                      onManage: list['kind'] == 'local'
-                          ? () => _open(list)
-                          : null,
-                      onRecipe: widget.openRecipe,
-                    ),
-                ],
+                ] else if (snapshot.hasData && lists.isEmpty)
+                  const Text('Keine passenden Listen gefunden.'),
               ],
             ),
-          ],
+          ),
+          itemBuilder: (context, index) {
+            final list = lists[index];
+            return Padding(
+              key: ValueKey(list['id']),
+              padding: const EdgeInsets.only(bottom: AppSpacing.section),
+              child: AnimatedBuilder(
+                animation: _wiggle,
+                child: _CollectionPreview(
+                  api: widget.api,
+                  list: list,
+                  refreshCount: widget.refreshCount,
+                  dragIndex: _orderLoaded && lists.length > 1 ? index : null,
+                  sorting: _sorting,
+                  onManage: list['kind'] == 'local' ? () => _open(list) : null,
+                  onRecipe: widget.openRecipe,
+                ),
+                builder: (context, child) => Transform.rotate(
+                  angle:
+                      math.sin(_wiggle.value * 2 * math.pi) *
+                      (index.isEven ? 0.008 : -0.008),
+                  child: child,
+                ),
+              ),
+            );
+          },
         ),
       );
     },
@@ -1083,12 +1217,13 @@ class _RecipeCollectionsState extends State<RecipeCollections> {
 
 class _CollectionPreview extends StatefulWidget {
   const _CollectionPreview({
-    super.key,
     required this.api,
     required this.list,
     required this.refreshCount,
     required this.onManage,
     required this.onRecipe,
+    this.dragIndex,
+    this.sorting = false,
   });
 
   final RezeptgartenApi api;
@@ -1096,12 +1231,22 @@ class _CollectionPreview extends StatefulWidget {
   final int refreshCount;
   final VoidCallback? onManage;
   final OpenRecipe onRecipe;
+  final int? dragIndex;
+  final bool sorting;
 
   @override
   State<_CollectionPreview> createState() => _CollectionPreviewState();
 }
 
 class _CollectionPreviewState extends State<_CollectionPreview> {
+  Widget _dragTitle(Widget label) {
+    final index = widget.dragIndex;
+    if (index == null) return label;
+    return widget.sorting
+        ? ReorderableDragStartListener(index: index, child: label)
+        : ReorderableDelayedDragStartListener(index: index, child: label);
+  }
+
   final _items = <Json>[];
   int _request = 0;
   int? _total;
@@ -1152,7 +1297,10 @@ class _CollectionPreviewState extends State<_CollectionPreview> {
   @override
   Widget build(BuildContext context) => ExpandableListCard(
     title: text(widget.list['name']),
-    leading: const Icon(Icons.list_alt),
+    leading: _dragTitle(
+      Icon(widget.sorting ? Icons.drag_handle : Icons.list_alt),
+    ),
+    wrapTitle: _dragTitle,
     action: widget.onManage == null
         ? null
         : IconButton(

@@ -44,8 +44,12 @@ Android markiert Wochenrezepte und abgelegte Platzhalter nach 250 ms. Ein
 Wisch nach oben braucht 140 dp, nach unten 90 dp. Die Wochenablage zeigt kompakte
 Kacheln nebeneinander, sobald die Breite ausreicht. Das Wochen-Einkaufssymbol
 steht rechts neben den Datumsschaltern.
-Android-Rezeptlisten sind unter ihren Titeln aufklappbar und haben eine
-Titelsuche unter „Neue Liste“. Die Titel sind fett gesetzt und farblich vom
+Android-Rezeptlisten sind unter ihren Titeln aufklappbar. Langes Drücken auf
+einen Listentitel startet das
+Verschieben und lässt die Listen wackeln. Ein Häkchen beendet den Modus.
+Bei reduzierter Bewegung kennzeichnen Griffe die verschiebbaren Listentitel.
+Die Reihenfolge wird auf dem Gerät gespeichert. Die Titelsuche steht unter
+„Neue Liste“. Die Titel sind fett gesetzt und farblich vom
 zweispaltigen Raster mit Rezeptbildern abgesetzt. Lokale Listen haben ein
 Bearbeiten-Symbol. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
 Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
