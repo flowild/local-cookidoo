@@ -483,6 +483,117 @@ class TelegramService extends ChangeNotifier {
     }
   }
 
+  Future<Json> apiRequest(
+    String method,
+    String path,
+    Json? body, {
+    String? revision,
+  }) async {
+    final key = _cartKey;
+    if (!paired || step != TelegramStep.ready || key == null) {
+      throw const ApiException('Telegram ist nicht gekoppelt.');
+    }
+    final nonce = newCalendarMoveId();
+    final cipher = AesGcm.with256bits();
+    final secret = SecretKey(base64Decode(key));
+    final message = utf8.encode(
+      jsonEncode({
+        'method': method,
+        'path': path,
+        'body': body,
+        'revision': ?revision,
+        'sent': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      }),
+    );
+    if (message.length > 64 * 1024) {
+      throw const ApiException('Die Telegram-Anfrage ist zu groß.');
+    }
+    final sealed = await cipher.encrypt(
+      zlib.encode(message),
+      secretKey: secret,
+      aad: utf8.encode('request:$nonce'),
+    );
+    if (_cartKey != key || _disposed) {
+      throw const ApiException('Die Telegram-Kopplung hat sich geändert.');
+    }
+    final encoded = base64Encode(sealed.concatenation());
+    final pending = TelegramSnapshotParts('api', nonce);
+    _snapshots[nonce] = pending;
+    final total = (encoded.length + 2999) ~/ 3000;
+    Future<void> send() async {
+      for (var index = 0; index < total; index++) {
+        if (_cartKey != key || _disposed || !_snapshots.containsKey(nonce)) {
+          throw const ApiException('Die Telegram-Anfrage wurde beendet.');
+        }
+        final offset = index * 3000;
+        await _send(
+          'rezeptgarten-api $nonce ${index + 1}/$total ${encoded.substring(offset, min(offset + 3000, encoded.length))}',
+        );
+      }
+    }
+
+    try {
+      final result = await Future.wait<Object?>([
+        send(),
+        pending.result.future.timeout(const Duration(seconds: 125)),
+      ], eagerError: true);
+      final packed = base64Decode(result[1] as String);
+      if (packed.length < 28 || packed.length > 1000028 || _cartKey != key) {
+        throw const FormatException('Ungültige Telegram-Antwort.');
+      }
+      final compressed = await cipher.decrypt(
+        SecretBox.fromConcatenation(packed, nonceLength: 12, macLength: 16),
+        secretKey: secret,
+        aad: utf8.encode('response:$nonce'),
+      );
+      return jsonDecode(utf8.decode(zlib.decode(compressed))) as Json;
+    } on Exception {
+      throw ApiException(
+        method == 'GET'
+            ? 'Rezeptgarten hat über Telegram keine bestätigte Antwort gesendet.'
+            : 'Die Änderung konnte über Telegram nicht bestätigt werden. Bitte lade den aktuellen Stand.',
+      );
+    } finally {
+      _snapshots.remove(nonce);
+    }
+  }
+
+  Future<void> _downloadApiResponse(
+    TelegramSnapshotParts pending,
+    int fileId,
+  ) async {
+    try {
+      final file = await request({
+        '@type': 'downloadFile',
+        'file_id': fileId,
+        'priority': 24,
+        'offset': 0,
+        'limit': 1333373,
+        'synchronous': true,
+      });
+      final local = file['local'];
+      if (local is! Json || local['is_downloading_completed'] != true) {
+        throw const FormatException('Unvollständige Telegram-Antwort.');
+      }
+      final saved = File(local['path'] as String);
+      if (await saved.length() > 1333372) {
+        throw const FormatException('Die Telegram-Antwort ist zu groß.');
+      }
+      final encoded = await saved.readAsString();
+      if (!pending.result.isCompleted) pending.result.complete(encoded);
+    } on Exception catch (error) {
+      if (!pending.result.isCompleted) pending.result.completeError(error);
+    } finally {
+      if (!_disposed) {
+        try {
+          await request({'@type': 'deleteFile', 'file_id': fileId});
+        } on Exception {
+          // Only the encrypted response remains in the private TDLib cache.
+        }
+      }
+    }
+  }
+
   void _receiveMessage(Object? raw) {
     if (raw is! Map ||
         raw['chat_id'] != _botChat ||
@@ -494,10 +605,31 @@ class TelegramService extends ChangeNotifier {
     if (sender is! Map ||
         sender['@type'] != 'messageSenderUser' ||
         sender['user_id'] != _botId ||
-        content is! Map ||
-        content['@type'] != 'messageText') {
+        content is! Map) {
       return;
     }
+    if (content['@type'] == 'messageDocument') {
+      final caption = content['caption'];
+      final document = content['document'];
+      final file = document is Map ? document['document'] : null;
+      final label = caption is Map ? caption['text'] : null;
+      final match = label is String
+          ? RegExp(r'^rezeptgarten-api-document ([a-f0-9]{32})$')
+                .firstMatch(label)
+          : null;
+      final pending = match == null ? null : _snapshots[match[1]];
+      if (pending?.kind == 'api' &&
+          !pending!.result.isCompleted &&
+          file is Map &&
+          file['id'] is int &&
+          file['size'] is int &&
+          (file['size'] as int) > 0 &&
+          (file['size'] as int) <= 1333372) {
+        unawaited(_downloadApiResponse(pending, file['id'] as int));
+      }
+      return;
+    }
+    if (content['@type'] != 'messageText') return;
     final formatted = content['text'];
     final message = formatted is Map ? formatted['text'] : null;
     if (message is! String) return;
@@ -515,7 +647,7 @@ class TelegramService extends ChangeNotifier {
       return;
     }
     final match = RegExp(
-      r'^rezeptgarten-(cart|week)-(part|error) ([a-f0-9]{32})(?: (\d+)/(\d+) ([A-Za-z0-9+/=]+))?$',
+      r'^rezeptgarten-(cart|week|api)-(part|error) ([a-f0-9]{32})(?: (\d+)/(\d+) ([A-Za-z0-9+/=]+))?$',
     ).firstMatch(message);
     if (match == null) return;
     final pending = _snapshots[match[3]];
@@ -548,7 +680,7 @@ class TelegramSnapshotParts {
 
   void accept(String message) {
     final match = RegExp(
-      r'^rezeptgarten-(cart|week)-(part|error) ([a-f0-9]{32})(?: (\d+)/(\d+) ([A-Za-z0-9+/=]+))?$',
+      r'^rezeptgarten-(cart|week|api)-(part|error) ([a-f0-9]{32})(?: (\d+)/(\d+) ([A-Za-z0-9+/=]+))?$',
     ).firstMatch(message);
     if (match == null ||
         match[3] != nonce ||

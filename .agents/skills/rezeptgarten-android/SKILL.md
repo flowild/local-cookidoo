@@ -29,20 +29,25 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
   Die Wochenansichten zeigen die ISO-Kalenderwoche an der Navigation. Die
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
-  „Heute“ zeigt den heutigen Tag der aktuellen Woche. Im Heimnetz wird der
-  Tag im Kalender ausgewählt, im Telegram-Modus scrollt die Liste zu ihm.
+  „Heute“ wählt in beiden Modi den heutigen Tag der aktuellen Woche im
+  Kalender aus.
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit
   auf den sichtbaren Tab begrenzen. Beim erneuten Laden sichtbarer Listen,
   Vorratskategorien oder Wocheninhalte ihre Position beibehalten. Bei Änderungen der Kontoverbindung und
-  beim Verlassen des Heimnetzmodus private Ansichtsdaten und Bildcache leeren.
+  bei einem Wechsel des Verbindungsmodus private Ansichtsdaten und den
+  Bildcache im Arbeitsspeicher leeren.
   Identische Android-Netzmeldungen im bestätigten Heimnetz überspringen.
   Bei der Rückkehr zur App die Verbindung im Hintergrund prüfen und den
   Sammlungsabgleich einmal anstoßen. Die lokale Ansicht bleibt dabei bedienbar.
 - Bilder getrennt nach Vorschau und Original laden. Gleichzeitige Bildabrufe
   bündeln, die Cachefreigabe des Servers beachten und den Speicher begrenzen.
-  Die Dekodierungsgröße an die physische Anzeigebreite anpassen.
+  Die Dekodierungsgröße an die physische Anzeigebreite anpassen. Freigegebene
+  Bilder kontobezogen im privaten Verzeichnis ohne Backups speichern.
+  Vorschaubilder der Sammlung beim Öffnen im Heimnetz und nach dem
+  Sammlungsabgleich im Hintergrund laden. Unterwegs vorhandene Dateien
+  verwenden. Fehlende Dateien behalten bis zum Heimnetzabruf den Platzhalter.
 - Prüfe beim Öffnen und Schließen eines Rezepts die Anzahl der Abrufe. Reines Lesen
   erhält Woche, Trefferseiten und Scrollposition. Langsame Wochenmedien und
   Notizsymbole dürfen die Navigation nicht aufhalten. Eine geladene Notiz bleibt
@@ -129,7 +134,7 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Sammlungsabgleich; Herunterziehen einer Ansicht startet ihn ebenfalls
   und lädt nach Abschluss die Ansicht neu. Der Fortschrittsindikator in der
   Kopfzeile ist während des Abgleichs sichtbar. Im Telegram-Modus lädt die
-  Geste nur die verschlüsselte Momentaufnahme neu. Es gibt keinen
+  Geste denselben Abgleich aus. Es gibt keinen
   zeitgesteuerten Sammlungsabgleich und keine Intervall-Einstellung.
 - Android-Systemdienste erst nach dem Anhängen der Activity initialisieren.
   Den App-Start bei Änderungen am nativen Einstieg zusätzlich auf einer
@@ -142,14 +147,15 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   über die gebündelte CA. Fordere beim Wechsel von ungefährer zu genauer
   Standortfreigabe beide Standortberechtigungen gemeinsam erneut an.
   Außerhalb des Heimnetzes sowie bei nicht erreichbarem
-  Server stehen Woche und Einkaufswagen nach Telegram-Benutzeranmeldung und
-  bestätigter Kopplung lesend bereit.
+  Server stehen nach Telegram-Benutzeranmeldung und bestätigter Kopplung
+  dieselben sechs Hauptansichten und Bearbeitungsfunktionen bereit.
+  Konto- und Kopplungsverwaltung sowie APK-Updates bleiben im Heimnetz.
   Die Einstellungen zeigen „WLAN-Erkennung einrichten“ bei fehlender genauer
   Berechtigung. Telegram braucht Anmeldung und Kopplung. Sobald beides vorliegt,
   öffnet die Statuszeile die Verwaltung.
-  Der Einkaufswagen speichert Häkchen
-  geräte- und kopplungsbezogen. Gespeicherte Häkchen vor Änderungen laden und
-  erneutes Laden bei Speicherfehlern anbieten. Wochenwechsel mit Kalenderdaten
+  Beide Modi verwenden die serverseitigen Einkaufs-Häkchen. Häkchen aus dem
+  früheren Telegram-Modus bleiben in dessen Gerätespeicher.
+  Wochenwechsel mit Kalenderdaten
   berechnen und über die Berliner Zeitumstellung hinweg prüfen. TDLib verwendet
   die eingegebene eigene Telegram-API-ID und den API-Hash. Der Android-Keystore schützt Zugangsdaten und
   Geräteschlüssel, die TDLib-Sitzung liegt im Backup-ausgeschlossenen Bereich.

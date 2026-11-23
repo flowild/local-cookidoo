@@ -9,7 +9,9 @@ import re
 import base64
 import secrets
 import time
+import zlib
 import httpx
+from cryptography.exceptions import InvalidTag
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
@@ -30,6 +32,7 @@ from .version import APP_VERSION
 from .telegram_cart import encrypt_payload
 from .telegram_week import snapshot as telegram_week_snapshot
 from .telegram_pairs import select_pair
+from .telegram_api import encrypt_response, open_request, route_allowed
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -143,6 +146,7 @@ def create_app(directory=None, secure_cookies=None):
     telegram_vault = Vault(database.directory, 'telegram-server-bot.enc')
     telegram_lock = Lock()
     telegram_pending = {}
+    telegram_account_lock = asyncio.Lock()
     service = SyncService(database, vault)
     @asynccontextmanager
     async def lifespan(app):
@@ -171,12 +175,22 @@ def create_app(directory=None, secure_cookies=None):
                 return JSONResponse({'detail': 'Die Anfrage muss aus dieser App stammen.'}, status_code=403)
             content_length = request.headers.get('content-length', '0')
             try:
-                max_length = 48000 if request.method == 'PUT' and request.url.path.startswith('/api/notes/') else 16384
+                if request.url.path == '/api/telegram-api':
+                    max_length = 92000
+                else:
+                    max_length = 48000 if request.method == 'PUT' and request.url.path.startswith('/api/notes/') else 16384
                 if int(content_length) > max_length:
                     return JSONResponse({'detail': 'Die Anfrage ist zu groß.'}, status_code=413)
             except ValueError:
                 return JSONResponse({'detail': 'Ungültige Anfrage.'}, status_code=400)
-        response = await call_next(request)
+        if request.method != 'GET' and request.url.path in {
+            '/api/connect', '/api/disconnect', '/api/telegram-server-bot',
+            '/api/telegram-android-pair', '/api/telegram-android-confirm',
+        }:
+            async with telegram_account_lock:
+                response = await call_next(request)
+        else:
+            response = await call_next(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
@@ -197,6 +211,76 @@ def create_app(directory=None, secure_cookies=None):
     def auth_status():
         # Compatibility for clients that have not yet reloaded the app shell.
         return {'configured': True, 'authenticated': True}
+
+    @app.get('/api/android-images')
+    def android_images(after: str = Query('', pattern=r'^(?:[a-f0-9]{40}\.webp)?$')):
+        with database.connect() as connection:
+            rows = connection.execute(
+                'SELECT DISTINCT image_file FROM recipes '
+                'WHERE image_file > ? AND id IN (SELECT recipe_id FROM members) '
+                'ORDER BY image_file LIMIT 201', (after,),
+            ).fetchall()
+        images = [row['image_file'] for row in rows[:200]]
+        return {'owner': service.week_collection_owner(), 'images': images,
+                'next': images[-1] if len(rows) > 200 else None}
+
+    @app.post('/api/telegram-api')
+    async def telegram_api(request: Request):
+        if not request.client or request.client.host != '127.0.0.1':
+            raise HTTPException(403, 'Nur lokal verfügbar.')
+        try:
+            envelope = await request.json()
+            client_id, nonce, encoded = (envelope[k] for k in ('client_id', 'nonce', 'data'))
+            if (type(client_id) is not int or not isinstance(nonce, str)
+                    or not re.fullmatch(r'[a-f0-9]{32}', nonce)
+                    or not isinstance(encoded, str) or len(encoded) > 90000):
+                raise ValueError()
+        except (TypeError, ValueError, KeyError):
+            raise HTTPException(400, 'Ungültige Anfrage.') from None
+        async with telegram_account_lock:
+            pair = select_pair(telegram_vault.read() or {}, client_id)
+            try:
+                payload = open_request(pair, nonce, encoded)
+                method, target = payload['method'], payload['path']
+                sent, body = payload['sent'], payload.get('body')
+                now = time.time()
+                if (type(sent) is not int or not now - 180 <= sent <= now + 30
+                        or body is not None and not isinstance(body, dict)
+                        or not route_allowed(method, target)):
+                    raise ValueError()
+            except (ValueError, KeyError, InvalidTag, TypeError, OverflowError, zlib.error):
+                raise HTTPException(403, 'Ungültige Telegram-Anfrage.') from None
+            owner = service.week_collection_owner()
+            if (not database.get('account') or pair.get('cart_owner') != owner):
+                return {'data': encrypt_response(pair, nonce, 409, {
+                    'detail': 'Die Telegram-Kopplung gehört zu einem anderen Cookidoo-Konto. Bitte im Heimnetz erneut koppeln.',
+                })}
+            if method != 'GET':
+                with database.connect() as connection:
+                    connection.execute('DELETE FROM telegram_writes WHERE expires < ?', (now,))
+                    inserted = connection.execute(
+                        'INSERT OR IGNORE INTO telegram_writes VALUES (?,?)', (nonce, sent + 181),
+                    ).rowcount
+                if not inserted:
+                    return {'data': encrypt_response(pair, nonce, 409, {
+                        'detail': 'Diese Änderung wurde schon angefragt. Bitte lade den aktuellen Stand.',
+                    }, owner)}
+            origin = 'http://127.0.0.1:8000'
+            try:
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+                                             base_url=origin, follow_redirects=False) as internal:
+                    result = await internal.request(method, target, json=body, headers={'Origin': origin})
+                content = result.json()
+            except (ValueError, httpx.HTTPError):
+                return {'data': encrypt_response(pair, nonce, 502, {
+                    'detail': 'Das Ergebnis konnte nicht bestätigt werden. Bitte lade den aktuellen Stand.',
+                }, owner)}
+            status, revision = result.status_code, None
+            if method == 'GET' and status == 200 and result.url.path.split('/')[:3] == ['', 'api', 'recipes']:
+                revision = hashlib.sha256(result.content).hexdigest()
+                if payload.get('revision') == revision:
+                    status, content = 304, None
+            return {'data': encrypt_response(pair, nonce, status, content, owner, revision)}
 
     @app.get('/api/status')
     def status():

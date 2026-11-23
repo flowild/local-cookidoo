@@ -21,7 +21,10 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Die Web-App benötigt für persönliche Daten eine Verbindung zum Heimnetz.
 - Der Service Worker speichert nur die öffentliche App-Hülle. Persönliche API-
   Antworten bleiben vom Cache ausgeschlossen. Die Android-App bietet nach
-  Benutzeranmeldung und Kopplung den verschlüsselten Telegram-Zugriff.
+  Benutzeranmeldung und Kopplung den verschlüsselten Telegram-Zugriff auf
+  die gemeinsamen APIs. Telegram darf nur explizit freigegebene Android-
+  Endpunkte aufrufen. Änderungen am Funktionsumfang mit beiden Verbindungen
+  prüfen. Rezeptbilder lädt Android ausschließlich im Heimnetz.
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`

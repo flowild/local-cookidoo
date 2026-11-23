@@ -13,8 +13,11 @@ Der Dienst `rezeptgarten-telegram` auf dem Proxmox-Host liest das verschlüsselt
 Server-Bot-Token über `pct exec` aus LXC 103 und verarbeitet ausschließlich frische
 private Anfragen des bestätigten Android-Telegram-Benutzerkontos. Eine kurzlebige
 Kennung bestätigt die im Heimnetz gestartete Kopplung. Vor jeder Antwort wird die
-Kopplung erneut geprüft. Einkaufswagen und Woche werden kontogebunden im Container
-gelesen und vor der Weitergabe mit AES-256-GCM verschlüsselt. Der Telegram-Offset
+Kopplung erneut geprüft. Android-Anfragen und Antworten verwenden AES-256-GCM.
+Der Container prüft Kontobindung und erlaubte Methoden und Pfade vor dem
+Aufruf der gemeinsamen Endpunkte. SQLite schützt vor erneut ausgeführten
+Schreibkennungen. Ältere APKs nutzen weiterhin ihre Wochen- und Wagenabrufe.
+Der Telegram-Offset
 liegt unter `/var/lib/rezeptgarten-telegram`. Keine Tokens, Schlüssel oder Nachrichten
 protokollieren. Bridge-Änderungen auf dem Host unter
 `/opt/rezeptgarten-telegram/telegram_bridge.py` bereitstellen und den Dienst neu

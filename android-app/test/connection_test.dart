@@ -30,20 +30,35 @@ class FakeApi extends RezeptgartenApi {
 
 class FakeTelegram extends TelegramService {
   bool available = true;
+  final paths = <String>[];
   @override
   bool get paired => available;
 
   @override
-  Future<Json> snapshot(String kind, {String? day}) async => {
-    'today': day,
-    'days': <Json>[],
-    'shelf': <String>[],
-    'shelf_placeholders': <String>[],
-    'queue_phase': 'idle',
-  };
-
-  @override
-  Future<Map<String, bool>> loadChecks() async => {};
+  Future<Json> apiRequest(
+    String method,
+    String path,
+    Json? body, {
+    String? revision,
+  }) async {
+    paths.add(path);
+    return {
+      'status': 200,
+      'body': switch (Uri.parse(path).path) {
+        '/api/status' => {'connected': false, 'cart_recipe_count': 0},
+        '/api/featured-recipe' => <String, Object?>{},
+        '/api/calendar/week' => {'days': <Json>[]},
+        '/api/recipes' => {
+          'items': [
+            {'id': 'r1', 'name': 'Rezept unterwegs'},
+          ],
+          'total': 1,
+          'match_total': 1,
+        },
+        _ => throw StateError('Unexpected request: $path'),
+      },
+    };
+  }
 }
 
 class NavigationApi extends FakeApi {
@@ -90,9 +105,11 @@ void main() {
       messenger.setMockMethodCallHandler(channel, (_) async => home);
       messenger.setMockStreamHandler(
         events,
-        MockStreamHandler.inline(onListen: (_, sink) {
-          networkEvents = sink;
-        }),
+        MockStreamHandler.inline(
+          onListen: (_, sink) {
+            networkEvents = sink;
+          },
+        ),
       );
       final connection = ConnectionController(api, telegram)..start();
       await tester.pump();
@@ -162,10 +179,10 @@ void main() {
         tester
             .widget<NavigationRail>(find.byType(NavigationRail))
             .selectedIndex,
-        3,
+        1,
       );
       final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(rail.destinations[2].disabled, isTrue);
+      expect(rail.destinations[2].disabled, isFalse);
       expect(rail.destinations[4].disabled, isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       appearance.dispose();
@@ -175,7 +192,7 @@ void main() {
     },
   );
 
-  testWidgets('disables unavailable navigation in Telegram mode', (
+  testWidgets('opens the normal recipe library in Telegram mode', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -186,6 +203,9 @@ void main() {
     final telegram = FakeTelegram()..step = TelegramStep.ready;
     final connection = ConnectionController(api, telegram)
       ..mode = ConnectionMode.telegram;
+    api.localAllowed = () => false;
+    api.telegramAllowed = () => true;
+    api.telegramRequest = telegram.apiRequest;
     final appearance = AppearanceController();
     await tester.pumpWidget(
       MaterialApp(
@@ -214,8 +234,16 @@ void main() {
           )
           .first,
     );
-    expect(recipes.enabled, isFalse);
+    expect(recipes.enabled, isTrue);
     expect(week.enabled, isTrue);
+    telegram.paths.clear();
+    await tester.tap(find.text('Rezepte').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Rezept unterwegs'), findsOneWidget);
+    expect(
+      telegram.paths.map((path) => Uri.parse(path).path),
+      contains('/api/recipes'),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     appearance.dispose();
     connection.dispose();

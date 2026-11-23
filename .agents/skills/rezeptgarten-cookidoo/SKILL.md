@@ -23,10 +23,10 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   Arbeitsspeicher. Manueller und automatischer Abgleich verwenden
   dieselben Servereinstellungen und dieselbe Warteschlange wie die Web-App.
 
-- Die Telegram-Wochenansicht der Web-App nutzt den bestehenden Kalenderclient und Lock im
-  laufenden App-Dienst. Die verschlüsselte, kontogebundene Momentaufnahme enthält
-  Tage, vorgemerkte Verschiebungen, lokale Platzhalter und Ablage ohne Bild- oder
-  Notizinhalte. Fehler und unklare Warteschlangenzustände bleiben sichtbar.
+- Android nutzt über Telegram dieselben Kalender-, Notiz-, Abgleich- und
+  Einkaufswagen-Endpunkte wie im Heimnetz. Damit gelten in beiden Modi der
+  bestehende Cookidoo-Client und Lock, der Notizvergleich und die Prüfung
+  unklarer Schreibvorgänge. Die Kopplung muss zum aktiven Konto gehören.
 
 `cookidoo-api==0.19.0` ist fest gepinnt. Die cookidoo-migrate-Integration hat teils
 ältere Imports und wird nicht unverändert eingebunden. Lizenzhinweise stehen in

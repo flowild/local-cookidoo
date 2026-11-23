@@ -26,6 +26,8 @@ class ConnectionController extends ChangeNotifier {
 
   void start() {
     api.localAllowed = () => mode == ConnectionMode.local;
+    api.telegramAllowed = () => mode == ConnectionMode.telegram;
+    api.telegramRequest = telegram.apiRequest;
     telegram.addListener(_telegramChanged);
     _subscription = _changes.receiveBroadcastStream().listen(
       _networkChanged,
@@ -123,6 +125,8 @@ class ConnectionController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     api.localAllowed = null;
+    api.telegramAllowed = null;
+    api.telegramRequest = null;
     _subscription?.cancel();
     telegram.removeListener(_telegramChanged);
     super.dispose();

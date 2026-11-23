@@ -18,7 +18,6 @@ import 'symbol_field.dart';
 import 'week_view.dart';
 import 'telegram_service.dart';
 import 'connection.dart';
-import 'telegram_view.dart';
 
 typedef _CartRow = ({Json entry, Json row, int? position, String category});
 
@@ -82,7 +81,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   bool startupSyncAttempted = false;
   bool wasBackgrounded = false;
   Timer? syncPoll;
-  int viewRefresh = 0;
   static const _retainedAreas = {1, 2, 3, 5};
   final _dirtyAreas = <int>{};
   final _pullingAreas = <int>{};
@@ -91,7 +89,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   final _areaRefreshes = List.filled(areas.length, 0);
   int _session = 0;
   var _pagerKey = GlobalKey<_SectionPagerState>();
-  late bool _wasLocal;
+  ConnectionMode? _lastMode;
   final pantryExpanded = <int>{};
   final recipeSearch = FocusNode();
   final cartItem = TextEditingController();
@@ -101,11 +99,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       widget.connection == null ||
       widget.connection!.mode == ConnectionMode.local;
 
+  bool get _available =>
+      _local || widget.connection?.mode == ConnectionMode.telegram;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _wasLocal = _local;
+    _lastMode = widget.connection?.mode;
     widget.connection?.addListener(_connectionChanged);
     if (_local) unawaited(_startupSync());
   }
@@ -132,18 +133,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (!mounted) return;
     setState(() {
       final mode = widget.connection?.mode;
-      if ((mode == ConnectionMode.telegram || mode == ConnectionMode.offline) &&
-          area != 3 &&
-          area != 4) {
+      if (mode == ConnectionMode.offline && area != 3 && area != 4) {
         area = 3;
         _navigationIndex.value = area;
       }
-      if (_wasLocal != _local) {
-        _wasLocal = _local;
+      if (_lastMode != mode) {
+        _lastMode = mode;
         _resetSession();
       }
       serverCartCount = null;
-      viewRefresh++;
       _areaRefreshes[area]++;
       _areaData[area] = _load(area);
     });
@@ -179,6 +177,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         return;
       }
       _adoptStatus(status);
+      if (widget.connection != null) unawaited(api.warmRecipeImages());
       if (status['connected'] == true) await _beginSync(notify: false);
     } on Exception {
       if (session == _session) startupSyncAttempted = false;
@@ -209,7 +208,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     if (approved == true) await widget.connection?.requestPermission();
   }
 
-  Future<dynamic> _load(int index) async => !_local
+  Future<dynamic> _load(int index) async => !_available
       ? null
       : switch (index) {
           0 => _loadOverview(),
@@ -290,7 +289,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Future<void> _beginSync({bool notify = true}) async {
-    if (!_local || syncPending || syncRunning || busy) return;
+    if (!_available || syncPending || syncRunning || busy) return;
     final session = _session;
     setState(() {
       syncPending = true;
@@ -341,7 +340,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       final deadline = DateTime.now().add(const Duration(minutes: 10));
       while (mounted &&
           session == _session &&
-          _local &&
+          _available &&
           (syncPending || syncRunning) &&
           DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(seconds: 1));
@@ -375,6 +374,9 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           );
         }
         if (wasRunning && !syncRunning) {
+          if (_local && widget.connection != null) {
+            unawaited(api.warmRecipeImages(afterCurrent: true));
+          }
           _recipeRevision++;
           _dirtyAreas.addAll([0, 1, 2, 3, 4, 5]);
           // A section's pull handler already reloads it after the sync.
@@ -386,7 +388,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         }
       } on Exception {
         if (mounted && generation == syncGeneration) {
-          if (_local && syncRunning) {
+          if (_available && syncRunning) {
             if (!syncPollFailed) {
               syncPollFailed = true;
               ScaffoldMessenger.of(context).showSnackBar(
@@ -413,13 +415,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       !busy &&
       index >= 0 &&
       index < areas.length &&
-      (_local || index == 3 || index == 4);
+      (_available || index == 3 || index == 4);
 
   void _open(int index) {
     if (!_canOpen(index) || area == index) return;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => area = index);
-    if (_local && _dirtyAreas.contains(index)) unawaited(_refresh());
+    if (_available && _dirtyAreas.contains(index)) unawaited(_refresh());
   }
 
   Future<void> _navigate(int index) async {
@@ -432,11 +434,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _dirtyAreas.remove(area);
     if (_retainedAreas.contains(area)) {
       setState(() {
-        if (_local) {
-          _areaRefreshes[area]++;
-        } else {
-          viewRefresh++;
-        }
+        _areaRefreshes[area]++;
       });
       return;
     }
@@ -556,7 +554,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
         );
       },
     );
-    if (name == null || !mounted || session != _session || !_local) return;
+    if (name == null || !mounted || session != _session || !_available) return;
     if (await _mutate('POST', '/api/cart/items', {'name': name}) && mounted) {
       cartItem.clear();
     }
@@ -1300,7 +1298,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             ),
           IconButton(
             tooltip: 'Rezepte suchen',
-            onPressed: busy || !_local
+            onPressed: busy || !_available
                 ? null
                 : () async {
                     await _navigate(2);
@@ -1362,7 +1360,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                         icon: Icon(icons[index]),
                         selectedIcon: Icon(selectedIcons[index]),
                         label: Text(label),
-                        disabled: !_local && index != 3 && index != 4,
+                        disabled: !_available && index != 3 && index != 4,
                       ),
                   ],
                 ),
@@ -1372,13 +1370,13 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               child: _SectionPager(
                 key: _pagerKey,
                 index: area,
-                firstIndex: _local || area < 3 ? 0 : 3,
-                count: _local || area < 3 ? areas.length : 2,
-                swipeEnabled: !busy && (_local || area >= 3),
+                firstIndex: _available || area < 3 ? 0 : 3,
+                count: _available || area < 3 ? areas.length : 2,
+                swipeEnabled: !busy && (_available || area >= 3),
                 canOpen: _canOpen,
                 onPageChanged: (index) => _navigationIndex.value = index,
                 onOpen: _open,
-                builder: _local ? _localArea : _remoteArea,
+                builder: _available ? _localArea : _offlineArea,
               ),
             ),
           ],
@@ -1401,7 +1399,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                       icon: Icon(icons[index]),
                       selectedIcon: Icon(selectedIcons[index]),
                       label: compactToolbar && index == 0 ? 'Start' : label,
-                      enabled: _local || index == 3 || index == 4,
+                      enabled: _available || index == 3 || index == 4,
                     ),
                 ],
               ),
@@ -1409,17 +1407,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     );
   }
 
-  Widget _remoteArea(int index) {
+  Widget _offlineArea(int index) {
     final connection = widget.connection;
-    final telegram = widget.telegram;
-    if (connection?.mode == ConnectionMode.telegram && telegram != null) {
-      return TelegramView(
-        key: ValueKey('telegram-$index-$viewRefresh'),
-        telegram: telegram,
-        cart: index == 4,
-        notice: connection?.error,
-      );
-    }
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,

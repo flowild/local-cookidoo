@@ -26,6 +26,7 @@ class Database:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, expires REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS telegram_writes (nonce TEXT PRIMARY KEY, expires REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS collections (
                     id TEXT PRIMARY KEY, source_id TEXT NOT NULL, kind TEXT NOT NULL,
                     name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL

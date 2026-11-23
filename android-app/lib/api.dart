@@ -41,14 +41,39 @@ class RezeptgartenApi {
       : Future.value(_providedClient);
   bool get usesTestData => false;
   bool Function()? localAllowed;
+  bool Function()? telegramAllowed;
+  Future<Json> Function(
+    String method,
+    String path,
+    Json? body, {
+    String? revision,
+  })?
+  telegramRequest;
+  bool get _viaTelegram => telegramAllowed?.call() == true;
   static final _photoName = RegExp(r'^[a-f0-9]{40}\.webp$');
+  static final _ownerName = RegExp(r'^[a-f0-9]{64}$');
   static final _maxAge = RegExp(r'(?:^|,)\s*max-age=(\d+)');
   static const _photoBudget = 12 * 1024 * 1024;
   static const _photoTimeout = Duration(seconds: 10);
   final _photos = <String, ({Uint8List bytes, DateTime expires})>{};
   final _photoRequests = <String, Future<Uint8List?>>{};
+  final _recipeReads = <String, ({String revision, Object? content})>{};
   int _photoBytes = 0;
   int _photoGeneration = 0;
+  String? _imageOwner;
+  Future<void>? _warmingImages;
+  Future<Directory?>? _imageDirectory;
+
+  Future<Directory?> _diskImages() => _imageDirectory ??= () async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final root = await const MethodChannel('de.rezeptgarten/storage')
+          .invokeMethod<String>('noBackupDirectory');
+      return root == null ? null : Directory('$root/recipe-images');
+    } on Exception {
+      return null;
+    }
+  }();
 
   static Future<HttpClient> _localClient() async {
     final certificate = await rootBundle.load('assets/rezeptgarten-ca.pem');
@@ -112,6 +137,7 @@ class RezeptgartenApi {
   }
 
   Future<dynamic> get(String path, {Duration? timeout}) {
+    if (_viaTelegram) return _telegramJson('GET', path);
     final response = _json('GET', path, timeout: timeout);
     return timeout == null
         ? response
@@ -139,7 +165,50 @@ class RezeptgartenApi {
       );
 
   Future<dynamic> write(String method, String path, [Json? body]) =>
-      _json(method, path, body: body);
+      _viaTelegram
+      ? _telegramJson(method, path, body)
+      : _json(method, path, body: body);
+
+  Future<dynamic> _telegramJson(
+    String method,
+    String path, [
+    Json? body,
+  ]) async {
+    final generation = _photoGeneration;
+    final cached = method == 'GET' ? _recipeReads[path] : null;
+    final result = await telegramRequest!(
+      method,
+      path,
+      body,
+      revision: cached?.revision,
+    );
+    if (!_viaTelegram || generation != _photoGeneration) {
+      throw const ApiException('Die Verbindung hat sich geändert.');
+    }
+    final owner = result['owner'];
+    _imageOwner = owner is String && _ownerName.hasMatch(owner) ? owner : null;
+    final status = result['status'];
+    final content = result['body'];
+    final revision = result['revision'];
+    if (status == 304 && cached != null && revision == cached.revision) {
+      return cached.content;
+    }
+    if (status is! int || status < 200 || status >= 300) {
+      throw ApiException(
+        content is Json && content['detail'] is String
+            ? content['detail'] as String
+            : 'Der Server konnte die Anfrage nicht verarbeiten.',
+      );
+    }
+    if (revision is String) {
+      _recipeReads.remove(path);
+      if (_recipeReads.length >= 48) {
+        _recipeReads.remove(_recipeReads.keys.first);
+      }
+      _recipeReads[path] = (revision: revision, content: content);
+    }
+    return content;
+  }
 
   Future<dynamic> _json(
     String method,
@@ -185,7 +254,7 @@ class RezeptgartenApi {
   Future<Uint8List?> image(Object? filename, {bool full = false}) {
     if (filename is! String ||
         !_photoName.hasMatch(filename) ||
-        localAllowed?.call() == false) {
+        (!_viaTelegram && localAllowed?.call() == false)) {
       return Future.value();
     }
     final path = '/api/images/$filename${full ? '' : '?size=thumb'}';
@@ -199,10 +268,137 @@ class RezeptgartenApi {
     }
     return _photoRequests.putIfAbsent(path, () {
       final generation = _photoGeneration;
-      return _loadPhoto(path, generation).whenComplete(() {
-        if (generation == _photoGeneration) _photoRequests.remove(path);
-      });
+      return _findPhoto(filename, path, generation, full: full).whenComplete(
+        () {
+          if (generation == _photoGeneration) _photoRequests.remove(path);
+        },
+      );
     });
+  }
+
+  Future<void> warmRecipeImages({bool afterCurrent = false}) {
+    final generation = _photoGeneration;
+    final current = _warmingImages;
+    if (current != null) {
+      return afterCurrent
+          ? current.then((_) async {
+              if (generation == _photoGeneration) await warmRecipeImages();
+            })
+          : current;
+    }
+    return _warmingImages = _warmImages(generation).whenComplete(() {
+      if (generation == _photoGeneration) _warmingImages = null;
+    });
+  }
+
+  Future<void> _warmImages(int generation) async {
+    final disk = await _diskImages();
+    if (disk == null) return;
+    var cursor = '';
+    try {
+      while (generation == _photoGeneration && localAllowed?.call() == true) {
+        final page = await get('/api/android-images?after=$cursor') as Json;
+        final owner = page['owner'];
+        if (generation != _photoGeneration ||
+            localAllowed?.call() != true ||
+            owner is! String ||
+            !_ownerName.hasMatch(owner)) {
+          return;
+        }
+        _imageOwner = owner;
+        final names = (page['images'] as List)
+            .whereType<String>()
+            .where(_photoName.hasMatch)
+            .toList();
+        for (var index = 0; index < names.length; index += 3) {
+          if (generation != _photoGeneration || localAllowed?.call() != true) {
+            return;
+          }
+          await Future.wait([
+            for (final name in names.skip(index).take(3))
+              _findPhoto(
+                name,
+                '/api/images/$name?size=thumb',
+                generation,
+                full: false,
+              ),
+          ]);
+        }
+        final next = page['next'];
+        if (next is! String || !_photoName.hasMatch(next) || next == cursor) {
+          break;
+        }
+        cursor = next;
+      }
+      if (generation == _photoGeneration) await _trimDiskImages(disk);
+    } on Exception {
+      // Images remain available on demand when background loading fails.
+    }
+  }
+
+  Future<void> _trimDiskImages(Directory disk) async {
+    final files = <({File file, FileStat stat})>[];
+    if (!await disk.exists()) return;
+    await for (final entry in disk.list(recursive: true, followLinks: false)) {
+      if (entry is File && entry.path.endsWith('.webp')) {
+        files.add((file: entry, stat: await entry.stat()));
+      }
+    }
+    files.sort((a, b) => b.stat.modified.compareTo(a.stat.modified));
+    var bytes = 0;
+    for (final entry in files) {
+      bytes += entry.stat.size;
+      if (bytes > 200 * 1024 * 1024) await entry.file.delete();
+    }
+  }
+
+  Future<Uint8List?> _findPhoto(
+    String filename,
+    String path,
+    int generation, {
+    required bool full,
+  }) async {
+    final owner = _imageOwner;
+    final disk = owner == null ? null : await _diskImages();
+    final folder = disk == null ? null : Directory('${disk.path}/$owner');
+    final file = folder == null
+        ? null
+        : File('${folder.path}/${full ? 'full-' : ''}$filename');
+    try {
+      if (file != null && await file.exists()) {
+        final bytes = await file.readAsBytes();
+        return generation == _photoGeneration && owner == _imageOwner
+            ? bytes
+            : null;
+      }
+    } on FileSystemException {
+      // The file may have been removed while trimming the cache.
+    }
+    if (generation != _photoGeneration || owner != _imageOwner) return null;
+    if (_viaTelegram) return full ? image(filename) : null;
+    final bytes = await _loadPhoto(path, generation);
+    if (bytes != null &&
+        _photos.containsKey(path) &&
+        file != null &&
+        generation == _photoGeneration &&
+        owner == _imageOwner) {
+      try {
+        await folder!.create(recursive: true);
+        final temporary = File('${file.path}.${newCalendarMoveId()}.tmp');
+        try {
+          await temporary.writeAsBytes(bytes, flush: true);
+          await temporary.rename(file.path);
+        } finally {
+          if (await temporary.exists()) await temporary.delete();
+        }
+      } on FileSystemException {
+        // The loaded image is still usable if writing the cache failed.
+      }
+    }
+    return generation == _photoGeneration &&
+            (owner == null || owner == _imageOwner)
+        ? bytes
+        : null;
   }
 
   Future<Uint8List?> _loadPhoto(String path, int generation) async {
@@ -228,6 +424,7 @@ class RezeptgartenApi {
           lifetime > 0 &&
           bytes.isNotEmpty &&
           bytes.lengthInBytes <= _photoBudget) {
+        _photoBytes -= _photos.remove(path)?.bytes.lengthInBytes ?? 0;
         while (_photoBytes + bytes.lengthInBytes > _photoBudget) {
           _photoBytes -= _photos
               .remove(_photos.keys.first)!
@@ -252,7 +449,10 @@ class RezeptgartenApi {
     _photoGeneration++;
     _photos.clear();
     _photoRequests.clear();
+    _recipeReads.clear();
     _photoBytes = 0;
+    _imageOwner = null;
+    _warmingImages = null;
   }
 
   Future<Uint8List> _bytes(Stream<List<int>> response) async {

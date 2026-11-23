@@ -66,7 +66,7 @@ Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
    die vollständigen lokalen Funktionen zur Verfügung. Bei einem anderen WLAN,
    Mobilfunk oder unbekannter SSID verwendet die App mit Internet und aktiver
    Kopplung Telegram. Bei einem Timeout oder Verbindungsfehler in `ThomasWlan`
-   gilt derselbe Telegram-Rückfall für Lesezugriffe. Zertifikatsfehler werden
+   gilt derselbe Telegram-Rückfall. Zertifikatsfehler werden
    sichtbar gemeldet. Fehlen die Voraussetzungen für beide Wege, zeigt die App
    „Offline“ mit dem konkreten Grund. Die Android-Berechtigung für die
    SSID-Erkennung wird im Vordergrund erklärt und angefragt; bei Ablehnung lässt
@@ -98,23 +98,21 @@ Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
    HTTPS-Weg mit dem aktuell gewählten Rezeptgarten-Konto. Eine kurzlebige
    Einmalkennung im privaten Dialog mit dem konfigurierten Server-Bot bestätigt
    den Telegram-Absender. Erst nach bestätigter Kopplung darf die Bridge frische,
-   authentifizierte Android-Anfragen dieser Benutzer-ID annehmen. Eine eigene
-   Android-Kopplung und ein eigener Nachrichtentyp erhalten die bestehenden
-   Web-Bot-Kopplungen. Antworten verwenden die vorhandenen Wochen- und
-   Einkaufswagen-Momentaufnahmen, AES-256-GCM und eindeutige Anfragekennungen.
+   authentifizierte Android-Anfragen dieser Benutzer-ID annehmen. Anfragen und
+   Antworten verwenden AES-256-GCM und eindeutige Anfragekennungen. Die Bridge
+   befördert kleine Antworten als Nachricht und größere als verschlüsselte Datei.
    Die App prüft Bot-ID, Zuordnung, Vollständigkeit und Authentizität vor der
    Anzeige. Bei Kontowechsel ist eine erneute Kopplung erforderlich. Ein Gerät
    kann im Heimnetz serverseitig entkoppelt werden.
 
-4. **Telegram-Funktionsumfang der ersten Version.** „Meine Woche“ mit
-   Wochenwechsel, Tagesrezepten, Platzhaltern und Ablage sowie „Mein
-   Einkaufswagen“ stehen als verschlüsselte Momentaufnahmen zur Verfügung.
-   Einkaufs-Häkchen lassen sich auf dem Gerät ändern und zurücksetzen. Die
-   Änderungen gelten nur für die jeweilige Kopplung auf dem Gerät. Weitere
-   Serverfunktionen und Schreibaktionen sind verfügbar, sobald die lokale
-   Verbindung zurückkehrt. Die Kopfzeile zeigt „Heimnetz“, „Telegram“ oder
-   „Offline“. Bei Rückkehr ins Heimnetz lädt die aktuelle Ansicht den
-   Serverstand neu.
+4. **Telegram-Funktionsumfang.** Start, Listen, Rezepte, Woche, Einkaufswagen
+   und Vorrat verwenden dieselben Ansichten und Serveraktionen wie im
+   Heimnetz. Änderungen einschließlich Einkaufs-Häkchen landen auf dem Server.
+   Die Konto- und Kopplungsverwaltung sowie APK-Updates erfolgen im Heimnetz.
+   Die Kopfzeile zeigt „Heimnetz“, „Telegram“ oder „Offline“. Rezeptbilder
+   lädt Android im Heimnetz und verwendet sie unterwegs aus dem privaten
+   Gerätespeicher. Neue Rezepte sind über Telegram sofort nach der Abfrage
+   mit Text und Zutaten verfügbar. Das Bild folgt beim nächsten Heimnetzabruf.
 
 5. **Alte Android-Bot-Absender bereinigen.** Vor der Umstellung die Nutzung des
    bisherigen Android-Bot-Kopplungsplatzes und seiner Konfiguration prüfen.

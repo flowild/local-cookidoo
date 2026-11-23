@@ -61,12 +61,15 @@ Rezeptzutaten. Die Rezepte im Android-Einkaufswagen erscheinen als kompakte
 Zeilen mit runden Vorschaubildern wie in den Wochenlisten. Neben dem Wagentitel
 steht das Symbol „An Cookidoo übertragen“. Einträge lassen sich einzeln entfernen.
 Auf schmalen Displays bleiben die Hauptaktionen in der Kopfzeile bedienbar.
-Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Wechsel
-ihren Zustand. Kontowechsel und Wechsel vom Heimnetz setzen die Ansichten und
-den Android-Bildcache zurück. Wiederholte Netzmeldungen im selben Heim-WLAN
+Besuchte Listen-, Rezept-, Wochen- und Vorratsansichten behalten beim Tabwechsel
+ihren Zustand. Konto- und Verbindungswechsel setzen Ansichten und Bildcache
+im Arbeitsspeicher zurück. Wiederholte Netzmeldungen im selben Heim-WLAN
 erhalten die sichtbare Ansicht, ihre Bedienbarkeit und den laufenden Abgleich.
-Erfolgreiche Bildantworten mit Cachefreigabe
-werden im Arbeitsspeicher wiederverwendet. Andere API-Antworten verwenden
+Android speichert freigegebene Rezeptbilder kontobezogen im privaten, von
+Backups ausgeschlossenen Speicher. Beim Öffnen im Heimnetz und nach dem
+Sammlungsabgleich lädt Android die Vorschaubilder der Sammlung im Hintergrund.
+Der Telegram-Modus nutzt gespeicherte Bilder und zeigt für fehlende Bilder
+einen Platzhalter bis zum nächsten Heimnetzabruf. Andere API-Antworten verwenden
 keinen HTTP-Cache.
 Die Übersichtskarte „Deine Sammlung“ bietet Direktzugriffe auf Rezeptlisten,
 alle Rezepte, die Woche und den Einkaufswagen. Die vier Schaltflächen teilen
@@ -154,11 +157,10 @@ Abgleichs einen Fortschrittsindikator. Die App meldet Fehler und prüft den Stat
 nach vorübergehenden Fehlern erneut. Ältere Statusantworten beenden keinen neu
 gestarteten Abgleich. Beim Aktualisieren
 von Rezeptdetails bleibt ein ungeklärter Notizentwurf erhalten. Außerhalb des
-Heimnetzes aktualisiert Herunterziehen die lesende Telegram-Ansicht; ein
-Cookidoo-Abgleich wird dort nicht ausgelöst. Telegram-Wochen
-wechseln nach Kalenderdatum auch über Zeitumstellungen hinweg. Der Telegram-
-Einkaufswagen lädt gespeicherte Häkchen, bevor er Änderungen zulässt. Ein
-Lesefehler wird angezeigt und der Abruf kann wiederholt werden. Der frühere
+Heimnetzes startet Herunterziehen den Sammlungsabgleich über Telegram und
+aktualisiert anschließend die Ansicht. Beide Modi verwenden dieselbe Berliner
+Kalenderlogik und dieselben serverseitigen Einkaufs-Häkchen. Häkchen aus dem
+früheren Telegram-Modus bleiben auf dem Gerät. Der frühere
 zeitgesteuerte Sammlungsabgleich ist serverweit entfernt, bestehende Intervalle
 haben keine Wirkung. Die separate Warteschlange für Wochenänderungen bleibt
 aktiv. Dunkelmodus und Akzentfarbe
@@ -170,10 +172,10 @@ genauer Freigabe. In den Android-Einstellungen erscheint die
 Einrichtungsaktion für WLAN bei fehlender genauer Freigabe und für Telegram
 bei fehlender Anmeldung oder Kopplung. Bei eingerichteter Kopplung öffnet
 die Telegram-Statuszeile die Verwaltung. Außerhalb des Heimnetzes stehen nach
-Telegram-Benutzeranmeldung und
-Kopplung im Heimnetz die verschlüsselten, lesenden Ansichten „Meine Woche“ und
-„Mein Einkaufswagen“ zur Verfügung. Einkaufs-Häkchen im Telegram-Modus werden
-auf dem Gerät gespeichert. Die App fragt nach Telegram-API-ID und API-Hash, wenn
+Telegram-Benutzeranmeldung und Kopplung im Heimnetz dieselben sechs
+Hauptansichten mit ihren Bearbeitungsfunktionen verschlüsselt zur Verfügung.
+Kontoverwaltung, Telegram-Kopplung und APK-Updates verwenden das Heimnetz.
+Die App fragt nach Telegram-API-ID und API-Hash, wenn
 sie fehlen, und schützt Zugangsdaten und Sitzung auf dem Gerät. Die Android-
 Kopplung ist an das bei der Verbindung ausgewählte Cookidoo-Konto gebunden.
 Die Web-App benötigt das Heimnetz. Die APK enthält keine Gemini- oder
@@ -186,11 +188,13 @@ Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 Die Einstellungen verwalten das verschlüsselt auf dem Server gespeicherte Token
 des Rezeptgarten-Server-Bots. Die Android-App meldet sich mit dem Telegram-
 Benutzerkonto an und koppelt dieses im Heimnetz mit dem Server-Bot und dem
-aktuellen Cookidoo-Konto. Der Host-Dienst akzeptiert ausschließlich bestätigte
-private Benutzeranfragen. Woche und Einkaufswagen sind außerhalb des Heimnetzes
-über Telegram verschlüsselt und lesend verfügbar; Einkaufs-Häkchen bleiben lokal.
-Telegram sieht Metadaten. Unvollständige oder nicht authentifizierte Antworten
-werden nicht angezeigt. Nachrichten, Tokens und Schlüssel nicht protokollieren.
+aktuellen Cookidoo-Konto. Der Host-Dienst akzeptiert ausschließlich frische,
+private Anfragen bestätigter Benutzer. Der Server prüft Verschlüsselung,
+Kontobindung und erlaubte Android-Endpunkte. Wiederholte Anfragen mit derselben
+Schreibkennung werden abgefangen. Rezeptabfragen mit unverändertem Ergebnis geben
+innerhalb der Android-Sitzung nur eine Änderungskennung zurück. Telegram sieht
+Metadaten. Unvollständige oder nicht authentifizierte Antworten werden nicht
+angezeigt. Nachrichten, Tokens und Schlüssel nicht protokollieren.
 Der frühere Client-Bot und der Telegram-Zugriff der Web-App sind entfernt.
 Beim Start entfernt die Web-App alte lokale Bot-Zugangsdaten; der Server verwirft
 alte Bot-Kopplungen und behält bestehende Android-Benutzerkopplungen.
