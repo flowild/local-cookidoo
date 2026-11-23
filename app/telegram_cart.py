@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, shopping_category
+from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, pantry_item_icons, shopping_category
 from .security import Vault
 from .telegram_pairs import select_pair
 
@@ -25,8 +25,8 @@ class ReadOnlyCartDatabase:
         return json.loads(row['value']) if row else None
 
     def pantry(self):
-        return {'categories': [dict(row) for row in self.connection.execute('SELECT id,name FROM pantry_categories')],
-                'items': [dict(row) for row in self.connection.execute('SELECT category_id,name FROM pantry_items')]}
+        return {'categories': [dict(row) for row in self.connection.execute('SELECT id,name,icon FROM pantry_categories')],
+                'items': [dict(row) for row in self.connection.execute('SELECT category_id,name,icon FROM pantry_items ORDER BY name COLLATE NOCASE,id')]}
 
     def cart(self, owner):
         return [{'id': row['id'], 'kind': row['kind'], 'data': json.loads(row['data'])} for row in
@@ -43,6 +43,18 @@ def snapshot(database, paired_owner):
     pantry_names = [item['name'] for item in pantry['items']]
     categories = {c['id']: c['name'] for c in pantry['categories']}
     pantry_categories = {ingredient_group_key(i['name']): categories[i['category_id']] for i in pantry['items'] if i['category_id'] in categories}
+    item_icons = pantry_item_icons(pantry['items'])
+    category_icons = {c['name']: c['icon'] for c in pantry['categories'] if c.get('icon')}
+
+    def appearance(name):
+        category = shopping_category(name, pantry_categories)
+        fields = {'category': category}
+        if symbol := item_icons.get(ingredient_group_key(name)):
+            fields['icon'] = symbol
+        if symbol := category_icons.get(category):
+            fields['category_icon'] = symbol
+        return fields
+
     result = []
     for item in database.cart(owner):
         data = item['data']
@@ -52,11 +64,11 @@ def snapshot(database, paired_owner):
                 name = ingredient.get('name') or ingredient_name(ingredient.get('text', ''))
                 if ingredient_group_key(name) == 'wasser':
                     continue
-                ingredients.append({'check_id': f"r:{item['id']}:{position}", 'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'in_pantry': ingredient_available(name, pantry_names), 'category': shopping_category(name, pantry_categories)})
+                ingredients.append({'check_id': f"r:{item['id']}:{position}", 'text': ingredient.get('text', ''), 'icon_name': name, 'owned': bool(ingredient.get('owned')), 'in_pantry': ingredient_available(name, pantry_names), **appearance(name)})
             result.append({'kind': 'recipe', 'name': data.get('name', ''), 'ingredients': ingredients})
         elif item['kind'] == 'additional' and ingredient_group_key(data.get('name', '')) != 'wasser':
             name = data.get('name', '')
-            result.append({'kind': 'additional', 'check_id': f"a:{item['id']}", 'name': name, 'category': shopping_category(name, pantry_categories), 'owned': bool(data.get('owned'))})
+            result.append({'kind': 'additional', 'check_id': f"a:{item['id']}", 'name': name, 'owned': bool(data.get('owned')), **appearance(name)})
     return result
 
 

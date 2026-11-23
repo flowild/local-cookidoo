@@ -2,6 +2,24 @@ import 'package:material_ui/material_ui.dart';
 
 final _ingredientIcons = {
   for (final (pattern, symbol) in const [
+    (r'avocado', '🥑'),
+    (r'erdbeer', '🍓'),
+    (r'heidelbeer|blaubeer', '🫐'),
+    (r'linse|kichererbse|bohne', '🫘'),
+    (r'nuss|nüsse|mandel', '🥜'),
+    (r'garnele|shrimp', '🦐'),
+    (r'schokolade|kuvertüre', '🍫'),
+    (r'limonade|cola', '🥤'),
+    (r'schwarztee|grüntee|kräutertee|^tee$', '🫖'),
+    (r'croissant', '🥐'),
+    (r'kuchen|torte', '🍰'),
+    (r'pizza', '🍕'),
+    (r'toilettenpapier|klopapier|wc.papier|küchenrolle|küchenpapier', '🧻'),
+    (r'schwamm|scheuerschw', '🧽'),
+    (r'seife', '🧼'),
+    (r'reiniger|waschmittel|spülmittel|shampoo', '🧴'),
+    (r'zahnbürste|zahnpasta', '🪥'),
+    (r'müllbeutel|mülltüte|müllsack', '🗑️'),
     ('chili|cayenne|paprikapulver|paprika edels', '🌶️'),
     ('ingwer|ginger', '🫚'),
     ('öl|oil', '🫒'),
@@ -51,13 +69,18 @@ final _ingredientIcons = {
 };
 
 class IngredientIcon extends StatelessWidget {
-  const IngredientIcon(this.name, {this.category, super.key});
+  const IngredientIcon(this.name, {this.category, this.selected, super.key});
 
   final String name;
   final String? category;
+  final Object? selected;
 
   @override
   Widget build(BuildContext context) {
+    final custom = selected;
+    if (custom is String && custom.isNotEmpty) {
+      return ExcludeSemantics(child: Text(custom));
+    }
     const fallback = {
       'Gewürze': '🌿',
       'Gemüse': '🥕',

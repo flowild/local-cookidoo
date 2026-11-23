@@ -10,6 +10,7 @@ import 'pill_widgets.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
 import 'recipe_card.dart';
+import 'symbol_field.dart';
 
 class RecipeDetail extends StatefulWidget {
   const RecipeDetail({
@@ -434,6 +435,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
     final missing = dark ? const Color(0xffff6572) : const Color(0xffd32239);
     final hidden = _list(recipe['hidden_ingredient_positions']).toSet();
     final availability = recipe['ingredient_availability'];
+    final icons = recipe['ingredient_icons'];
     final rows = <Widget>[];
     for (final (index, ingredient) in _list(
       recipe['ingredients_json'],
@@ -482,7 +484,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
                 ),
               ),
               const SizedBox(width: AppSpacing.related),
-              IngredientIcon(name.isEmpty ? label : name),
+              IngredientIcon(
+                name.isEmpty ? label : name,
+                selected: icons is Json ? icons['$index'] : null,
+              ),
             ],
           ),
           title: Text(label),
@@ -595,7 +600,10 @@ class _RecipeDetailState extends State<RecipeDetail> {
         Wrap(
           spacing: AppSpacing.related,
           runSpacing: AppSpacing.tight,
-          children: [for (final list in lists) InfoPill(text(list['name']))],
+          children: [
+            for (final list in lists)
+              InfoPill(text(list['name']), symbol: list['icon']),
+          ],
         ),
       Text(
         text(recipe['name'], 'Rezept'),
@@ -689,7 +697,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
             for (final list in _localLists)
               CheckboxListTile(
                 value: memberships.contains(list['id']),
-                title: Text(text(list['name'])),
+                title: SymbolLabel(text(list['name']), list['icon']),
                 controlAffinity: ListTileControlAffinity.leading,
                 onChanged: _working
                     ? null

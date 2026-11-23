@@ -61,7 +61,11 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Rezepte erscheinen mit derselben runden Vorschau wie in den Wochenlisten.
   Im Vorrat Zutaten durch Antippen bearbeiten und Kategorieaktionen bündeln.
   Zutaten, Kategorien und lokale Listen verwenden dasselbe Symbolfeld beim
-  Anlegen und Bearbeiten. Bei lokalen Listen steht der Editor in der Verwaltung.
+  Anlegen und Bearbeiten. Die Auswahl umfasst Lebensmittel, Haushalt und
+  Rezeptlisten. Bei lokalen Listen steht der Editor in der Verwaltung. Das
+  gewählte Listensymbol erscheint auch in der Woche und in Rezeptdetails.
+  Zutaten und Warenbereiche verwenden auch im Telegram-Wagen die passenden
+  Vorratssymbole, sofern sie festgelegt sind.
   Kategorie- und Zutatenzeilen verwenden eine feste Symbolspalte und eine
   gemeinsame linke Textkante. Menüs und Aufklappsymbole stehen rechts.
 - Beim Bestätigen von Einkaufs-Häkchen die Höhe vor den vorhandenen Einträgen

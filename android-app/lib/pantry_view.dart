@@ -337,11 +337,11 @@ class _PantryViewState extends State<PantryView> {
                     width: iconWidth,
                     child: Center(
                       heightFactor: 1,
-                      child: item['icon'] is String
-                          ? ExcludeSemantics(
-                              child: Text(item['icon'] as String),
-                            )
-                          : IngredientIcon(text(item['name']), category: name),
+                      child: IngredientIcon(
+                        text(item['name']),
+                        category: name,
+                        selected: item['icon'],
+                      ),
                     ),
                   ),
                   title: Text(text(item['name'])),
@@ -633,7 +633,10 @@ class _PantryEditorState extends State<_PantryEditor> {
                   for (final category in widget.categories!)
                     DropdownMenuItem(
                       value: category['id'] as int,
-                      child: Text(text(category['name'])),
+                      child: SymbolLabel(
+                        text(category['name']),
+                        category['icon'],
+                      ),
                     ),
                 ],
               ),

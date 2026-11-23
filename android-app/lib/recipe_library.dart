@@ -383,8 +383,9 @@ class _RecipeBrowserState extends State<RecipeBrowser>
     crossAxisAlignment: CrossAxisAlignment.stretch,
     spacing: AppSpacing.item,
     children: [
-      Text(
+      SymbolLabel(
         text(_collectionDetails?['name'], 'Alle Rezepte'),
+        _collectionDetails?['icon'],
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       if (_collection == null)

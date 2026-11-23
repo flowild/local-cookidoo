@@ -1423,7 +1423,10 @@ class _WeekListState extends State<_WeekList> {
   @override
   Widget build(BuildContext context) => ExpandableListCard(
     title: text(widget.list['name']),
-    leading: const Icon(Icons.list_alt),
+    leading: switch (widget.list['icon']) {
+      final String symbol => ExcludeSemantics(child: Text(symbol)),
+      _ => const Icon(Icons.list_alt),
+    },
     onExpansionChanged: (expanded) {
       if (expanded && !_requested) unawaited(_load());
     },

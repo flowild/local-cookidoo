@@ -209,6 +209,17 @@ const symbolOptions = [
   ['🧁','Gebäck'], ['🍲','Topf'], ['🥗','Salat'], ['☕','Tasse'],
   ['🧊','Tiefkühlfach'], ['🛒','Einkaufswagen'], ['📚','Bücher'], ['⭐','Stern'],
   ['❤️','Herz'], ['🍽️','Geschirr'], ['🧺','Korb'], ['🍋','Zitrone'],
+  ['🥔','Kartoffel'], ['🍅','Tomate'], ['🧅','Zwiebel'], ['🧄','Knoblauch'],
+  ['🫑','Paprika'], ['🥦','Brokkoli'], ['🥒','Gurke'], ['🍄','Pilze'],
+  ['🥬','Blattgemüse'], ['🥑','Avocado'], ['🌶️','Chili'], ['🫚','Ingwer'],
+  ['🍌','Banane'], ['🍊','Orange'], ['🍓','Erdbeeren'], ['🫐','Blaubeeren'],
+  ['🌾','Mehl und Getreide'], ['🫘','Hülsenfrüchte'], ['🥜','Nüsse'], ['🫒','Oliven und Öl'],
+  ['🧀','Käse'], ['🧈','Butter'], ['🍗','Geflügel'], ['🦐','Garnelen'],
+  ['🍯','Honig'], ['🍫','Schokolade'], ['🥤','Getränke'], ['🫖','Tee'],
+  ['🥐','Frühstück'], ['🍰','Kuchen'], ['🍕','Pizza'], ['🥘','Pfanne'],
+  ['🥣','Schüssel'], ['🍱','Vorkochen'], ['🥡','Zum Mitnehmen'], ['🧻','Toilettenpapier'],
+  ['🧽','Schwamm'], ['🧼','Seife'], ['🧴','Reinigungsmittel'], ['🪥','Zahnpflege'],
+  ['🗑️','Müllbeutel'],
 ];
 function fillSymbolField(id, value) {
   const field = $(id);
@@ -447,7 +458,7 @@ function renderWeekLists() {
   if (!container) return;
   weekListRecipes = new Map();
   const lists = state.collections.filter(collection => collection.kind === 'local');
-  container.innerHTML = lists.length ? `<h2>Meine lokalen Listen</h2>${lists.map(collection => `<details class="week-local-list" data-week-list="${escapeHTML(collection.id)}" ${weekOpenLists.has(collection.id) ? 'open' : ''}><summary><span>${escapeHTML(collection.name)}</span><span class="week-local-count">${collection.recipe_count} ${collection.recipe_count === 1 ? 'Rezept' : 'Rezepte'}</span></summary><div class="week-local-content"><div class="candidate-list" data-week-list-items></div><p class="week-local-empty" hidden>Diese Liste ist noch leer.</p><button class="button" type="button" data-week-list-more hidden>Weitere Rezepte anzeigen</button></div></details>`).join('')}` : '';
+  container.innerHTML = lists.length ? `<h2>Meine lokalen Listen</h2>${lists.map(collection => `<details class="week-local-list" data-week-list="${escapeHTML(collection.id)}" ${weekOpenLists.has(collection.id) ? 'open' : ''}><summary><span>${symbolPrefix(collection)}${escapeHTML(collection.name)}</span><span class="week-local-count">${collection.recipe_count} ${collection.recipe_count === 1 ? 'Rezept' : 'Rezepte'}</span></summary><div class="week-local-content"><div class="candidate-list" data-week-list-items></div><p class="week-local-empty" hidden>Diese Liste ist noch leer.</p><button class="button" type="button" data-week-list-more hidden>Weitere Rezepte anzeigen</button></div></details>`).join('')}` : '';
 }
 function updateWeekListButtons() {
   document.querySelectorAll('[data-week-add]').forEach(button => {
@@ -734,26 +745,45 @@ async function renderCart(request = state.request) {
       if (!byCategory.has(category)) byCategory.set(category, []);
       byCategory.get(category).push(items);
     });
-    return [...byCategory].sort(([a],[b]) => a === 'Sonstiges' ? 1 : b === 'Sonstiges' ? -1 : a.localeCompare(b, 'de')).map(([category, categoryItems]) => `<section class="cart-category"><h3>${escapeHTML(category)}</h3><div class="cart-ingredients-list">${categoryItems.map(items => {
+    return [...byCategory].sort(([a],[b]) => a === 'Sonstiges' ? 1 : b === 'Sonstiges' ? -1 : a.localeCompare(b, 'de')).map(([category, categoryItems]) => `<section class="cart-category"><h3>${symbolPrefix({icon:categoryItems[0][0].ingredient.category_icon})}${escapeHTML(category)}</h3><div class="cart-ingredients-list">${categoryItems.map(items => {
     const title = items[0].ingredient.name || items[0].ingredient.text;
     const quantities = items.map(({ingredient}) => ingredient.text.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|Stück)\b/i));
     const total = items.length > 1 && quantities.every(Boolean) && quantities.every(q => q[2].toLocaleLowerCase('de-DE') === quantities[0][2].toLocaleLowerCase('de-DE')) ? `${quantities.reduce((sum, q) => sum + Number(q[1].replace(',', '.')), 0).toLocaleString('de-DE')} ${quantities[0][2]}` : '';
-    const heading = items.length > 1 ? `<div class="cart-ingredient-heading"><strong>${escapeHTML(title)}</strong>${total ? `<span class="cart-total">${escapeHTML(total)} insgesamt</span>` : ''}</div>` : '';
-    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(ingredient.name || ingredient.text, ingredient.category)}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
+    const heading = items.length > 1 ? `<div class="cart-ingredient-heading"><strong>${symbolPrefix(items[0].ingredient)}${escapeHTML(title)}</strong>${total ? `<span class="cart-total">${escapeHTML(total)} insgesamt</span>` : ''}</div>` : '';
+    return `<div class="cart-ingredient">${heading}${items.map(({entry,ingredient,position}) => `<label class="cart-ingredient-row"><input type="checkbox" data-cart-ingredient="${entry.id}" data-position="${position}" ${ingredient.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(ingredient.name || ingredient.text, ingredient.category, ingredient.icon)}</span><span class="cart-ingredient-copy"><span class="cart-ingredient-text">${escapeHTML(ingredient.text)}</span><small>${escapeHTML(entry.data.name)}</small></span></label>`).join('')}</div>`;
     }).join('')}</div></section>`).join('');
   };
   const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
-  const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
+  const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(entry.data.name, entry.data.category, entry.data.icon)}</span><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
   $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3>Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
 }
 
-function pantryIcon(name, category) {
+function pantryIcon(name, category, selected) {
+  if (selected) return escapeHTML(selected);
   const value = name.toLocaleLowerCase('de-DE');
   if (/ingwer|ginger/.test(value)) return '<svg class="ingredient-ginger" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 15.2c.7-2.1 2.5-3.3 4.7-3.5l-.8-2.4a2.2 2.2 0 0 1 4.2-1.4l.9 2.5 2.5-.6-.5-2a2 2 0 0 1 3.9-.9l.6 2.4c2 .3 3.2 1.7 2.8 3.5-.3 1.5-1.6 2.3-3.2 2.7l-.1 1.2c-.1 2-1.8 3.3-3.8 2.8l-2.7-.7c-1.7 1.3-4 1.5-5.8.6-1.7-.9-3.3-2.3-2.7-4.2Z" fill="#d6a568" stroke="#795833" stroke-width="1.2"/><path d="M7.8 12.1l1 2.1m3.4-3.4.7 2.1m5.1-2.8.2 1.8M7.6 16.6l1.4.4m5-1 1.3.4" fill="none" stroke="#a77a49" stroke-width="1" stroke-linecap="round"/></svg>';
-  if (/öl|oil/.test(value)) return '<svg class="ingredient-oil" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4v3.1c0 1.3.5 2.1 1.5 3.1l1.1 1.1c.6.6.9 1.4.9 2.2v8.1c0 1.3-1 2.4-2.3 2.4H8.8c-1.3 0-2.3-1.1-2.3-2.4v-8.1c0-.8.3-1.6.9-2.2l1.1-1.1C9.5 7.2 10 6.4 10 5.1Z" fill="#d2a742" stroke="#755d27" stroke-width="1.2"/><path d="M9.5 2h5v2.2h-5z" fill="#52714a" stroke="#3c5a37" stroke-width=".8"/><path d="M7.6 12h8.8v6.2H7.6z" fill="#f6efd3" stroke="none"/><path d="M12 12.9c-.8 1.1-1.7 2-1.7 2.8a1.7 1.7 0 0 0 3.4 0c0-.8-.9-1.7-1.7-2.8Z" fill="#84944d" stroke="none"/></svg>';
+  if (/öl|\boil\b/.test(value)) return '<svg class="ingredient-oil" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4v3.1c0 1.3.5 2.1 1.5 3.1l1.1 1.1c.6.6.9 1.4.9 2.2v8.1c0 1.3-1 2.4-2.3 2.4H8.8c-1.3 0-2.3-1.1-2.3-2.4v-8.1c0-.8.3-1.6.9-2.2l1.1-1.1C9.5 7.2 10 6.4 10 5.1Z" fill="#d2a742" stroke="#755d27" stroke-width="1.2"/><path d="M9.5 2h5v2.2h-5z" fill="#52714a" stroke="#3c5a37" stroke-width=".8"/><path d="M7.6 12h8.8v6.2H7.6z" fill="#f6efd3" stroke="none"/><path d="M12 12.9c-.8 1.1-1.7 2-1.7 2.8a1.7 1.7 0 0 0 3.4 0c0-.8-.9-1.7-1.7-2.8Z" fill="#84944d" stroke="none"/></svg>';
   if (/paprika|bell peppers?/.test(value) && !/paprikapulver|paprika edels|chili|cayenne|gemahlen/.test(value)) return '<svg class="ingredient-pepper" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.7 6.1c-3.7-2.1-7.8.4-7.6 4.8.1 4.7 2.3 9.8 5.4 10 1.1.1 1.7-.4 2.5-.4s1.6.5 2.7.4c3-.2 5.1-5.3 5.3-10 .1-4.4-4-6.9-7.6-4.8Z" fill="#e85b4e" stroke="#aa3b32" stroke-width="1.1"/><path d="M11.9 6.6c-.9-2.1-.2-3.8 1.6-4.7l1 .9c-1.2.7-1.5 1.7-1.1 3.2" fill="#56864c" stroke="#3e693a" stroke-width="1"/><path d="M8 8.4c-1.1 2.8-.8 7.3.7 10M15.9 8.4c1.1 2.8.8 7.3-.7 10" fill="none" stroke="#f58e7e" stroke-width="1.1" stroke-linecap="round"/></svg>';
   if (/\bghee\b|butterschmalz/.test(value)) return '<svg class="ingredient-ghee" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7.2h11v12.2c0 1.4-1.1 2.4-2.4 2.4H8.9c-1.3 0-2.4-1-2.4-2.4Z" fill="#e7b74d" stroke="#886b2e" stroke-width="1.2"/><path d="M6 4h12v3H6z" fill="#876b45" stroke="#614d35" stroke-width="1"/><path d="M7.4 11h9.2v6H7.4z" fill="#fff3d1" stroke="none"/><path d="M12 11.9c-.8 1-1.6 1.8-1.6 2.6a1.6 1.6 0 0 0 3.2 0c0-.8-.8-1.6-1.6-2.6Z" fill="#d5a335" stroke="none"/></svg>';
   const icons = [
+    [/avocado/, '🥑'],
+    [/erdbeer/, '🍓'],
+    [/heidelbeer|blaubeer/, '🫐'],
+    [/linse|kichererbse|bohne/, '🫘'],
+    [/nuss|nüsse|mandel/, '🥜'],
+    [/garnele|shrimp/, '🦐'],
+    [/schokolade|kuvertüre/, '🍫'],
+    [/limonade|cola/, '🥤'],
+    [/schwarztee|grüntee|kräutertee|^tee$/, '🫖'],
+    [/croissant/, '🥐'],
+    [/kuchen|torte/, '🍰'],
+    [/pizza/, '🍕'],
+    [/toilettenpapier|klopapier|wc.papier|küchenrolle|küchenpapier/, '🧻'],
+    [/schwamm|scheuerschw/, '🧽'],
+    [/seife/, '🧼'],
+    [/reiniger|waschmittel|spülmittel|shampoo/, '🧴'],
+    [/zahnbürste|zahnpasta/, '🪥'],
+    [/müllbeutel|mülltüte|müllsack/, '🗑️'],
     [/chili|cayenne|paprikapulver|paprika edels/, '🌶️'],
     [/knoblauch/, '🧄'], [/zwiebel/, '🧅'], [/kartoffel/, '🥔'], [/tomate/, '🍅'],
     [/karotte|möhre/, '🥕'], [/gurke/, '🥒'], [/brokkoli/, '🥦'],
@@ -795,7 +825,7 @@ function showPantryDialog(item = null, categoryId = null) {
   closeSuggestions();
   $('#pantry-quantity').value = item?.quantity || '';
   fillSymbolField('#pantry-icon', item?.icon);
-  $('#pantry-category').innerHTML = state.pantry.categories.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  $('#pantry-category').innerHTML = state.pantry.categories.map(c => `<option value="${c.id}">${escapeHTML(c.icon ? `${c.icon} ${c.name}` : c.name)}</option>`).join('');
   if (item || categoryId) $('#pantry-category').value = String(item?.category_id || categoryId);
   errorMessage($('#pantry-error'), ''); $('#pantry-dialog').showModal(); $('#pantry-name').focus();
 }
@@ -1006,20 +1036,20 @@ function recipeDetails(recipe) {
   const parse = value => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } };
   const ingredients = parse(recipe.ingredients_json).map((item, position) => {
     if (recipe.hidden_ingredient_positions?.includes(position)) return null;
-    if (typeof item === 'string') return {text:item, available:recipe.ingredient_availability?.[position]};
+    if (typeof item === 'string') return {text:item, icon:recipe.ingredient_icons?.[position], available:recipe.ingredient_availability?.[position]};
     if (!item || typeof item !== 'object') return null;
     const description = typeof item.description === 'string' ? item.description.trim() : '';
     const name = typeof item.name === 'string' ? item.name.trim() : '';
     const preparation = typeof item.preparation === 'string' ? item.preparation.trim() : '';
     const text = description && name && !description.toLocaleLowerCase('de-DE').includes(name.toLocaleLowerCase('de-DE')) ? `${description} ${name}` : description || name;
-    return {name, text:text + (preparation && !text.includes(preparation) ? (preparation.startsWith(',') ? '' : ', ') + preparation : ''), available:recipe.ingredient_availability?.[position]};
+    return {name, text:text + (preparation && !text.includes(preparation) ? (preparation.startsWith(',') ? '' : ', ') + preparation : ''), icon:recipe.ingredient_icons?.[position], available:recipe.ingredient_availability?.[position]};
   }).filter(item => item?.text);
   const groups = parse(recipe.instructions_json);
   const sections = groups.some(item => Array.isArray(item?.steps))
     ? groups.map(group => ({title: group.title || '', steps: (group.steps || []).filter(item => typeof item === 'string' && item)}))
     : [{title: '', steps: groups.map(item => typeof item === 'string' ? item : item?.text).filter(item => typeof item === 'string' && item)}];
   const steps = sections.filter(group => group.steps.length);
-  return `${ingredients.length ? `<details class="creation-detail recipe-accordion" id="recipe-ingredients" open><summary>Zutaten<span aria-hidden="true">⌄</span></summary><ul class="ingredient-list">${ingredients.map(item => { const status = item.available === true ? 'available' : item.available === false ? 'missing' : 'unknown'; const label = item.available === true ? 'Im Vorrat' : item.available === false ? 'Nicht im Vorrat' : 'Nicht zugeordnet'; return `<li><span class="ingredient-dot ${status}" role="img" aria-label="${label}" title="${label}"></span><span class="recipe-ingredient-icon" aria-hidden="true">${pantryIcon(item.name || item.text, '')}</span><span>${escapeHTML(item.text)}</span></li>`; }).join('')}</ul></details>` : ''}${steps.length ? `<details class="creation-detail recipe-accordion" id="recipe-preparation"><summary>Zubereitung<span aria-hidden="true">⌄</span></summary>${steps.map(group => `${group.title ? `<h4>${escapeHTML(group.title)}</h4>` : ''}<ol>${group.steps.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ol>`).join('')}</details>` : ''}`;
+  return `${ingredients.length ? `<details class="creation-detail recipe-accordion" id="recipe-ingredients" open><summary>Zutaten<span aria-hidden="true">⌄</span></summary><ul class="ingredient-list">${ingredients.map(item => { const status = item.available === true ? 'available' : item.available === false ? 'missing' : 'unknown'; const label = item.available === true ? 'Im Vorrat' : item.available === false ? 'Nicht im Vorrat' : 'Nicht zugeordnet'; return `<li><span class="ingredient-dot ${status}" role="img" aria-label="${label}" title="${label}"></span><span class="recipe-ingredient-icon" aria-hidden="true">${pantryIcon(item.name || item.text, '', item.icon)}</span><span>${escapeHTML(item.text)}</span></li>`; }).join('')}</ul></details>` : ''}${steps.length ? `<details class="creation-detail recipe-accordion" id="recipe-preparation"><summary>Zubereitung<span aria-hidden="true">⌄</span></summary>${steps.map(group => `${group.title ? `<h4>${escapeHTML(group.title)}</h4>` : ''}<ol>${group.steps.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ol>`).join('')}</details>` : ''}`;
 }
 function renderRecipeTips(tips, custom = false) {
   if (custom && Array.isArray(tips)) {
@@ -1120,7 +1150,7 @@ async function openRecipe(id, fromWeek = false) {
   const difficulty = {easy:'Einfach',medium:'Mittel',advanced:'Anspruchsvoll',hard:'Anspruchsvoll'}[recipe.difficulty?.toLowerCase()];
   const versions = recipe.versions || [];
   const selector = versions.length > 1 ? `<label class="version-select">Rezeptversion<select id="recipe-version">${versions.map((version, index) => `<option value="${escapeHTML(version.id)}" ${version.id === recipe.id ? 'selected' : ''}>${version.origin_recipe_id ? `Meine Kreation${versions.filter(v => v.origin_recipe_id).length > 1 ? ` ${index}` : ''}` : 'Cookidoo-Original'}${version.servings ? ` · ${escapeHTML(version.servings)} Portionen` : ''}</option>`).join('')}</select></label>` : '';
-  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}<div id="recipe-tips-container"></div>${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-week" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Diese Woche kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
+  $('#recipe-content').innerHTML = `<div class="recipe-detail-photo">${photo(recipe.image_file, recipe.name, true)}</div><div class="recipe-detail-body"><div class="recipe-collection-pills">${recipe.collections.map(c => `<a data-close-recipe href="#liste/${encodeURIComponent(c.id)}">${symbolPrefix(c)}${escapeHTML(c.name)}</a>`).join('')}</div><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>${selector}<div class="recipe-meta">${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}${active ? `<span class="meta-chip">${active} Arbeitszeit</span>` : ''}${recipe.servings ? `<span class="meta-chip">${escapeHTML(recipe.servings)} Portionen</span>` : ''}${difficulty ? `<span class="meta-chip">${difficulty}</span>` : ''}</div><div class="recipe-note-preview" id="recipe-note-preview" data-recipe-id="${escapeHTML(recipe.id)}"><label class="recipe-note-heading" for="recipe-note-text"><strong>Meine Notiz</strong>${icon('edit')}</label><textarea id="recipe-note-text" class="recipe-note-text" rows="1" maxlength="5000" placeholder="Notiz hinzufügen" aria-describedby="recipe-note-status" enterkeyhint="done" readonly></textarea></div><p id="recipe-note-status" class="recipe-note-status" role="status" hidden></p>${recipeDetails(recipe)}<div id="recipe-tips-container"></div>${recipe.is_local === false ? '<p class="calendar-detail-hint">Dieses Rezept ist in deiner Cookidoo-Woche eingeplant.</p>' : `<section class="local-memberships"><h3>Zu lokalen Listen hinzufügen</h3>${local.length ? local.map(c => `<label class="membership-option"><input type="checkbox" data-local-list="${escapeHTML(c.id)}" data-local-recipe="${escapeHTML(recipe.id)}" ${recipe.collections.some(item => item.id === c.id) ? 'checked' : ''}><span>${symbolPrefix(c)}${escapeHTML(c.name)}</span></label>`).join('') : '<p>Erstelle zuerst eine lokale Rezeptliste unter „Listen“.</p>'}</section>`}<button type="button" class="button button-primary button-full" data-action="plan-week" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cook')}Diese Woche kochen</span></button><button type="button" class="button button-primary button-full" data-action="add-shopping" data-action-calendar="${recipe.is_local === false}" data-action-recipe="${escapeHTML(recipe.id)}"><span class="recipe-action-label">${icon('cart')}Zum Einkaufswagen hinzufügen</span></button><a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer"><span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span></a></div>`;
   if (!$('#recipe-dialog').open) $('#recipe-dialog').showModal();
   inlineNote = {id:recipe.id, original:'', draft:'', loaded:false, loading:false, saving:null, requested:false};
   const currentNote = inlineNote;

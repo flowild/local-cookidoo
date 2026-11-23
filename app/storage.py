@@ -491,7 +491,7 @@ class Database:
                 except (TypeError, ValueError):
                     pass
             family = item['origin_recipe_id'] or recipe_id
-            item['collections'] = [dict(r) for r in db.execute('''SELECT DISTINCT c.id,c.name,c.position FROM collections c JOIN members m ON m.collection_id=c.id
+            item['collections'] = [dict(r) for r in db.execute('''SELECT DISTINCT c.id,c.name,c.position,c.icon FROM collections c JOIN members m ON m.collection_id=c.id
                 JOIN recipes r ON r.id=m.recipe_id WHERE COALESCE(r.origin_recipe_id,r.id)=? ORDER BY c.position''', (family,))]
             item['versions'] = [dict(r) for r in db.execute('''SELECT r.id,r.name,r.servings,r.origin_recipe_id FROM recipes r
                 WHERE COALESCE(r.origin_recipe_id,r.id)=? AND EXISTS(SELECT 1 FROM members m WHERE m.recipe_id=r.id)

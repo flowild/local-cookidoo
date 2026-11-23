@@ -122,9 +122,11 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
       {'id': index + 1, 'name': name},
   ];
 
-  bool _inPantry(String name) => _pantry.values.any(
-    (item) => text(item['name']).toLowerCase() == name.toLowerCase(),
-  );
+  Json? _pantryItem(String name) => _pantry.values
+      .where((item) => text(item['name']).toLowerCase() == name.toLowerCase())
+      .firstOrNull;
+
+  bool _inPantry(String name) => _pantryItem(name) != null;
 
   Json _calendar(String day) {
     final monday = _monday(day);
@@ -224,6 +226,11 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
         for (final (index, item) in objects(recipe['ingredients_json']).indexed)
           '$index': _inPantry(text(item['name'])),
       },
+      'ingredient_icons': {
+        for (final (index, item) in objects(recipe['ingredients_json']).indexed)
+          if (_pantryItem(text(item['name']))?['icon'] case final String icon)
+            '$index': icon,
+      },
     };
   }
 
@@ -258,6 +265,18 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
     _ => 'Sonstiges',
   };
 
+  Json _shoppingAppearance(String name) {
+    final item = _pantryItem(name);
+    final category = _categories
+        .where((category) => category['id'] == item?['category_id'])
+        .firstOrNull;
+    return {
+      'category': category?['name'] ?? _shoppingCategory(name),
+      'category_icon': category?['icon'],
+      'icon': item?['icon'],
+    };
+  }
+
   Json _shoppingCart() => {
     'items': [
       for (final entry in _cart.values)
@@ -271,7 +290,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
                 for (final item in objects(entry['data']['ingredients']))
                   {
                     ...item,
-                    'category': _shoppingCategory(text(item['name'])),
+                    ..._shoppingAppearance(text(item['name'])),
                     'in_pantry': _inPantry(text(item['name'])),
                   },
               ],
@@ -282,7 +301,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
             ...entry,
             'data': {
               ...entry['data'] as Json,
-              'category': _shoppingCategory(text(entry['data']['name'])),
+              ..._shoppingAppearance(text(entry['data']['name'])),
             },
           },
     ],

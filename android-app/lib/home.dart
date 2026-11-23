@@ -14,6 +14,7 @@ import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
 import 'settings_view.dart';
+import 'symbol_field.dart';
 import 'week_view.dart';
 import 'telegram_service.dart';
 import 'connection.dart';
@@ -783,6 +784,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                             IngredientIcon(
                               text(item.row['name'] ?? item.row['text']),
                               category: item.category,
+                              selected: item.row['icon'],
                             ),
                             const SizedBox(width: AppSpacing.related),
                             Expanded(
@@ -886,15 +888,17 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                     ),
                     child: Semantics(
                       header: true,
-                      child: Text(
+                      child: SymbolLabel(
                         first.category,
+                        first.row['category_icon'],
                         style: theme.textTheme.titleSmall,
                       ),
                     ),
                   ),
                 if (group.length > 1)
-                  Text(
+                  SymbolLabel(
                     text(first.row['name'] ?? first.row['text']),
+                    first.row['icon'],
                     style: theme.textTheme.titleSmall,
                   ),
                 for (final item in group) shoppingRow(item, checked),

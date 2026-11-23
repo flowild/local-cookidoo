@@ -19,11 +19,16 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       String? opened;
+      final api = DebugRezeptgartenApi();
+      await api.write('PUT', '/api/local-collections/test-alltag', {
+        'name': 'Schnelle Alltagsküche',
+        'icon': '🥔',
+      });
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: WeekView(
-              api: DebugRezeptgartenApi(),
+              api: api,
               openRecipe: (recipe, _) async {
                 opened = recipe['id'] as String;
               },
@@ -41,6 +46,7 @@ void main() {
       }
 
       await tapVisible(find.text('Lokale Listen'));
+      expect(find.text('🥔'), findsOneWidget);
       await tapVisible(find.text('Schnelle Alltagsküche'));
       final pill = find.widgetWithText(
         CompactRecipeTile,

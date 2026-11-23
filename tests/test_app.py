@@ -1265,12 +1265,22 @@ class AppTests(unittest.TestCase):
         database.save_snapshot(collections, recipes)
         self.assertEqual(self.client.get('/api/recipes/r1').json()['ingredient_availability'], {'0': False, '1': False})
         category = self.client.get('/api/pantry').json()['categories'][0]['id']
-        created = self.client.post('/api/pantry/items', json={'name':'salz', 'category_id':category, 'quantity':''}, headers=ORIGIN)
+        created = self.client.post('/api/pantry/items', json={'name':'salz', 'category_id':category, 'quantity':'', 'icon':'🌶️'}, headers=ORIGIN)
         self.assertEqual(created.status_code, 200)
-        self.assertEqual(self.client.get('/api/recipes/r1').json()['ingredient_availability'], {'0': False, '1': True})
-        self.assertEqual(self.client.get('/api/recipes/r2').json()['ingredient_availability'], {'0': True})
+        local = self.client.post('/api/local-collections', json={'name':'Meine Liste', 'icon':'🥔'}, headers=ORIGIN).json()
+        added = self.client.put(f"/api/local-collections/{local['id']}/recipes/r1", json={'present':True}, headers=ORIGIN)
+        self.assertEqual(added.status_code, 200)
+        first = self.client.get('/api/recipes/r1').json()
+        self.assertEqual(first['ingredient_availability'], {'0': False, '1': True})
+        self.assertEqual(first['ingredient_icons'], {'1': '🌶️'})
+        self.assertEqual(next(c for c in first['collections'] if c['id'] == local['id'])['icon'], '🥔')
+        second = self.client.get('/api/recipes/r2').json()
+        self.assertEqual(second['ingredient_availability'], {'0': True})
+        self.assertEqual(second['ingredient_icons'], {'0': '🌶️'})
         self.client.delete(f"/api/pantry/items/{created.json()['id']}", headers=ORIGIN)
-        self.assertFalse(self.client.get('/api/recipes/r1').json()['ingredient_availability']['1'])
+        refreshed = self.client.get('/api/recipes/r1').json()
+        self.assertFalse(refreshed['ingredient_availability']['1'])
+        self.assertEqual(refreshed['ingredient_icons'], {})
 
     def test_recipe_availability_matches_spice_variants_and_water(self):
         database = self.app.state.database

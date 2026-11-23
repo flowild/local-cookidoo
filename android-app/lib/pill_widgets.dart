@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'spacing.dart';
+import 'symbol_field.dart';
 
 /// Equal-width rows for the pairs of related actions shown on a page.
 class ActionPillGrid extends StatelessWidget {
@@ -63,10 +64,16 @@ class ActionPillGrid extends StatelessWidget {
 
 /// A read-only label that wraps at the available width.
 class InfoPill extends StatelessWidget {
-  const InfoPill(this.label, {super.key, this.highlighted = false});
+  const InfoPill(
+    this.label, {
+    super.key,
+    this.highlighted = false,
+    this.symbol,
+  });
 
   final String label;
   final bool highlighted;
+  final Object? symbol;
 
   @override
   Widget build(BuildContext context) {
@@ -82,8 +89,9 @@ class InfoPill extends StatelessWidget {
           horizontal: AppSpacing.related,
           vertical: AppSpacing.tight,
         ),
-        child: Text(
+        child: SymbolLabel(
           label,
+          symbol,
           style: theme.textTheme.labelMedium?.copyWith(
             color: highlighted ? colors.onPrimary : colors.onSecondaryContainer,
             fontWeight: highlighted ? FontWeight.w700 : null,

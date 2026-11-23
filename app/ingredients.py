@@ -83,6 +83,14 @@ def ingredient_group_key(name):
     return key
 
 
+def pantry_item_icons(items):
+    icons = {}
+    for item in items:
+        if item.get('icon'):
+            icons.setdefault(ingredient_group_key(item['name']), item['icon'])
+    return icons
+
+
 def ingredient_aliases(name):
     key = ingredient_group_key(name)
     return sorted(alias for alias, target in _ALIASES.items() if target == key and alias != key)

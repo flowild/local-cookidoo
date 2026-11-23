@@ -5,6 +5,7 @@ import 'calendar_badge.dart';
 import 'expandable_list_card.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
+import 'symbol_field.dart';
 import 'telegram_service.dart';
 
 const _placeholderNames = {
@@ -307,8 +308,9 @@ class _TelegramViewState extends State<TelegramView> {
                   text(row['category']) != text(rows[index - 1]['category']))
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.related),
-                  child: Text(
+                  child: SymbolLabel(
                     text(row['category'], 'Sonstiges'),
+                    row['category_icon'],
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
@@ -326,6 +328,7 @@ class _TelegramViewState extends State<TelegramView> {
                     IngredientIcon(
                       text(row['icon_name']),
                       category: text(row['category']),
+                      selected: row['icon'],
                     ),
                     const SizedBox(width: AppSpacing.related),
                     Expanded(child: Text(text(row['text']))),
