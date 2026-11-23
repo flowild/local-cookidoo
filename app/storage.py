@@ -91,6 +91,9 @@ class Database:
             pantry_columns = {row['name'] for row in db.execute('PRAGMA table_info(pantry_items)')}
             if 'ingredient_id' not in pantry_columns:
                 db.execute('ALTER TABLE pantry_items ADD COLUMN ingredient_id INTEGER REFERENCES ingredient_catalog(id)')
+            for table in ('pantry_categories', 'pantry_items', 'collections'):
+                if 'icon' not in {row['name'] for row in db.execute(f'PRAGMA table_info({table})')}:
+                    db.execute(f'ALTER TABLE {table} ADD COLUMN icon TEXT')
             self.rebuild_ingredients(db)
             for item in db.execute('SELECT id,name FROM pantry_items WHERE ingredient_id IS NULL').fetchall():
                 db.execute('UPDATE pantry_items SET ingredient_id=? WHERE id=?', (self.catalog_id(db, item['name']), item['id']))
@@ -120,8 +123,8 @@ class Database:
 
     def pantry(self):
         with self.connect() as db:
-            categories = [dict(row) for row in db.execute('SELECT id,name FROM pantry_categories ORDER BY position,id')]
-            items = [dict(row) for row in db.execute('SELECT id,category_id,name,quantity,ingredient_id FROM pantry_items ORDER BY casefold(name),id')]
+            categories = [dict(row) for row in db.execute('SELECT id,name,icon FROM pantry_categories ORDER BY position,id')]
+            items = [dict(row) for row in db.execute('SELECT id,category_id,name,quantity,ingredient_id,icon FROM pantry_items ORDER BY casefold(name),id')]
         return {'categories': categories, 'items': items}
 
     def week_placeholder_shelf(self, owner, week):
@@ -244,12 +247,22 @@ class Database:
                     results.append({'id':row['id'], 'name':group['name'], 'recipe_count':len(group['recipes'])})
             return results
 
-    def add_pantry_category(self, name):
+    def add_pantry_category(self, name, icon=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT 1 FROM pantry_categories WHERE casefold(name)=casefold(?)', (name,)).fetchone():
                 return None
-            return db.execute('INSERT INTO pantry_categories(name,position) VALUES(?,COALESCE((SELECT MAX(position)+1 FROM pantry_categories),0))', (name,)).lastrowid
+            return db.execute('INSERT INTO pantry_categories(name,icon,position) VALUES(?,?,COALESCE((SELECT MAX(position)+1 FROM pantry_categories),0))', (name, icon)).lastrowid
+
+    def update_pantry_category(self, category_id, name, icon):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM pantry_categories WHERE id=?', (category_id,)).fetchone():
+                return False
+            if db.execute('SELECT 1 FROM pantry_categories WHERE casefold(name)=casefold(?) AND id!=?', (name, category_id)).fetchone():
+                raise ValueError('Diese Kategorie gibt es bereits.')
+            db.execute('UPDATE pantry_categories SET name=?,icon=? WHERE id=?', (name, icon, category_id))
+            return True
 
     def delete_pantry_category(self, category_id):
         with self.connect() as db:
@@ -269,7 +282,7 @@ class Database:
             db.executemany('UPDATE pantry_categories SET position=? WHERE id=?', [(position, category_id) for position, category_id in enumerate(category_ids)])
         return True
 
-    def save_pantry_item(self, category_id, name, quantity, item_id=None, ingredient_id=None):
+    def save_pantry_item(self, category_id, name, quantity, item_id=None, ingredient_id=None, icon=...):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if not db.execute('SELECT 1 FROM pantry_categories WHERE id=?', (category_id,)).fetchone():
@@ -282,9 +295,11 @@ class Database:
                     raise ValueError('Bitte wähle die Zutat erneut aus den Vorschlägen aus.')
             else:
                 ingredient_id = self.catalog_id(db, name)
+            icon_value = None if icon is ... else icon
             if item_id is None:
-                return db.execute('INSERT INTO pantry_items(category_id,name,quantity,ingredient_id) VALUES(?,?,?,?)', (category_id, name, quantity, ingredient_id)).lastrowid
-            result = db.execute('UPDATE pantry_items SET category_id=?,name=?,quantity=?,ingredient_id=? WHERE id=?', (category_id, name, quantity, ingredient_id, item_id))
+                return db.execute('INSERT INTO pantry_items(category_id,name,quantity,ingredient_id,icon) VALUES(?,?,?,?,?)', (category_id, name, quantity, ingredient_id, icon_value)).lastrowid
+            result = db.execute('UPDATE pantry_items SET category_id=?,name=?,quantity=?,ingredient_id=?,icon=CASE WHEN ? THEN ? ELSE icon END WHERE id=?',
+                                (category_id, name, quantity, ingredient_id, icon is not ..., icon_value, item_id))
             return item_id if result.rowcount else None
 
     def delete_pantry_item(self, item_id):
@@ -495,11 +510,15 @@ class Database:
         with self.connect() as db:
             db.execute('UPDATE recipes SET tips_json=NULL WHERE id=?', (recipe_id,))
 
-    def create_local_collection(self, name):
+    def create_local_collection(self, name, icon=None):
         identifier = 'local:' + uuid.uuid4().hex
         with self.connect() as db:
-            db.execute("INSERT INTO collections(id,source_id,kind,name,description,position) VALUES(?,?,'local',?,'',COALESCE((SELECT MAX(position)+1 FROM collections),0))", (identifier, identifier, name))
+            db.execute("INSERT INTO collections(id,source_id,kind,name,description,icon,position) VALUES(?,?,'local',?,'',?,COALESCE((SELECT MAX(position)+1 FROM collections),0))", (identifier, identifier, name, icon))
         return identifier
+
+    def update_local_collection(self, collection_id, name, icon):
+        with self.connect() as db:
+            return db.execute("UPDATE collections SET name=?,icon=? WHERE id=? AND kind='local'", (name, icon, collection_id)).rowcount == 1
 
     def delete_local_collection(self, collection_id):
         with self.connect() as db:

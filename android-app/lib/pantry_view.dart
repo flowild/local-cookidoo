@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'api.dart';
 import 'spacing.dart';
 import 'ingredient_icon.dart';
+import 'symbol_field.dart';
 import 'expandable_list_card.dart';
 
 class PantryView extends StatefulWidget {
@@ -105,16 +106,19 @@ class _PantryViewState extends State<PantryView> {
     bool newCategory = false,
     int? categoryId,
     Json? item,
+    Json? category,
   }) async {
     if (_writing || _loading) return;
-    if (!newCategory && _categories.isEmpty) return;
+    final categoryEditor = newCategory || category != null;
+    if (!categoryEditor && _categories.isEmpty) return;
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _PantryEditor(
         api: widget.api,
-        categories: newCategory ? null : _categories,
+        categories: categoryEditor ? null : _categories,
         categoryId: categoryId,
         item: item,
+        category: category,
       ),
     );
     if (saved == true && mounted) {
@@ -263,6 +267,10 @@ class _PantryViewState extends State<PantryView> {
     const iconWidth = 36.0;
     final id = category['id'] as int;
     final name = text(category['name']);
+    final symbol = category['icon'] as String?;
+    final categoryIcon = symbol == null
+        ? null
+        : Center(heightFactor: 1, child: ExcludeSemantics(child: Text(symbol)));
     return Padding(
       key: ValueKey(id),
       padding: const EdgeInsets.only(bottom: AppSpacing.item),
@@ -291,10 +299,10 @@ class _PantryViewState extends State<PantryView> {
                     enabled: enabled,
                     child: Semantics(
                       label: '$name verschieben',
-                      child: const Icon(Icons.drag_handle),
+                      child: categoryIcon ?? const Icon(Icons.drag_handle),
                     ),
                   )
-                : null,
+                : categoryIcon,
           ),
           action: PopupMenuButton<String>(
             enabled: enabled,
@@ -302,12 +310,15 @@ class _PantryViewState extends State<PantryView> {
             onSelected: (value) {
               if (value == 'add') {
                 unawaited(_edit(categoryId: id));
+              } else if (value == 'edit') {
+                unawaited(_edit(category: category));
               } else {
                 unawaited(_removeCategory(category));
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'add', child: Text('Zutat hinzufügen')),
+              PopupMenuItem(value: 'edit', child: Text('Kategorie bearbeiten')),
               PopupMenuItem(value: 'delete', child: Text('Kategorie löschen')),
             ],
           ),
@@ -326,7 +337,11 @@ class _PantryViewState extends State<PantryView> {
                     width: iconWidth,
                     child: Center(
                       heightFactor: 1,
-                      child: IngredientIcon(text(item['name']), category: name),
+                      child: item['icon'] is String
+                          ? ExcludeSemantics(
+                              child: Text(item['icon'] as String),
+                            )
+                          : IngredientIcon(text(item['name']), category: name),
                     ),
                   ),
                   title: Text(text(item['name'])),
@@ -409,19 +424,24 @@ class _PantryEditor extends StatefulWidget {
     this.categories,
     this.categoryId,
     this.item,
+    this.category,
   });
 
   final RezeptgartenApi api;
   final List<Json>? categories;
   final int? categoryId;
   final Json? item;
+  final Json? category;
 
   @override
   State<_PantryEditor> createState() => _PantryEditorState();
 }
 
 class _PantryEditorState extends State<_PantryEditor> {
-  late final _name = TextEditingController(text: text(widget.item?['name']));
+  late final _name = TextEditingController(
+    text: text((widget.item ?? widget.category)?['name']),
+  );
+  late String? _symbol = (widget.item ?? widget.category)?['icon'] as String?;
   late final _quantity = TextEditingController(
     text: text(widget.item?['quantity']),
   );
@@ -497,9 +517,12 @@ class _PantryEditorState extends State<_PantryEditor> {
     final name = _name.text.trim();
     try {
       if (_newCategory) {
-        await widget.api.write('POST', '/api/pantry/categories', {
-          'name': name,
-        });
+        final id = widget.category?['id'];
+        await widget.api.write(
+          id == null ? 'POST' : 'PUT',
+          id == null ? '/api/pantry/categories' : '/api/pantry/categories/$id',
+          {'name': name, 'icon': _symbol},
+        );
       } else {
         final id = widget.item?['id'];
         final body = {
@@ -507,6 +530,7 @@ class _PantryEditorState extends State<_PantryEditor> {
           'quantity': _quantity.text.trim(),
           'category_id': _categoryId,
           'ingredient_id': _ingredientId,
+          'icon': _symbol,
         };
         await widget.api.write(
           id == null ? 'POST' : 'PUT',
@@ -542,7 +566,9 @@ class _PantryEditorState extends State<_PantryEditor> {
       scrollable: true,
       title: Text(
         _newCategory
-            ? 'Neue Kategorie'
+            ? (widget.category == null
+                  ? 'Neue Kategorie'
+                  : 'Kategorie bearbeiten')
             : widget.item == null
             ? 'Zutat hinzufügen'
             : 'Zutat bearbeiten',
@@ -565,6 +591,12 @@ class _PantryEditorState extends State<_PantryEditor> {
               validator: _validateName,
               onChanged: _newCategory ? null : _search,
               onFieldSubmitted: _newCategory ? (_) => _save() : null,
+            ),
+            SymbolField(
+              value: _symbol,
+              onChanged: _saving
+                  ? null
+                  : (symbol) => setState(() => _symbol = symbol),
             ),
             if (!_newCategory) ...[
               if (_suggestions.isNotEmpty)

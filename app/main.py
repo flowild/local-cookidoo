@@ -44,8 +44,13 @@ class Settings(BaseModel):
     sync_hours: int
 
 
+Symbol = Literal['🍎', '🥕', '🌿', '🧂', '🥩', '🐟', '🥛', '🥚', '🍞', '🍚', '🍝', '🥫',
+                 '🧁', '🍲', '🥗', '☕', '🧊', '🛒', '📚', '⭐', '❤️', '🍽️', '🧺', '🍋']
+
+
 class LocalCollection(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    icon: Symbol | None = None
 
 
 class Membership(BaseModel):
@@ -54,6 +59,7 @@ class Membership(BaseModel):
 
 class PantryCategory(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+    icon: Symbol | None = None
 
 
 class PantryOrder(BaseModel):
@@ -65,6 +71,7 @@ class PantryItem(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     quantity: str = Field(default='', max_length=80)
     ingredient_id: int | None = Field(default=None, gt=0)
+    icon: Symbol | None = None
 
 
 class CalendarMove(BaseModel):
@@ -628,7 +635,16 @@ def create_app(directory=None, secure_cookies=None):
         name = payload.name.strip()
         if not name:
             raise HTTPException(400, 'Bitte gib einen Namen für die Liste ein.')
-        return {'id': database.create_local_collection(name)}
+        return {'id': database.create_local_collection(name, payload.icon)}
+
+    @app.put('/api/local-collections/{collection_id}')
+    def update_local_collection(collection_id: str, payload: LocalCollection):
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, 'Bitte gib einen Namen für die Liste ein.')
+        if not database.update_local_collection(collection_id, name, payload.icon):
+            raise HTTPException(404, 'Diese lokale Rezeptliste wurde nicht gefunden.')
+        return {'id': collection_id}
 
     @app.delete('/api/local-collections/{collection_id}')
     def delete_local_collection(collection_id: str):
@@ -665,7 +681,7 @@ def create_app(directory=None, secure_cookies=None):
         name = payload.name.strip()
         if not name:
             raise HTTPException(400, 'Bitte gib einen Kategorienamen ein.')
-        identifier = database.add_pantry_category(name)
+        identifier = database.add_pantry_category(name, payload.icon)
         if identifier is None:
             raise HTTPException(409, 'Diese Kategorie gibt es bereits.')
         return {'id': identifier}
@@ -676,12 +692,26 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(409, 'Die Kategorien haben sich geändert. Bitte lade den Vorrat neu.')
         return {'ok': True}
 
+    @app.put('/api/pantry/categories/{category_id}')
+    def update_pantry_category(category_id: int, payload: PantryCategory):
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, 'Bitte gib einen Kategorienamen ein.')
+        try:
+            updated = database.update_pantry_category(category_id, name, payload.icon)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        if not updated:
+            raise HTTPException(404, 'Diese Vorratskategorie wurde nicht gefunden.')
+        return {'id': category_id}
+
     def save_pantry(payload: PantryItem, item_id=None):
         name = payload.name.strip()
         if not name:
             raise HTTPException(400, 'Bitte gib einen Zutatennamen ein.')
         try:
-            identifier = database.save_pantry_item(payload.category_id, name, payload.quantity.strip(), item_id, payload.ingredient_id)
+            icon = payload.icon if 'icon' in payload.model_fields_set else ...
+            identifier = database.save_pantry_item(payload.category_id, name, payload.quantity.strip(), item_id, payload.ingredient_id, icon)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         if identifier is None:

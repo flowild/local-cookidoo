@@ -60,6 +60,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Der Cookidoo-Transfer steht als Symbol mit Tooltip neben dem Wagentitel.
   Rezepte erscheinen mit derselben runden Vorschau wie in den Wochenlisten.
   Im Vorrat Zutaten durch Antippen bearbeiten und Kategorieaktionen bündeln.
+  Zutaten, Kategorien und lokale Listen verwenden dasselbe Symbolfeld beim
+  Anlegen und Bearbeiten. Bei lokalen Listen steht der Editor in der Verwaltung.
   Kategorie- und Zutatenzeilen verwenden eine feste Symbolspalte und eine
   gemeinsame linke Textkante. Menüs und Aufklappsymbole stehen rechts.
 - Beim Bestätigen von Einkaufs-Häkchen die Höhe vor den vorhandenen Einträgen

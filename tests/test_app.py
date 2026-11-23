@@ -61,6 +61,30 @@ class AppTests(unittest.TestCase):
         self.client.__exit__(None, None, None)
         self.tmp.cleanup()
 
+    def test_icons_can_be_created_changed_and_reset(self):
+        def write(method, path, body, status=200):
+            response = self.client.request(method, path, json=body, headers=ORIGIN)
+            self.assertEqual(response.status_code, status, response.text)
+            return response.json()
+
+        category = write('POST', '/api/pantry/categories', {'name': 'Kühlfach', 'icon': '🧊'})['id']
+        ingredient = {'category_id': category, 'name': 'Zitrone', 'icon': '🍋'}
+        item = write('POST', '/api/pantry/items', ingredient)['id']
+        collection = write('POST', '/api/local-collections', {'name': 'Sommer', 'icon': '🥗'})['id']
+        category_path = f'/api/pantry/categories/{category}'
+        item_path = f'/api/pantry/items/{item}'
+        list_path = f'/api/local-collections/{collection}'
+        write('PUT', category_path, {'name': 'Kühlfach', 'icon': '🥛'})
+        write('PUT', item_path, {'category_id': category, 'name': 'Zitrone', 'quantity': '2'})
+        write('PUT', list_path, {'name': 'Sommer', 'icon': '⭐'})
+        write('PUT', item_path, {**ingredient, 'icon': 'unbekannt'}, 422)
+        data = self.client.get('/api/pantry').json()
+        self.assertEqual(next(c for c in data['categories'] if c['id'] == category)['icon'], '🥛')
+        self.assertEqual(next(i for i in data['items'] if i['id'] == item)['icon'], '🍋')
+        self.assertEqual(next(c for c in self.client.get('/api/collections').json()['items'] if c['id'] == collection)['icon'], '⭐')
+        write('PUT', item_path, {**ingredient, 'icon': None})
+        self.assertIsNone(self.client.get('/api/pantry').json()['items'][0]['icon'])
+
     def test_collections_link_to_cookidoo_in_the_configured_region(self):
         database = self.app.state.sync.database
         collections, recipes = snapshot()

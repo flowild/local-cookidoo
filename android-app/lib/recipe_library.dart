@@ -10,6 +10,7 @@ import 'pill_widgets.dart';
 import 'expandable_list_card.dart';
 import 'spacing.dart';
 import 'recipe_card.dart';
+import 'symbol_field.dart';
 
 typedef OpenRecipe = Future<void> Function(Json recipe);
 
@@ -75,6 +76,7 @@ class _RecipeBrowserState extends State<RecipeBrowser>
   _RecipeLoad _retry = _RecipeLoad.first;
   String? _error;
 
+  late Json? _collectionDetails = widget.collection;
   String? get _collection => widget.collection?['id'] as String?;
   bool get _local => widget.collection?['kind'] == 'local';
 
@@ -251,7 +253,7 @@ class _RecipeBrowserState extends State<RecipeBrowser>
       builder: (dialog) => AlertDialog(
         title: const Text('Liste löschen?'),
         content: Text(
-          '„${widget.collection!['name']}“ und ihre Zuordnungen werden gelöscht. Die Rezepte bleiben erhalten.',
+          '„${_collectionDetails!['name']}“ und ihre Zuordnungen werden gelöscht. Die Rezepte bleiben erhalten.',
         ),
         actions: [
           TextButton(
@@ -325,6 +327,29 @@ class _RecipeBrowserState extends State<RecipeBrowser>
     await _fetch();
   }
 
+  Future<void> _editCollection() async {
+    final details = await showDialog<Json>(
+      context: context,
+      builder: (_) => _CollectionNameDialog(collection: _collectionDetails),
+    );
+    if (details == null || !mounted || _saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.api.write(
+        'PUT',
+        '/api/local-collections/${Uri.encodeComponent(_collection!)}',
+        details,
+      );
+      if (!mounted) return;
+      setState(() => _collectionDetails = {..._collectionDetails!, ...details});
+      widget.onCollectionChanged?.call();
+    } on Exception catch (error) {
+      if (mounted) _showError(context, error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _searchInput() => TextField(
     controller: _searchField,
     enabled: !_saving,
@@ -359,7 +384,7 @@ class _RecipeBrowserState extends State<RecipeBrowser>
     spacing: AppSpacing.item,
     children: [
       Text(
-        text(widget.collection?['name'], 'Alle Rezepte'),
+        text(_collectionDetails?['name'], 'Alle Rezepte'),
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       if (_collection == null)
@@ -446,6 +471,11 @@ class _RecipeBrowserState extends State<RecipeBrowser>
       appBar: AppBar(
         title: const Text('Rezeptlisten'),
         actions: [
+          IconButton(
+            tooltip: 'Name und Symbol bearbeiten',
+            onPressed: _saving ? null : _editCollection,
+            icon: const Icon(Icons.edit_outlined),
+          ),
           IconButton(
             tooltip: 'Liste löschen',
             onPressed: _saving ? null : _removeCollection,
@@ -1042,14 +1072,14 @@ class _RecipeCollectionsState extends State<RecipeCollections>
 
   Future<void> _create() async {
     if (_creating) return;
-    final name = await showDialog<String>(
+    final details = await showDialog<Json>(
       context: context,
       builder: (_) => const _CollectionNameDialog(),
     );
-    if (name == null || !mounted || _creating) return;
+    if (details == null || !mounted || _creating) return;
     setState(() => _creating = true);
     try {
-      await widget.api.write('POST', '/api/local-collections', {'name': name});
+      await widget.api.write('POST', '/api/local-collections', details);
       if (mounted) {
         widget.onChanged?.call();
         await _reload();
@@ -1313,7 +1343,11 @@ class _CollectionPreviewState extends State<_CollectionPreview> {
   Widget build(BuildContext context) => ExpandableListCard(
     title: text(widget.list['name']),
     leading: _dragTitle(
-      Icon(widget.sorting ? Icons.drag_handle : Icons.list_alt),
+      widget.sorting
+          ? const Icon(Icons.drag_handle)
+          : widget.list['icon'] is String
+          ? ExcludeSemantics(child: Text(widget.list['icon'] as String))
+          : const Icon(Icons.list_alt),
     ),
     wrapTitle: _dragTitle,
     action: switch ((widget.onManage, widget.list['source_url'])) {
@@ -1366,29 +1400,45 @@ class _CollectionPreviewState extends State<_CollectionPreview> {
 }
 
 class _CollectionNameDialog extends StatefulWidget {
-  const _CollectionNameDialog();
+  const _CollectionNameDialog({this.collection});
+  final Json? collection;
   @override
   State<_CollectionNameDialog> createState() => _CollectionNameDialogState();
 }
 
 class _CollectionNameDialogState extends State<_CollectionNameDialog> {
-  String name = '';
+  late String name = text(widget.collection?['name']);
+  late String? symbol = widget.collection?['icon'] as String?;
 
   void _submit() {
     if (name.isNotEmpty && name.runes.length <= 100) {
-      Navigator.pop(context, name);
+      Navigator.pop(context, <String, dynamic>{'name': name, 'icon': symbol});
     }
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Neue lokale Liste'),
-    content: TextField(
-      autofocus: true,
-      maxLength: 100,
-      onChanged: (value) => setState(() => name = value.trim()),
-      onSubmitted: (_) => _submit(),
-      decoration: const InputDecoration(labelText: 'Listenname'),
+    title: Text(
+      widget.collection == null ? 'Neue lokale Liste' : 'Liste bearbeiten',
+    ),
+    scrollable: true,
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      spacing: AppSpacing.item,
+      children: [
+        TextFormField(
+          initialValue: name,
+          autofocus: true,
+          maxLength: 100,
+          onChanged: (value) => setState(() => name = value.trim()),
+          onFieldSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(labelText: 'Listenname'),
+        ),
+        SymbolField(
+          value: symbol,
+          onChanged: (value) => setState(() => symbol = value),
+        ),
+      ],
     ),
     actions: [
       TextButton(
@@ -1397,7 +1447,7 @@ class _CollectionNameDialogState extends State<_CollectionNameDialog> {
       ),
       FilledButton(
         onPressed: name.isEmpty ? null : _submit,
-        child: const Text('Anlegen'),
+        child: Text(widget.collection == null ? 'Anlegen' : 'Speichern'),
       ),
     ],
   );

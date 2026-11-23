@@ -45,6 +45,8 @@ Die separate Warteschlange für Wochenänderungen bleibt aktiv.
   verglichen. Verfügbarkeit erscheint in den Rezeptdetails.
   Vorratskarten richten Sortiergriff, Aufklappsymbol, Kategorienamen, Anzahl
   und Aktionen im Kopf an festen Spalten aus.
+  Zutaten, Vorratskategorien und lokale Rezeptlisten bieten beim Anlegen und
+  Bearbeiten eine Symbolauswahl mit Standardoption. Die Symbole werden serverseitig gespeichert.
 - Die Übersicht zeigt ein täglich wechselndes Zufallsrezept mit manueller Neuauswahl.
   Dunkelmodus und Akzentfarbe gelten pro Browser. Meldungen müssen auch über geöffneten
   modalen Dialogen sichtbar sein.

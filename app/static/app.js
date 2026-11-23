@@ -202,12 +202,38 @@ function updateSync() {
 function emptyContent(title, description, action = false, compact = false) {
   return `<section class="empty-state ${compact ? 'compact' : ''}"><span class="empty-icon">${icon(action ? 'layers' : 'search')}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p>${action ? `<button class="button button-primary" data-action="${state.status?.connected ? 'sync' : 'connect'}">${icon(state.status?.connected ? 'sync' : 'link')}${state.status?.connected ? 'Rezeptlisten laden' : 'Cookidoo verbinden'}${icon('arrow')}</button>` : ''}</section>`;
 }
+const symbolOptions = [
+  ['🍎','Apfel'], ['🥕','Möhre'], ['🌿','Kräuter'], ['🧂','Gewürze'],
+  ['🥩','Fleisch'], ['🐟','Fisch'], ['🥛','Milch'], ['🥚','Ei'],
+  ['🍞','Brot'], ['🍚','Reis'], ['🍝','Pasta'], ['🥫','Konserve'],
+  ['🧁','Gebäck'], ['🍲','Topf'], ['🥗','Salat'], ['☕','Tasse'],
+  ['🧊','Tiefkühlfach'], ['🛒','Einkaufswagen'], ['📚','Bücher'], ['⭐','Stern'],
+  ['❤️','Herz'], ['🍽️','Geschirr'], ['🧺','Korb'], ['🍋','Zitrone'],
+];
+function fillSymbolField(id, value) {
+  const field = $(id);
+  field.innerHTML = '<option value="">Standard</option>' + symbolOptions.map(([symbol, name]) => `<option value="${symbol}">${symbol} ${name}</option>`).join('');
+  field.value = value || '';
+}
+function symbolPrefix(entry) {
+  return entry.icon ? `<span aria-hidden="true">${escapeHTML(entry.icon)}</span> ` : '';
+}
+function showListEditor(list = null) {
+  const form = $('#new-list-form');
+  form.dataset.editId = list?.id || '';
+  $('#new-list-title').textContent = list ? 'Liste bearbeiten' : 'Neue Rezeptliste';
+  $('#new-list-name').value = list?.name || '';
+  fillSymbolField('#new-list-icon', list?.icon);
+  form.querySelector('button[type="submit"]').textContent = list ? 'Speichern' : 'Liste erstellen';
+  errorMessage($('#new-list-error'), '');
+  $('#new-list-dialog').showModal();
+}
 function collectionCard(collection) {
   const images = collection.images || [];
   let mosaic = images.map(file => photo(file)).join('');
   if (images.length === 2) mosaic += `<span class="image-placeholder">${icon('leaf')}</span>`;
   if (!images.length) mosaic = `<span class="image-placeholder">${icon('layers')}</span>`;
-  return `<a class="collection-card" href="#liste/${encodeURIComponent(collection.id)}"><div class="collection-mosaic ${images.length ? '' : 'no-images'}">${mosaic}</div><div class="collection-info"><div><h3>${escapeHTML(collection.name)}</h3><p>${collection.recipe_count} ${collection.recipe_count === 1 ? 'Rezept' : 'Rezepte'} · ${collection.kind === 'local' ? 'Lokale Liste' : collection.kind === 'bookmarks' ? 'Merkliste' : collection.kind === 'creations' ? 'Eigene Kreationen' : collection.kind === 'managed' ? 'Kollektion' : 'Cookidoo-Liste'}</p></div><span class="collection-arrow">${icon('arrow')}</span></div></a>`;
+  return `<a class="collection-card" href="#liste/${encodeURIComponent(collection.id)}"><div class="collection-mosaic ${images.length ? '' : 'no-images'}">${mosaic}</div><div class="collection-info"><div><h3>${symbolPrefix(collection)}${escapeHTML(collection.name)}</h3><p>${collection.recipe_count} ${collection.recipe_count === 1 ? 'Rezept' : 'Rezepte'} · ${collection.kind === 'local' ? 'Lokale Liste' : collection.kind === 'bookmarks' ? 'Merkliste' : collection.kind === 'creations' ? 'Eigene Kreationen' : collection.kind === 'managed' ? 'Kollektion' : 'Cookidoo-Liste'}</p></div><span class="collection-arrow">${icon('arrow')}</span></div></a>`;
 }
 function collectionSections() {
   const local = state.collections.filter(c => c.kind === 'local');
@@ -675,7 +701,7 @@ async function renderRoute() {
   const title = state.query ? `Rezepte für „${state.query}“` : (collection?.name || 'Alle deine Rezepte');
   const description = collection ? collection.description || (collection.kind === 'local' ? 'Deine lokal gespeicherte Rezeptliste.' : 'Alle Rezepte aus dieser Cookidoo-Rezeptliste.') : 'Deine gespeicherten Rezepte. Einmal gesammelt, überall griffbereit.';
   const filterPanel = collection ? `<form id="recipe-filters" class="recipe-filters"><div class="recipe-ingredient-combobox"><label for="recipe-ingredient-filter">Zutaten (alle enthalten)</label><input id="recipe-ingredient-filter" name="ingredient" type="text" maxlength="2000" autocomplete="off" placeholder="Zutaten auswählen oder eingeben" value="${escapeHTML(state.filters.ingredient)}" role="combobox" aria-autocomplete="list" aria-controls="recipe-ingredient-options" aria-expanded="false"><div id="recipe-ingredient-options" class="ingredient-suggestions" role="listbox" aria-label="Zutaten in dieser Liste" hidden></div></div><label>Mindestens Portionen<select name="min_servings"><option value="">Beliebig</option>${filterOptions.servings.map(n => `<option value="${n}" ${String(n) === state.filters.minServings ? 'selected' : ''}>${n} Portionen</option>`).join('')}</select></label><div class="filter-actions"><button class="button button-primary" type="submit">Filtern</button><button class="button" type="button" data-action="reset-filters">Zurücksetzen</button></div><fieldset class="time-filter"><legend>Gesamtzeit höchstens</legend><div class="time-options">${[['','Beliebig'],['20','20 Min.'],['30','30 Min.'],['40','40 Min.'],['60','60 Min.']].map(([value, label]) => `<label class="time-choice"><input type="radio" name="max_minutes" value="${value}" ${state.filters.maxMinutes === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</div></fieldset></form>` : '';
-  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${escapeHTML(title)}</h1><p>${escapeHTML(description)}</p>${collection?.kind === 'local' ? `<button class="button list-delete" type="button" data-delete-local-list="${escapeHTML(collection.id)}">${icon('trash')}Liste löschen</button>` : ''}</div>${filterPanel}<div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option>${collection ? `<option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option>` : ''}</select></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
+  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${collection ? symbolPrefix(collection) : ''}${escapeHTML(title)}</h1><p>${escapeHTML(description)}</p>${collection?.kind === 'local' ? `<button class="button" type="button" data-edit-local-list="${escapeHTML(collection.id)}">${icon('edit')}Liste bearbeiten</button><button class="button list-delete" type="button" data-delete-local-list="${escapeHTML(collection.id)}">${icon('trash')}Liste löschen</button>` : ''}</div>${filterPanel}<div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option>${collection ? `<option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option>` : ''}</select></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
   if (collection?.kind === 'local') {
     content.insertAdjacentHTML('beforeend', `<section class="add-recipes"><div class="section-heading"><div><h2>Weitere Rezepte hinzufügen</h2><p>Diese Rezepte sind noch nicht in dieser Liste.</p></div></div><label class="candidate-search">Rezepte suchen<input id="candidate-search" type="search" maxlength="200" autocomplete="off" placeholder="Rezeptname eingeben" value="${escapeHTML(state.candidateQuery)}"></label><div id="candidate-list" class="candidate-list"></div><p id="candidate-empty" class="candidate-empty" hidden></p><button id="candidate-more" class="button load-more" hidden>Weitere Rezepte anzeigen${icon('arrow')}</button></section>`);
   }
@@ -747,8 +773,8 @@ function pantryIcon(name, category) {
 function pantryCategoryCard(group, query) {
   const collapsed = collapsedPantry.has(group.id);
   const disabled = query || pantryReordering ? 'disabled' : '';
-  const list = group.items.length ? `<ul class="pantry-items">${group.items.map(item => `<li><span class="pantry-item-icon" aria-hidden="true">${pantryIcon(item.name, group.name)}</span><div class="pantry-item-text"><strong>${escapeHTML(item.name)}</strong>${item.quantity ? `<span>${escapeHTML(item.quantity)}</span>` : ''}</div><button class="pantry-edit" data-pantry-edit="${item.id}" aria-label="${escapeHTML(item.name)} bearbeiten">Bearbeiten</button><button class="pantry-remove" data-pantry-remove="${item.id}" aria-label="${escapeHTML(item.name)} entfernen">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="pantry-empty">Noch keine Zutaten eingetragen.</p>';
-  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
+  const list = group.items.length ? `<ul class="pantry-items">${group.items.map(item => `<li><span class="pantry-item-icon" aria-hidden="true">${escapeHTML(item.icon || pantryIcon(item.name, group.name))}</span><div class="pantry-item-text"><strong>${escapeHTML(item.name)}</strong>${item.quantity ? `<span>${escapeHTML(item.quantity)}</span>` : ''}</div><button class="pantry-edit" data-pantry-edit="${item.id}" aria-label="${escapeHTML(item.name)} bearbeiten">Bearbeiten</button><button class="pantry-remove" data-pantry-remove="${item.id}" aria-label="${escapeHTML(item.name)} entfernen">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="pantry-empty">Noch keine Zutaten eingetragen.</p>';
+  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${symbolPrefix(group)}${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-edit" type="button" data-pantry-edit-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} bearbeiten" title="Kategorie bearbeiten">${icon('edit')}</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
 }
 function renderPantry() {
   if (state.view !== 'vorrat') return;
@@ -768,9 +794,20 @@ function showPantryDialog(item = null, categoryId = null) {
   selectedIngredient = item?.ingredient_id ?? null;
   closeSuggestions();
   $('#pantry-quantity').value = item?.quantity || '';
+  fillSymbolField('#pantry-icon', item?.icon);
   $('#pantry-category').innerHTML = state.pantry.categories.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
   if (item || categoryId) $('#pantry-category').value = String(item?.category_id || categoryId);
   errorMessage($('#pantry-error'), ''); $('#pantry-dialog').showModal(); $('#pantry-name').focus();
+}
+function showCategoryEditor(category = null) {
+  const form = $('#pantry-category-form');
+  form.dataset.editId = category?.id || '';
+  $('#pantry-category-title').textContent = category ? 'Kategorie bearbeiten' : 'Neue Kategorie';
+  $('#pantry-category-name').value = category?.name || '';
+  fillSymbolField('#pantry-category-icon', category?.icon);
+  form.querySelector('button[type="submit"]').textContent = category ? 'Speichern' : 'Kategorie erstellen';
+  errorMessage($('#pantry-category-error'), '');
+  $('#pantry-category-dialog').showModal();
 }
 function closeSuggestions() {
   clearTimeout(suggestionTimer); suggestionRequest++;
@@ -1379,6 +1416,8 @@ document.addEventListener('click', async event => {
   const weekAdd = event.target.closest('[data-week-add]');
   const weekListMore = event.target.closest('[data-week-list-more]');
   const deleteLocalList = event.target.closest('[data-delete-local-list]');
+  const editLocalList = event.target.closest('[data-edit-local-list]');
+  const editPantryCategory = event.target.closest('[data-pantry-edit-category]');
   const deletePantryCategory = event.target.closest('[data-pantry-delete-category]');
   const pantryAdd = event.target.closest('[data-pantry-add-category]');
   const pantryEdit = event.target.closest('[data-pantry-edit]');
@@ -1386,6 +1425,16 @@ document.addEventListener('click', async event => {
   const pantryToggle = event.target.closest('[data-pantry-toggle]');
   const action = event.target.closest('[data-action]');
   try {
+    if (editLocalList) {
+      const list = state.collections.find(item => item.id === editLocalList.dataset.editLocalList && item.kind === 'local');
+      if (list) showListEditor(list);
+      return;
+    }
+    if (editPantryCategory) {
+      const category = state.pantry.categories.find(item => item.id === Number(editPantryCategory.dataset.pantryEditCategory));
+      if (category) showCategoryEditor(category);
+      return;
+    }
     if (deleteLocalList) {
       const list = state.collections.find(item => item.id === deleteLocalList.dataset.deleteLocalList && item.kind === 'local');
       if (list && confirm(`Lokale Liste „${list.name}“ löschen? Die Zuordnungen zu dieser Liste werden entfernt. Rezepte, die nur hier gespeichert sind, erscheinen danach nicht mehr in der Sammlung.`)) {
@@ -1526,8 +1575,8 @@ document.addEventListener('click', async event => {
         }
         case 'reset-filters': state.filters = {ingredient:'',minServings:'',maxMinutes:''}; await renderRoute(); break;
         case 'pantry-add': showPantryDialog(); break;
-        case 'pantry-category': $('#pantry-category-form').reset(); errorMessage($('#pantry-category-error'), ''); $('#pantry-category-dialog').showModal(); $('#pantry-category-name').focus(); break;
-        case 'new-list': $('#new-list-form').reset(); errorMessage($('#new-list-error'), ''); $('#new-list-dialog').showModal(); $('#new-list-name').focus(); break;
+        case 'pantry-category': showCategoryEditor(); break;
+        case 'new-list': showListEditor(); break;
         case 'connect': errorMessage($('#connect-error'), ''); $('#cookidoo-email').value = state.status?.account?.email || ''; $('#connect-dialog').showModal(); break;
         case 'sync': await startSync(); break;
         case 'install': await install(); break;
@@ -1550,10 +1599,13 @@ $('#new-list-form').addEventListener('submit', async event => {
   const button = event.currentTarget.querySelector('button[type="submit"]');
   button.disabled = true; errorMessage($('#new-list-error'), '');
   try {
-    await post('/api/local-collections', {name: $('#new-list-name').value});
+    const id = event.currentTarget.dataset.editId;
+    const body = {name:$('#new-list-name').value, icon:$('#new-list-icon').value || null};
+    if (id) await api(`/api/local-collections/${encodeURIComponent(id)}`, {method:'PUT',body:JSON.stringify(body)});
+    else await post('/api/local-collections', body);
     $('#new-list-dialog').close();
     await loadLibrary();
-    toast('Deine lokale Liste wurde erstellt.');
+    toast(id ? 'Liste gespeichert.' : 'Deine lokale Liste wurde erstellt.');
   } catch (error) { errorMessage($('#new-list-error'), error.message); }
   finally { button.disabled = false; }
 });
@@ -1561,7 +1613,7 @@ $('#pantry-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]'); button.disabled = true; errorMessage($('#pantry-error'), '');
   try {
-    const data = {name:$('#pantry-name').value, category_id:Number($('#pantry-category').value), quantity:$('#pantry-quantity').value, ingredient_id:selectedIngredient};
+    const data = {name:$('#pantry-name').value, category_id:Number($('#pantry-category').value), quantity:$('#pantry-quantity').value, ingredient_id:selectedIngredient, icon:$('#pantry-icon').value || null};
     if (state.pantryEdit !== null) await api(`/api/pantry/items/${state.pantryEdit}`, {method:'PUT',body:JSON.stringify(data)});
     else await post('/api/pantry/items', data);
     $('#pantry-dialog').close(); await refreshPantry(); toast('Vorrat gespeichert.');
@@ -1571,7 +1623,15 @@ $('#pantry-form').addEventListener('submit', async event => {
 $('#pantry-category-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]'); button.disabled = true; errorMessage($('#pantry-category-error'), '');
-  try { await post('/api/pantry/categories', {name:$('#pantry-category-name').value}); $('#pantry-category-dialog').close(); await refreshPantry(); toast('Kategorie erstellt.'); }
+  try {
+    const id = event.currentTarget.dataset.editId;
+    const body = {name:$('#pantry-category-name').value, icon:$('#pantry-category-icon').value || null};
+    if (id) await api(`/api/pantry/categories/${id}`, {method:'PUT',body:JSON.stringify(body)});
+    else await post('/api/pantry/categories', body);
+    $('#pantry-category-dialog').close();
+    await refreshPantry();
+    toast(id ? 'Kategorie gespeichert.' : 'Kategorie erstellt.');
+  }
   catch (error) { errorMessage($('#pantry-category-error'), error.message); }
   finally { button.disabled = false; }
 });

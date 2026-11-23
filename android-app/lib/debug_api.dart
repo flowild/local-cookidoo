@@ -35,6 +35,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
     'test-alltag': {'linsensuppe', 'apfelporridge'},
   };
   final _listNames = {'test-alltag': 'Schnelle Alltagsküche'};
+  final _listIcons = <String, Object?>{};
   final _notes = {'linsensuppe': 'Beim nächsten Mal mit Petersilie servieren.'};
   final _categories = <Json>[
     {'id': 1, 'name': 'Obst & Gemüse'},
@@ -105,6 +106,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
       {
         'id': entry.key,
         'name': _listNames[entry.key],
+        'icon': _listIcons[entry.key],
         'kind': 'local',
         'recipe_count': entry.value.length,
       },
@@ -358,9 +360,14 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
         final id = 'test-${_nextId++}';
         _lists[id] = {};
         _listNames[id] = text(data['name']);
+        _listIcons[id] = data['icon'];
+      case ('PUT', ['api', 'local-collections', final id]):
+        _listNames[id] = text(data['name']);
+        _listIcons[id] = data['icon'];
       case ('DELETE', ['api', 'local-collections', final id]):
         _lists.remove(id);
         _listNames.remove(id);
+        _listIcons.remove(id);
       case (
         'PUT',
         ['api', 'local-collections', final id, 'recipes', final recipe],
@@ -422,7 +429,7 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
         }
         return {'message': 'Cookidoo-Übertragung simuliert.'};
       case ('POST', ['api', 'pantry', 'categories']):
-        _categories.add({'id': _nextId++, 'name': data['name']});
+        _categories.add({'id': _nextId++, ...data});
       case ('DELETE', ['api', 'pantry', 'categories', final id]):
         final category = int.parse(id);
         _categories.removeWhere((item) => item['id'] == category);
@@ -432,6 +439,11 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
         _categories.sort(
           (a, b) => ids.indexOf(a['id']).compareTo(ids.indexOf(b['id'])),
         );
+      case ('PUT', ['api', 'pantry', 'categories', final id]):
+        final category = _categories.firstWhere(
+          (item) => item['id'] == int.parse(id),
+        );
+        category.addAll(data);
       case ('POST', ['api', 'pantry', 'items']):
         final id = _nextId++;
         _pantry[id] = {...data, 'id': id};

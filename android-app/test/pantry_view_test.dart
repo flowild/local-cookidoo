@@ -77,10 +77,16 @@ void main() {
       await tester.tap(suggestion);
       await tester.enterText(field('Menge (optional)'), '250 g');
       await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('🍎  Apfel').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Speichern'));
       await tester.pumpAndSettle();
       expect(api.item?['ingredient_id'], 11);
       expect(find.text('250 g'), findsOneWidget);
+      expect(api.item?['icon'], '🍎');
+      expect(find.text('🍎'), findsOneWidget);
 
       await tester.tap(find.text('Reis'));
       await tester.pumpAndSettle();
@@ -111,6 +117,19 @@ void main() {
 
       await tester.tap(find.byTooltip('Aktionen für Vorräte'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Kategorie bearbeiten'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('🥕  Möhre').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Speichern'));
+      await tester.pumpAndSettle();
+      expect(api.categoryIcon, '🥕');
+      expect(find.text('🥕'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Aktionen für Vorräte'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kategorie löschen'));
       await tester.pumpAndSettle();
       expect(api.item, isNotNull);
@@ -133,6 +152,7 @@ class _PantryApi extends RezeptgartenApi {
   List<int> order = [1, 2];
   List<String> categoryNames = ['Vorräte', 'Gemüse'];
   List<Json> extraItems = [];
+  String? categoryIcon;
   Json? item;
 
   @override
@@ -141,7 +161,12 @@ class _PantryApi extends RezeptgartenApi {
     return switch (uri.path) {
       '/api/pantry' => {
         'categories': [
-          for (final id in order) {'id': id, 'name': categoryNames[id - 1]},
+          for (final id in order)
+            {
+              'id': id,
+              'name': categoryNames[id - 1],
+              'icon': id == 1 ? categoryIcon : null,
+            },
         ],
         'items': [...extraItems, if (item != null) item],
       },
@@ -161,6 +186,8 @@ class _PantryApi extends RezeptgartenApi {
         item = {'id': 1, ...body!};
       case ('PUT', '/api/pantry/categories/order'):
         order = (body!['category_ids'] as List).cast<int>().toList();
+      case ('PUT', '/api/pantry/categories/1'):
+        categoryIcon = body!['icon'] as String?;
       case ('DELETE', '/api/pantry/categories/1'):
         order.remove(1);
         item = null;

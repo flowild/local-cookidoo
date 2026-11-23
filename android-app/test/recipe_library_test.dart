@@ -215,9 +215,15 @@ void main() {
       'Abendessen',
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('🍎  Apfel').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Anlegen'));
     await tester.pumpAndSettle();
     expect(api.name, 'Abendessen');
+    expect(api.symbol, '🍎');
+    expect(find.text('🍎'), findsOneWidget);
 
     await tester.tap(find.text('Abendessen'));
     await tester.pumpAndSettle();
@@ -233,6 +239,15 @@ void main() {
     expect(find.text('Liste öffnen'), findsNothing);
     await tester.tap(find.byTooltip('Liste verwalten'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Name und Symbol bearbeiten'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('🥕  Möhre').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    expect(api.symbol, '🥕');
     expect(find.text('Alle Rezepte'), findsOneWidget);
     expect(find.text('Gemüsesuppe'), findsOneWidget);
     expect(find.byTooltip('Reis zur Liste hinzufügen'), findsOneWidget);
@@ -467,6 +482,7 @@ class _LibraryApi extends RezeptgartenApi {
   _LibraryApi() : super(client: HttpClient());
   Map<String, List<String>> lastRecipeQuery = {};
   String? name;
+  String? symbol;
   bool present = false;
   bool moreLists = false;
   Future<void>? searchPending;
@@ -505,6 +521,7 @@ class _LibraryApi extends RezeptgartenApi {
               {
                 'id': 'local:meals',
                 'name': name,
+                'icon': symbol,
                 'kind': 'local',
                 'recipe_count': present ? 1 : 0,
               },
@@ -535,7 +552,9 @@ class _LibraryApi extends RezeptgartenApi {
   Future<dynamic> write(String method, String path, [Json? body]) async {
     switch ((method, path)) {
       case ('POST', '/api/local-collections'):
+      case ('PUT', '/api/local-collections/local%3Ameals'):
         name = body!['name'] as String;
+        symbol = body['icon'] as String?;
       case ('PUT', '/api/local-collections/local%3Ameals/recipes/r1'):
         present = body!['present'] == true;
       case ('DELETE', '/api/local-collections/local%3Ameals'):
