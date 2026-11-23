@@ -1411,21 +1411,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
               child: const Icon(Icons.shopping_cart_outlined),
             ),
           ),
-          if (syncPending || syncRunning)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.related),
-              child: Tooltip(
-                message: 'Synchronisierung läuft',
-                excludeFromSemantics: true,
-                child: SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    semanticsLabel: 'Synchronisierung läuft',
-                  ),
-                ),
-              ),
-            ),
           IconButton(
             tooltip: 'Einstellungen öffnen',
             onPressed: busy ? null : _settings,

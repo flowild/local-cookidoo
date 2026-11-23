@@ -507,13 +507,7 @@ void main() {
       ),
       ('Vorrat', 'Einkauf', -260.0, '/api/pantry', 'Trockenwaren'),
       ('Einkauf', 'Vorrat', 260.0, '/api/cart', 'Mein Einkaufswagen'),
-      (
-        'Übersicht',
-        'Listen',
-        260.0,
-        '/api/featured-recipe',
-        'Dein Rezeptmix',
-      ),
+      ('Übersicht', 'Listen', 260.0, '/api/featured-recipe', 'Dein Rezeptmix'),
     ]) {
       await tester.tap(find.text(target));
       await tester.pumpAndSettle();
@@ -534,13 +528,7 @@ void main() {
     }
   });
 
-  final syncProgress = find.byWidgetPredicate(
-    (widget) =>
-        widget is CircularProgressIndicator &&
-        widget.semanticsLabel == 'Synchronisierung läuft',
-  );
-
-  testWidgets('a late older status cannot hide a newly started sync', (
+  testWidgets('a late older status cannot end a newly started sync', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(412, 915);
@@ -557,10 +545,10 @@ void main() {
       'cart_recipe_count': 0,
     });
     await tester.pump();
-    expect(syncProgress, findsOneWidget);
+    expect(api.weekReads, 1);
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(syncProgress, findsNothing);
+    expect(api.weekReads, 2);
   });
 
   testWidgets('retries a failed sync status read until the sync completes', (
@@ -577,12 +565,12 @@ void main() {
     api.statusFailures = 1;
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(syncProgress, findsOneWidget);
+    expect(api.weekReads, 1);
     expect(find.textContaining('wird erneut geprüft'), findsOneWidget);
     api.keepRunning = false;
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(syncProgress, findsNothing);
+    expect(api.weekReads, 2);
   });
 
   testWidgets('starts a sync on opening and on pull to refresh', (
@@ -599,10 +587,10 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
     final appBar = find.byType(AppBar);
-    expect(
-      find.descendant(of: appBar, matching: find.byIcon(Icons.sync)),
-      findsNothing,
-    );
+    final cart = find.byTooltip('Einkaufswagen öffnen');
+    final settings = find.byTooltip('Einstellungen öffnen');
+    final cartPosition = tester.getCenter(cart);
+    final settingsPosition = tester.getCenter(settings);
     final content = tester.getRect(find.byType(RefreshIndicator).first);
     await tester.dragFrom(
       Offset(content.center.dx, content.top + 30),
@@ -611,6 +599,16 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(api.syncs, 2);
+    expect(find.byType(RefreshProgressIndicator), findsOneWidget);
+    expect(
+      find.descendant(
+        of: appBar,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+    expect(tester.getCenter(cart), cartPosition);
+    expect(tester.getCenter(settings), settingsPosition);
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
