@@ -648,7 +648,18 @@ void main() {
     );
     await tester.tap(find.text('Artikel hinzufügen'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '  Küchenrolle  ');
+    await tester.enterText(find.byType(TextField), 'küch');
+    await tester.pumpAndSettle();
+    final suggestion = find.widgetWithText(ActionChip, 'Küchenrolle');
+    expect(suggestion, findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Reis'), findsNothing);
+    await tester.tap(suggestion);
+    await tester.pumpAndSettle();
+    expect(api.cartItem, isNull);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'Küchenrolle',
+    );
     await tester.tap(find.text('Hinzufügen').hitTestable());
     await tester.pumpAndSettle();
     expect(api.cartItem, 'Küchenrolle');
@@ -801,6 +812,12 @@ class _TestApi extends RezeptgartenApi {
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async => switch (path) {
     '/api/status' => {'cart_recipe_count': addedDay == null ? 0 : 1},
+    '/api/pantry' => {
+      'items': [
+        {'name': 'Küchenrolle', 'icon': '🧻'},
+        {'name': 'Reis'},
+      ],
+    },
     '/api/calendar/week' => {
       'today': '2026-11-18',
       'days': [

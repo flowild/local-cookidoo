@@ -755,7 +755,42 @@ async function renderCart(request = state.request) {
   };
   const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
   const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(entry.data.name, entry.data.category, entry.data.icon)}</span><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3>Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form></section>`;
+  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3>Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" autocomplete="off" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form><div id="cart-item-suggestions" class="cart-item-suggestions" role="group" aria-label="Vorschläge aus dem Vorrat" hidden></div></section>`;
+  setupCartItemSuggestions();
+}
+
+function setupCartItemSuggestions() {
+  const input = $('#cart-item-name'), list = $('#cart-item-suggestions');
+  let items = [], loading;
+  function showSuggestions() {
+    const draft = input.value.trim(), query = draft.toLocaleLowerCase('de-DE');
+    const seen = new Set(), matches = [];
+    if (query) {
+      for (const item of items) {
+        const key = item.name.toLocaleLowerCase('de-DE');
+        if (item.name === draft || !key.includes(query) || seen.has(key)) continue;
+        seen.add(key); matches.push(item);
+        if (matches.length === 6) break;
+      }
+    }
+    list.innerHTML = matches.map((item, index) => `<button class="button" type="button" data-cart-suggestion="${index}"><span aria-hidden="true">${pantryIcon(item.name, '', item.icon)}</span>${escapeHTML(item.name)}</button>`).join('');
+    list.hidden = !matches.length;
+    list.onclick = event => {
+      const button = event.target.closest('[data-cart-suggestion]');
+      if (!button) return;
+      input.value = matches[Number(button.dataset.cartSuggestion)].name;
+      input.focus();
+      showSuggestions();
+    };
+  }
+  function loadSuggestions() {
+    loading ??= api('/api/pantry', {timeoutMs:3000}).then(result => {
+      items = result.items;
+      showSuggestions();
+    }).catch(() => { loading = null; });
+  }
+  input.addEventListener('focus', loadSuggestions);
+  input.addEventListener('input', showSuggestions);
 }
 
 function pantryIcon(name, category, selected) {

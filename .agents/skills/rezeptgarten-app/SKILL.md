@@ -95,6 +95,9 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 - „In den Einkaufswagen“ übernimmt Rezepte ab dem heutigen Berliner Datum aus der angezeigten Woche sowie die Wochenablage in den lokalen Einkaufswagen. Vorgemerkte Verschiebungen werden berücksichtigt; spätere Wochenänderungen ändern die Übernahme nicht automatisch.
 
 - „Mein Einkaufswagen“ liegt zwischen Woche und Vorrat. Rezeptaktionen und Wocheneinkauf speichern kontobezogene Schnappschüsse lokal; Zutaten können als vorhanden markiert und weitere Artikel hinzugefügt werden. Der Vorrat belegt die Markierung vor. Übertragung zu Cookidoo erfolgt nur auf ausdrücklichen Knopfdruck. Unsichere Ergebnisse bleiben sichtbar und werden erst nach ausdrücklicher Prüfung erneut freigegeben.
+- Beim Tippen eines Zusatzartikels zeigt der Einkaufswagen passende Namen und
+  Symbole aus dem Vorrat. Ein Antippen übernimmt den Namen in das Eingabefeld.
+  Das Feld nimmt auch freie Eingaben an.
 
 - Das Einkaufswagensymbol in der Kopfzeile öffnet den lokalen Wagen. Die kleine Zahl zeigt die kontobezogene Anzahl der enthaltenen Rezepte, auch nach Änderungen und einem Kontowechsel; Zusatzartikel werden nicht mitgezählt.
 

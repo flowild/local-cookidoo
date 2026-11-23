@@ -56,7 +56,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   bleiben kompakte Karten bei normaler Schrift gut lesbar.
 - Im Einkaufswagen offene Zutaten vor abgehakten Zutaten und Rezeptkarten
   anzeigen. Die ganze Zutatenzeile ist antippbar. Lange Listen schrittweise
-  beim Scrollen aufbauen. Zusatzartikel über das Eingabeblatt erfassen.
+  beim Scrollen aufbauen. Das Eingabeblatt für Zusatzartikel schlägt beim Tippen
+  passende Vorratsartikel mit Symbol vor und akzeptiert freie Eingaben.
   Der Cookidoo-Transfer steht als Symbol mit Tooltip neben dem Wagentitel.
   Rezepte erscheinen mit derselben runden Vorschau wie in den Wochenlisten.
   Im Vorrat Zutaten durch Antippen bearbeiten und Kategorieaktionen bündeln.

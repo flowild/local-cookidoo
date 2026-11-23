@@ -492,6 +492,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   Future<void> _addCartItem() async {
     if (busy) return;
     final session = _session;
+    Future<dynamic>? pantry;
     final name = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -533,6 +534,17 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                     ),
                     onSubmitted: (_) => submit(),
                   ),
+                  FutureBuilder<dynamic>(
+                    future: pantry ??= api.get(
+                      '/api/pantry',
+                      timeout: const Duration(seconds: 3),
+                    ),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data;
+                      if (data is! Json) return const SizedBox.shrink();
+                      return _cartItemSuggestions(objects(data['items']));
+                    },
+                  ),
                   FilledButton(
                     onPressed: submit,
                     child: const Text('Hinzufügen'),
@@ -549,6 +561,47 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       cartItem.clear();
     }
   }
+
+  Widget _cartItemSuggestions(List<Json> items) =>
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: cartItem,
+        builder: (context, value, _) {
+          final draft = value.text.trim();
+          if (draft.isEmpty) return const SizedBox.shrink();
+          final query = draft.toLowerCase();
+          final seen = <String>{};
+          final matches = items
+              .where((item) {
+                final name = text(item['name']);
+                final key = name.toLowerCase();
+                return key.contains(query) && name != draft && seen.add(key);
+              })
+              .take(6)
+              .toList();
+          if (matches.isEmpty) return const SizedBox.shrink();
+          return Wrap(
+            spacing: AppSpacing.related,
+            runSpacing: AppSpacing.tight,
+            children: [
+              for (final item in matches)
+                ActionChip(
+                  avatar: IngredientIcon(
+                    text(item['name']),
+                    selected: item['icon'],
+                  ),
+                  label: Text(text(item['name'])),
+                  onPressed: () {
+                    final name = text(item['name']);
+                    cartItem.value = TextEditingValue(
+                      text: name,
+                      selection: TextSelection.collapsed(offset: name.length),
+                    );
+                  },
+                ),
+            ],
+          );
+        },
+      );
 
   @override
   void dispose() {
