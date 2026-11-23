@@ -195,6 +195,9 @@ Schreibkennung werden abgefangen. Rezeptabfragen mit unverändertem Ergebnis geb
 innerhalb der Android-Sitzung nur eine Änderungskennung zurück. Telegram sieht
 Metadaten. Unvollständige oder nicht authentifizierte Antworten werden nicht
 angezeigt. Nachrichten, Tokens und Schlüssel nicht protokollieren.
+Android aktualisiert den Telegram-Lesestand des Rezeptgarten-Bot-Chats beim
+Empfang und nach erfolgreichem Versand. Telegram vergibt das zweite Häkchen
+einer ausgehenden Nachricht anhand des Lesestands der Empfängerseite.
 Der frühere Client-Bot und der Telegram-Zugriff der Web-App sind entfernt.
 Beim Start entfernt die Web-App alte lokale Bot-Zugangsdaten; der Server verwirft
 alte Bot-Kopplungen und behält bestehende Android-Benutzerkopplungen.

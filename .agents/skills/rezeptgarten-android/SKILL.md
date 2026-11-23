@@ -160,6 +160,10 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   die eingegebene eigene Telegram-API-ID und den API-Hash. Der Android-Keystore schützt Zugangsdaten und
   Geräteschlüssel, die TDLib-Sitzung liegt im Backup-ausgeschlossenen Bereich.
   Keine Zugangsdaten, Sitzungen oder Nachrichten in Git und Logs aufnehmen.
+  Im Rezeptgarten-Bot-Chat bei eingehenden und erfolgreich gesendeten
+  Nachrichten sofort TDLibs Lesemarkierung anfordern. Fehler dabei dürfen
+  den Rezeptabruf nicht unterbrechen. Den Absender eingehender Nachrichten
+  und die Chat-ID vor der Anforderung prüfen.
   Bei einer späteren Umstellung des Android-Ziel-SDK auf 37 oder höher die
   Laufzeitberechtigung `ACCESS_LOCAL_NETWORK` ergänzen und prüfen.
 - Build und Veröffentlichung aus der Projektwurzel mit

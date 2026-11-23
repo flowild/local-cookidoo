@@ -47,6 +47,36 @@ Future<Json> decodeTelegramSnapshot(
   return decoded;
 }
 
+@visibleForTesting
+Json? telegramReadCommand(Object? message, int? chatId, int? botId) {
+  if (message is! Json ||
+      chatId == null ||
+      botId == null ||
+      message['chat_id'] != chatId) {
+    return null;
+  }
+  final id = message['id'];
+  if (id is! int || id <= 0) return null;
+  if (message['is_outgoing'] == false) {
+    final sender = message['sender_id'];
+    if (sender is! Json ||
+        sender['@type'] != 'messageSenderUser' ||
+        sender['user_id'] != botId) {
+      return null;
+    }
+  } else if (message['is_outgoing'] != true ||
+      message['sending_state'] != null ||
+      message['scheduling_state'] != null) {
+    return null;
+  }
+  return {
+    '@type': 'viewMessages',
+    'chat_id': chatId,
+    'message_ids': [id],
+    'force_read': true,
+  };
+}
+
 class TelegramService extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   final _pending = <int, Completer<Map<String, dynamic>>>{};
@@ -155,9 +185,23 @@ class TelegramService extends ChangeNotifier {
         }
       } else if (data['@type'] == 'updateAuthorizationState') {
         _authorization(data['authorization_state'] as Map<String, dynamic>);
-      } else if (data['@type'] == 'updateNewMessage') {
-        _receiveMessage(data['message']);
+      } else if (data['@type'] == 'updateNewMessage' ||
+          data['@type'] == 'updateMessageSendSucceeded') {
+        final message = data['message'];
+        final read = telegramReadCommand(message, _botChat, _botId);
+        if (read != null) {
+          unawaited(_markRead(read));
+          if (message['is_outgoing'] == false) _receiveMessage(message);
+        }
       }
+    }
+  }
+
+  Future<void> _markRead(Json command) async {
+    try {
+      await request(command);
+    } catch (_) {
+      // Read acknowledgements are independent of the recipe request.
     }
   }
 
@@ -594,20 +638,9 @@ class TelegramService extends ChangeNotifier {
     }
   }
 
-  void _receiveMessage(Object? raw) {
-    if (raw is! Map ||
-        raw['chat_id'] != _botChat ||
-        raw['is_outgoing'] != false) {
-      return;
-    }
-    final sender = raw['sender_id'];
+  void _receiveMessage(Json raw) {
     final content = raw['content'];
-    if (sender is! Map ||
-        sender['@type'] != 'messageSenderUser' ||
-        sender['user_id'] != _botId ||
-        content is! Map) {
-      return;
-    }
+    if (content is! Json) return;
     if (content['@type'] == 'messageDocument') {
       final caption = content['caption'];
       final document = content['document'];
