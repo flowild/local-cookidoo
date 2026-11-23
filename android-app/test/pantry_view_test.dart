@@ -33,6 +33,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final add = tester.getRect(
+      find.ancestor(
+        of: find.text('Zutat hinzufügen'),
+        matching: find.bySubtype<FilledButton>(),
+      ),
+    );
+    final search = tester.getRect(find.byType(TextField));
+    expect(add.left, search.left);
+    expect(add.right, search.right);
     double left(String label) => tester.getTopLeft(find.text(label)).dx;
     expect(left('Vorräte'), left(api.categoryNames[1]));
     expect(left('Pfeffer'), left('Ingwer'));

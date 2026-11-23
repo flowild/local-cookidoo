@@ -151,3 +151,4 @@
 .week-touch-ready{outline:3px solid var(--green);outline-offset:2px}
 .week-swipe-selected,.week-swipe-selected body{touch-action:none;overscroll-behavior:none}
 @media(max-width:700px){.week-swipe-hint{display:block;margin:0 2px 10px;color:var(--muted);font-size:10px;line-height:1.5}}
+.pantry-toolbar>[data-action="pantry-add"]{flex-basis:100%;justify-content:center}

@@ -241,16 +241,13 @@ class _PantryViewState extends State<PantryView> {
                   ),
           ),
         ),
-      Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: FilledButton.icon(
-          onPressed: enabled
-              ? () => _edit(newCategory: _categories.isEmpty)
-              : null,
-          icon: const Icon(Icons.add),
-          label: Text(
-            _categories.isEmpty ? 'Neue Kategorie' : 'Zutat hinzufügen',
-          ),
+      FilledButton.icon(
+        onPressed: enabled
+            ? () => _edit(newCategory: _categories.isEmpty)
+            : null,
+        icon: const Icon(Icons.add),
+        label: Text(
+          _categories.isEmpty ? 'Neue Kategorie' : 'Zutat hinzufügen',
         ),
       ),
       if ((_loading && !_loaded) || _writing) const LinearProgressIndicator(),

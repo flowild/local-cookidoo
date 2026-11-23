@@ -362,6 +362,9 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 
 ## Listen, Vorrat und Navigation
 
+„Zutat hinzufügen“ nutzt in Android und Web-App die volle Inhaltsbreite
+der Vorratsansicht einschließlich der üblichen Seitenabstände.
+
 Die Symbolauswahl für Zutaten, Vorratskategorien und lokale Rezeptlisten enthält
 auch Lebensmittel und Haushaltsartikel wie Kartoffeln und Toilettenpapier.
 Gewählte Listensymbole erscheinen auch in der Woche und in Rezeptdetails.

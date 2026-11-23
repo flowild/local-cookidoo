@@ -43,6 +43,7 @@ Die separate Warteschlange für Wochenänderungen bleibt aktiv.
   per Griff sortierbare Kategorien. `app/ingredients.py` enthält den Abgleich von
   Synonymen, englischen Begriffen, Speiseölen und Wasser. Mengen werden nicht
   verglichen. Verfügbarkeit erscheint in den Rezeptdetails.
+  „Zutat hinzufügen“ nutzt die volle Breite des Vorratsinhalts.
   Vorratskarten richten Sortiergriff, Aufklappsymbol, Kategorienamen, Anzahl
   und Aktionen im Kopf an festen Spalten aus.
   Zutaten, Vorratskategorien und lokale Rezeptlisten bieten beim Anlegen und
