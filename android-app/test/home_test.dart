@@ -497,6 +497,12 @@ void main() {
     }
   });
 
+  final syncProgress = find.byWidgetPredicate(
+    (widget) =>
+        widget is CircularProgressIndicator &&
+        widget.semanticsLabel == 'Synchronisierung läuft',
+  );
+
   testWidgets('a late older status cannot hide a newly started sync', (
     tester,
   ) async {
@@ -514,10 +520,10 @@ void main() {
       'cart_recipe_count': 0,
     });
     await tester.pump();
-    expect(find.byTooltip('Synchronisierung läuft'), findsOneWidget);
+    expect(syncProgress, findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(find.byTooltip('Synchronisieren'), findsOneWidget);
+    expect(syncProgress, findsNothing);
   });
 
   testWidgets('retries a failed sync status read until the sync completes', (
@@ -534,12 +540,12 @@ void main() {
     api.statusFailures = 1;
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(find.byTooltip('Synchronisierung läuft'), findsOneWidget);
+    expect(syncProgress, findsOneWidget);
     expect(find.textContaining('wird erneut geprüft'), findsOneWidget);
     api.keepRunning = false;
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    expect(find.byTooltip('Synchronisieren'), findsOneWidget);
+    expect(syncProgress, findsNothing);
   });
 
   testWidgets('starts a sync on opening and on pull to refresh', (
@@ -555,15 +561,21 @@ void main() {
     expect(api.syncs, 1);
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
-    final refresh = tester.widget<RefreshIndicator>(
-      find.byType(RefreshIndicator).first,
+    final appBar = find.byType(AppBar);
+    expect(
+      find.descendant(of: appBar, matching: find.byIcon(Icons.sync)),
+      findsNothing,
     );
-    final pending = refresh.onRefresh();
+    final content = tester.getRect(find.byType(RefreshIndicator).first);
+    await tester.dragFrom(
+      Offset(content.center.dx, content.top + 30),
+      const Offset(0, 430),
+    );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(api.syncs, 2);
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(seconds: 1));
-    await pending;
     await tester.pumpAndSettle();
     expect(
       api.weekReads,

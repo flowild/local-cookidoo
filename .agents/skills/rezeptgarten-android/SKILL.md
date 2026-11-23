@@ -125,7 +125,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Bestätigungs- und Konfliktbehandlung.
 - Bei Öffnen und Rückkehr in die Android-App startet im Heimnetz ein
   Sammlungsabgleich; Herunterziehen einer Ansicht startet ihn ebenfalls
-  und lädt nach Abschluss die Ansicht neu. Im Telegram-Modus lädt die
+  und lädt nach Abschluss die Ansicht neu. Der Fortschrittsindikator in der
+  Kopfzeile ist während des Abgleichs sichtbar. Im Telegram-Modus lädt die
   Geste nur die verschlüsselte Momentaufnahme neu. Es gibt keinen
   zeitgesteuerten Sammlungsabgleich und keine Intervall-Einstellung.
 - Android-Systemdienste erst nach dem Anhängen der Activity initialisieren.

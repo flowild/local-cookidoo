@@ -149,9 +149,10 @@ und rechts ein Plus. Nach dem Hinzufügen zeigt sie ein Häkchen.
 Der Debug-Modus zeigt unterscheidbare mitgelieferte Rezeptbilder.
 Die Android-Einstellungen verwenden die gemeinsamen APIs für Cookidoo.
 Der Sammlungsabgleich startet beim Öffnen oder Wiederöffnen der Android-App im
-Heimnetz und beim Herunterziehen einer Ansicht. Die App zeigt laufenden Abgleich
-und Fehler an; vorübergehende Fehler beim Statusabruf werden erneut geprüft und
-ältere Statusantworten beenden keinen neu gestarteten Abgleich. Beim Aktualisieren
+Heimnetz und beim Herunterziehen einer Ansicht. Die Kopfzeile zeigt während des
+Abgleichs einen Fortschrittsindikator. Die App meldet Fehler und prüft den Status
+nach vorübergehenden Fehlern erneut. Ältere Statusantworten beenden keinen neu
+gestarteten Abgleich. Beim Aktualisieren
 von Rezeptdetails bleibt ein ungeklärter Notizentwurf erhalten. Außerhalb des
 Heimnetzes aktualisiert Herunterziehen die lesende Telegram-Ansicht; ein
 Cookidoo-Abgleich wird dort nicht ausgelöst. Telegram-Wochen
