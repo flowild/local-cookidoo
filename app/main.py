@@ -603,7 +603,18 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/collections')
     def collections():
-        return {'items': database.collections()}
+        items = database.collections()
+        region = (database.get('account') or {}).get('region', 'de')
+        language, _, website = REGIONS.get(region, REGIONS['de'])
+        for item in items:
+            if item['kind'] == 'local':
+                continue
+            source_id = item['source_id']
+            if item['kind'] == 'managed' and re.fullmatch(r'col[0-9]+', source_id):
+                item['source_url'] = f'{website}/collection/{language}/p/{source_id}'
+            else:
+                item['source_url'] = f'{website}/organize/{language}/my-recipes'
+        return {'items': items}
 
     @app.get('/api/collections/{collection_id}/filter-options')
     def filter_options(collection_id: str):

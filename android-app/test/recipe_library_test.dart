@@ -390,6 +390,44 @@ void main() {
     );
   });
 
+  testWidgets('Cookidoo lists open externally from the list header', (
+    tester,
+  ) async {
+    const links = MethodChannel('de.rezeptgarten/links');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    MethodCall? opened;
+    messenger.setMockMethodCallHandler(links, (call) async {
+      opened = call;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(links, null));
+    final api = _LibraryApi()
+      ..name = 'Abendessen'
+      ..moreLists = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecipeCollections(api: api, openRecipe: (_) async {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Liste verwalten'), findsOneWidget);
+    final cookidoo = find.byTooltip('Zu Cookidoo');
+    expect(
+      tester.getCenter(cookidoo).dy,
+      tester.getCenter(find.text('Frühstück')).dy,
+    );
+    await tester.tap(cookidoo);
+    await tester.pumpAndSettle();
+    expect(opened?.method, 'openCookidoo');
+    expect(
+      opened?.arguments,
+      'https://cookidoo.de/collection/de-DE/p/col500574',
+    );
+    expect(find.byType(RecipeCard), findsNothing);
+  });
+
   testWidgets('opened lists show two recipe cards per row below their title', (
     tester,
   ) async {
@@ -471,7 +509,13 @@ class _LibraryApi extends RezeptgartenApi {
                 'recipe_count': present ? 1 : 0,
               },
             if (moreLists)
-              {'id': 'cookidoo:breakfast', 'name': 'Frühstück', 'kind': 'list'},
+              {
+                'id': 'cookidoo:breakfast',
+                'name': 'Frühstück',
+                'kind': 'managed',
+                'source_url':
+                    'https://cookidoo.de/collection/de-DE/p/col500574',
+              },
           ],
         };
       case '/api/collections/local:meals/filter-options':

@@ -51,7 +51,10 @@ Bei reduzierter Bewegung kennzeichnen Griffe die verschiebbaren Listentitel.
 Die Reihenfolge wird auf dem Gerät gespeichert. Die Titelsuche steht unter
 „Neue Liste“. Die Titel sind fett gesetzt und farblich vom
 zweispaltigen Raster mit Rezeptbildern abgesetzt. Lokale Listen haben ein
-Bearbeiten-Symbol. Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
+Bearbeiten-Symbol. Importierte Cookidoo-Listen zeigen an derselben Stelle
+„Zu Cookidoo“. Öffentliche Kollektionen öffnen direkt, persönliche Listen
+führen zu „Meine Rezepte“ bei Cookidoo.
+Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
 Beim Abhaken behält der Einkaufswagen seine Scrollposition während des Abrufs.
 Zusatzartikel erhalten ihren Warenbereich über denselben Serverabgleich wie
 Rezeptzutaten. Die Rezepte im Android-Einkaufswagen erscheinen als kompakte

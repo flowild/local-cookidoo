@@ -61,6 +61,18 @@ class AppTests(unittest.TestCase):
         self.client.__exit__(None, None, None)
         self.tmp.cleanup()
 
+    def test_collections_link_to_cookidoo_in_the_configured_region(self):
+        database = self.app.state.sync.database
+        collections, recipes = snapshot()
+        collections[1]['source_id'] = 'col500574'
+        database.save_snapshot(collections, recipes)
+        database.create_local_collection('Lokal')
+        database.set('account', {'region': 'ch'})
+        items = {item['kind']: item for item in self.client.get('/api/collections').json()['items']}
+        self.assertEqual(items['managed']['source_url'], 'https://cookidoo.ch/collection/de-CH/p/col500574')
+        self.assertEqual(items['custom']['source_url'], 'https://cookidoo.ch/organize/de-CH/my-recipes')
+        self.assertNotIn('source_url', items['local'])
+
     def test_telegram_server_token_is_encrypted_and_origin_protected(self):
         token = '123456789:' + 'a' * 35
         self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])

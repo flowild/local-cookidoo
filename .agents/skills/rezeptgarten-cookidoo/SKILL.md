@@ -38,6 +38,9 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
   den tokenfähigen `_request_json`-Helfer für `organize/{language}/api/bookmark`;
   alle Seiten lesen und Rezept-IDs deduplizieren. Bei Custom- und Managed-Listen
   liefern die Count-Methoden `(totalElements, totalPages)`.
+- `/api/collections` liefert für importierte Listen eine Cookidoo-HTTPS-Adresse
+  des gewählten Marktes. Öffentliche Kollektionen mit Katalog-ID verlinken ihre
+  Detailseite. Persönliche Listen öffnen den bestätigten Bereich „Meine Rezepte“.
 - Listeneinträge haben keine Bilder. `get_recipe_details(id)` liefert Details,
   Zutaten und Bild-URLs; Bilder von erlaubten HTTPS-Assethosts ohne Cookidoo-Auth
   herunterladen und lokal als WebP bis 960 Pixel speichern. Keine Bilder erfinden.

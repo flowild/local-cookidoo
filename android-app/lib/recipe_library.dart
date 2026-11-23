@@ -1239,6 +1239,21 @@ class _CollectionPreview extends StatefulWidget {
 }
 
 class _CollectionPreviewState extends State<_CollectionPreview> {
+  static const _links = MethodChannel('de.rezeptgarten/links');
+
+  Future<void> _openCookidoo(String url) async {
+    try {
+      await _links.invokeMethod<void>('openCookidoo', url);
+    } on Exception {
+      if (mounted) {
+        _showError(
+          context,
+          const ApiException('Cookidoo konnte nicht geöffnet werden.'),
+        );
+      }
+    }
+  }
+
   Widget _dragTitle(Widget label) {
     final index = widget.dragIndex;
     if (index == null) return label;
@@ -1301,13 +1316,19 @@ class _CollectionPreviewState extends State<_CollectionPreview> {
       Icon(widget.sorting ? Icons.drag_handle : Icons.list_alt),
     ),
     wrapTitle: _dragTitle,
-    action: widget.onManage == null
-        ? null
-        : IconButton(
-            tooltip: 'Liste verwalten',
-            onPressed: widget.onManage,
-            icon: const Icon(Icons.edit_outlined),
-          ),
+    action: switch ((widget.onManage, widget.list['source_url'])) {
+      (final manage?, _) => IconButton(
+        tooltip: 'Liste verwalten',
+        onPressed: manage,
+        icon: const Icon(Icons.edit_outlined),
+      ),
+      (_, final String url) => IconButton(
+        tooltip: 'Zu Cookidoo',
+        onPressed: () => _openCookidoo(url),
+        icon: const Icon(Icons.open_in_new),
+      ),
+      _ => null,
+    },
     onExpansionChanged: (expanded) {
       if (expanded && _total == null && !_loading) unawaited(_load());
     },
