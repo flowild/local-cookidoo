@@ -134,7 +134,11 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Standortfreigabe beide Standortberechtigungen gemeinsam erneut an.
   Außerhalb des Heimnetzes sowie bei nicht erreichbarem
   Server stehen Woche und Einkaufswagen nach Telegram-Benutzeranmeldung und
-  bestätigter Kopplung lesend bereit. Der Einkaufswagen speichert Häkchen
+  bestätigter Kopplung lesend bereit.
+  Die Einstellungen zeigen „WLAN-Erkennung einrichten“ bei fehlender genauer
+  Berechtigung. Telegram braucht Anmeldung und Kopplung. Sobald beides vorliegt,
+  öffnet die Statuszeile die Verwaltung.
+  Der Einkaufswagen speichert Häkchen
   geräte- und kopplungsbezogen. Gespeicherte Häkchen vor Änderungen laden und
   erneutes Laden bei Speicherfehlern anbieten. Wochenwechsel mit Kalenderdaten
   berechnen und über die Berliner Zeitumstellung hinweg prüfen. TDLib verwendet

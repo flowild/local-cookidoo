@@ -137,7 +137,11 @@ class _TelegramSetupState extends State<TelegramSetup> {
           _ => '',
         };
         return AlertDialog(
-          title: const Text('Telegram einrichten'),
+          title: Text(
+            step == TelegramStep.ready && widget.telegram.paired
+                ? 'Telegram verwalten'
+                : 'Telegram einrichten',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -165,7 +165,11 @@ werden lokal gespeichert.
 Android nutzt bei verbundenem WLAN `ThomasWlan` und erreichbarem Server den
 lokalen HTTPS-Zugang. Für die WLAN-Namenerkennung fordert Android beide
 Standortberechtigungen gemeinsam an, auch beim Wechsel von ungefährer zu
-genauer Freigabe. Andernfalls stehen nach Telegram-Benutzeranmeldung und
+genauer Freigabe. In den Android-Einstellungen erscheint die
+Einrichtungsaktion für WLAN bei fehlender genauer Freigabe und für Telegram
+bei fehlender Anmeldung oder Kopplung. Bei eingerichteter Kopplung öffnet
+die Telegram-Statuszeile die Verwaltung. Außerhalb des Heimnetzes stehen nach
+Telegram-Benutzeranmeldung und
 Kopplung im Heimnetz die verschlüsselten, lesenden Ansichten „Meine Woche“ und
 „Mein Einkaufswagen“ zur Verfügung. Einkaufs-Häkchen im Telegram-Modus werden
 auf dem Gerät gespeichert. Die App fragt nach Telegram-API-ID und API-Hash, wenn

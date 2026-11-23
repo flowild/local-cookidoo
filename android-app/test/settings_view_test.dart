@@ -6,17 +6,85 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/appearance.dart';
+import 'package:rezeptgarten/connection.dart';
 import 'package:rezeptgarten/main.dart';
 import 'package:rezeptgarten/settings_view.dart';
+import 'package:rezeptgarten/telegram_service.dart';
 
 void main() {
+  testWidgets('setup actions follow WLAN permission and Telegram pairing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const network = MethodChannel('de.rezeptgarten/network');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    var hasPermission = false;
+    messenger.setMockMethodCallHandler(network, (call) async {
+      if (call.method == 'requestPermission') hasPermission = true;
+      return {'permission': hasPermission, 'wifi': false, 'online': true};
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(network, null));
+    final api = _SettingsApi();
+    final appearance = AppearanceController();
+    final telegram = _SettingsTelegram();
+    final connection = ConnectionController(api, telegram);
+    await connection.refresh();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsView(
+          api: api,
+          appearance: appearance,
+          connection: connection,
+          telegram: telegram,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final wlan = find.text('WLAN-Erkennung einrichten');
+    final setup = find.text('Telegram einrichten');
+    expect(wlan, findsOneWidget);
+    expect(setup, findsNothing);
+    telegram.update(TelegramStep.ready, paired: false);
+    await tester.pumpAndSettle();
+    expect(setup, findsOneWidget);
+    await tester.tap(wlan);
+    await tester.pumpAndSettle();
+    expect(wlan, findsNothing);
+    expect(find.text('WLAN-Erkennung eingerichtet'), findsOneWidget);
+
+    telegram.update(TelegramStep.ready, paired: true);
+    await tester.pumpAndSettle();
+    expect(setup, findsNothing);
+    await tester.tap(find.text('Mit Rezeptgarten verbunden'));
+    await tester.pumpAndSettle();
+    expect(find.text('Telegram verwalten'), findsOneWidget);
+    await tester.tap(find.text('Fertig'));
+    await tester.pumpAndSettle();
+    hasPermission = false;
+    await connection.refresh();
+    telegram.update(TelegramStep.ready, paired: false);
+    await tester.pumpAndSettle();
+    expect(wlan, findsOneWidget);
+    expect(setup, findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    connection.dispose();
+    telegram.dispose();
+    appearance.dispose();
+    await api.close();
+  });
+
   testWidgets('keeps loaded settings visible when a background read fails', (
     tester,
   ) async {
     final api = _SettingsApi();
-    await tester.pumpWidget(MaterialApp(
-      home: SettingsView(api: api, appearance: AppearanceController()),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsView(api: api, appearance: AppearanceController()),
+      ),
+    );
     await tester.pumpAndSettle();
     final account = find.text('Dein Cookidoo-Konto');
     expect(account, findsOneWidget);
@@ -39,13 +107,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.5)),
-        child: child!,
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: SettingsView(
+          api: _SettingsApi(),
+          appearance: AppearanceController(),
+        ),
       ),
-      home: SettingsView(api: _SettingsApi(), appearance: AppearanceController()),
-    ));
+    );
     await tester.pumpAndSettle();
     final button = find.text('Nach Updates suchen');
     await tester.scrollUntilVisible(button, 200);
@@ -215,6 +289,17 @@ void main() {
   );
 }
 
+class _SettingsTelegram extends TelegramService {
+  @override
+  bool paired = false;
+
+  void update(TelegramStep step, {required bool paired}) {
+    this.step = step;
+    this.paired = paired;
+    notifyListeners();
+  }
+}
+
 class _SettingsApi extends RezeptgartenApi {
   _SettingsApi() : super(client: HttpClient());
 
@@ -223,7 +308,9 @@ class _SettingsApi extends RezeptgartenApi {
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async => switch (path) {
-    '/api/status' when statusUnavailable => throw const ApiException('Status nicht erreichbar.'),
+    '/api/status' when statusUnavailable => throw const ApiException(
+      'Status nicht erreichbar.',
+    ),
     '/api/status' => {
       'account': account,
       'connected': account != null,

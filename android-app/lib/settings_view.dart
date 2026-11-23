@@ -167,7 +167,10 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _load({bool showLoading = false, bool background = false}) async {
+  Future<void> _load({
+    bool showLoading = false,
+    bool background = false,
+  }) async {
     if (!_local) return;
     final request = ++_request;
     if (showLoading) setState(() => _loading = true);
@@ -329,6 +332,17 @@ class _SettingsViewState extends State<SettingsView> {
     ),
   );
 
+  void _openTelegramSettings(TelegramService telegram) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => TelegramSetup(
+        telegram: telegram,
+        api: widget.api,
+        connection: widget.connection,
+      ),
+    );
+  }
+
   Widget _appearance() => ValueListenableBuilder(
     valueListenable: widget.appearance,
     builder: (context, appearance, _) => _card('Darstellung', [
@@ -447,36 +461,43 @@ class _SettingsViewState extends State<SettingsView> {
                 if (widget.connection
                     case final ConnectionController connection)
                   _card('Heimnetz', [
-                    const Text(
-                      'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
-                    ),
-                    TextButton(
-                      onPressed: connection.requestPermission,
-                      child: const Text('WLAN-Erkennung einrichten'),
-                    ),
+                    if (connection.hasPermission)
+                      const Text('WLAN-Erkennung eingerichtet')
+                    else if (connection.mode == ConnectionMode.checking)
+                      const Text('WLAN-Erkennung wird geprüft …')
+                    else ...[
+                      const Text(
+                        'Die WLAN-Erkennung benötigt die Android-Standortberechtigung.',
+                      ),
+                      TextButton(
+                        onPressed: connection.requestPermission,
+                        child: const Text('WLAN-Erkennung einrichten'),
+                      ),
+                    ],
                   ]),
                 if (widget.telegram case final TelegramService telegram)
-                  _card('Telegram', [
-                    ListenableBuilder(
-                      listenable: telegram,
-                      builder: (context, _) => Text(
-                        telegram.paired
-                            ? 'Mit Rezeptgarten verbunden'
-                            : 'Noch nicht verbunden',
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => showDialog<void>(
-                        context: context,
-                        builder: (_) => TelegramSetup(
-                          telegram: telegram,
-                          api: widget.api,
-                          connection: widget.connection,
+                  ListenableBuilder(
+                    listenable: telegram,
+                    builder: (context, _) => _card('Telegram', [
+                      if (telegram.step == TelegramStep.ready &&
+                          telegram.paired)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Mit Rezeptgarten verbunden'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _openTelegramSettings(telegram),
+                        )
+                      else if (telegram.step == TelegramStep.loading)
+                        const Text('Einrichtung wird geprüft …')
+                      else ...[
+                        const Text('Noch nicht verbunden'),
+                        TextButton(
+                          onPressed: () => _openTelegramSettings(telegram),
+                          child: const Text('Telegram einrichten'),
                         ),
-                      ),
-                      child: const Text('Telegram einrichten'),
-                    ),
-                  ]),
+                      ],
+                    ]),
+                  ),
                 if (!widget.api.usesTestData)
                   _card('Rezeptgarten für Android', [
                     if (_version != null)
