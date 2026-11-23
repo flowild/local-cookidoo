@@ -108,8 +108,11 @@ Die native Flutter-App entsteht unter `android-app/`. Die
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
 Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptgarten“. Android und
-PWA verwenden dieselbe Schale mit Keimling aus `app/static/icon-512.png`.
-`scripts/generate_icons.py` erzeugt daraus die weiteren Größen. Das
+PWA verwenden das Motiv Schale mit Keimling. Das adaptive Android-Launcher-Icon
+verwendet ein größeres Motiv auf einem fast schwarzen Hintergrund. Bei
+„Themensymbole“ bestimmt der Launcher die Farben des Motivs und des Hintergrunds.
+`scripts/generate_icons.py` erzeugt die PWA-, Kopfzeilen- und Ersatz-PNGs aus
+`app/static/icon-512.png`. Das
 Veröffentlichungsskript lädt jeden neuen Test- oder Release-Build standardmäßig
 auf LXC 103 hoch und prüft den HTTPS-Download und das Update-Manifest des Kanals.
 Bei einem Uploadfehler die vorhandene APK mit derselben Buildnummer erneut
