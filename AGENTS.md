@@ -235,6 +235,8 @@ Zugangsdaten oder persönlichen Rezeptdaten dokumentieren.
 ## Meine Woche
 
 Die Wochenansicht liest die gewählte Berliner Kalenderwoche direkt aus Cookidoo;
+bei laufendem Sammlungsabgleich kommt der Kalenderabruf zwischen dessen
+Cookidoo-Anfragen zum Zug.
 Pfeile wechseln die Woche, „Heute“ zeigt in Web-App und Android den heutigen Berliner Kalendertag, auch aus einer anderen Woche;
 Bilder werden lokal zwischengespeichert. Verschiebungen erscheinen sofort, werden
 serverseitig vorgemerkt und nach fünf Minuten Ruhezeit über den gemeinsamen

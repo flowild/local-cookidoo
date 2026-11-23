@@ -1590,6 +1590,49 @@ class SyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, [True] * 5)
         self.service.cache_image.assert_awaited_once()
 
+    async def test_calendar_read_runs_between_collection_requests_during_sync(self):
+        service = self.service
+        started = asyncio.Event()
+        finish_first_request = asyncio.Event()
+        finish_second_request = asyncio.Event()
+        calls = []
+
+        class Fake(EmptyBookmarks):
+            async def count_custom_collections(self):
+                calls.append('custom')
+                started.set()
+                await finish_first_request.wait()
+                return (0, 0)
+
+            async def count_managed_collections(self):
+                calls.append('managed')
+                await finish_second_request.wait()
+                return (0, 0)
+
+            async def list_custom_recipes(self):
+                return []
+
+            async def get_recipes_in_calendar_week(self, day):
+                calls.append('calendar')
+                return []
+
+        service.client = Fake()
+        self.assertTrue(service.begin())
+        await asyncio.wait_for(started.wait(), timeout=2)
+        calendar = asyncio.create_task(service.calendar_week())
+        await asyncio.sleep(0)
+        self.assertEqual(calls, ['custom'])
+        finish_first_request.set()
+        try:
+            week = await asyncio.wait_for(calendar, timeout=2)
+            self.assertEqual(len(week['days']), 7)
+            self.assertEqual(calls[:2], ['custom', 'calendar'])
+            self.assertTrue(service.state['running'])
+        finally:
+            finish_second_request.set()
+        await asyncio.wait_for(service.task, timeout=2)
+        self.assertEqual(service.state['phase'], 'done')
+
     async def test_calendar_shelf_removal_and_return_are_verified(self):
         service = self.service
         day = lambda ids: NS(id='2026-01-06', recipes=[NS(id=value, is_custom=False) for value in ids], customer_recipe_ids=[])

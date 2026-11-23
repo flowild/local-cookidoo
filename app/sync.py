@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import tempfile
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -564,9 +565,12 @@ class SyncService:
 
     async def calendar_week(self, requested_day=None):
         """Read the Berlin calendar week directly from the shared Cookidoo client."""
-        if self.lock.locked() or self.state['running']:
+        if self.lock.locked() and not self.state['running']:
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
+        client = self.client
         async with self.lock:
+            if client is not self.client:
+                raise ValueError('Das Cookidoo-Konto wurde gewechselt. Bitte lade die Woche erneut.')
             if not self.client:
                 raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
             today = datetime.now(ZoneInfo('Europe/Berlin')).date()
@@ -1005,8 +1009,9 @@ class SyncService:
         self.task = asyncio.create_task(self.synchronize())
         return True
 
-    async def bookmarks(self):
+    async def bookmarks(self, request_lock=None):
         """Adapt the bookmark endpoint missing from cookidoo-api 0.19's public API."""
+        request_lock = request_lock or nullcontext()
         region = (self.database.get('account') or {}).get('region', 'de')
         language = REGIONS[region][0]
         members = []
@@ -1014,11 +1019,12 @@ class SyncService:
         page = 0
         pages = 1
         while page < pages:
-            payload = await self.client._request_json(
-                'get', self.client.api_endpoint / f'organize/{language}/api/bookmark',
-                'loading bookmarks', params={'page': str(page)},
-                headers={'ACCEPT': 'application/vnd.vorwerk.organize.bookmark.mobile+json'},
-            )
+            async with request_lock:
+                payload = await self.client._request_json(
+                    'get', self.client.api_endpoint / f'organize/{language}/api/bookmark',
+                    'loading bookmarks', params={'page': str(page)},
+                    headers={'ACCEPT': 'application/vnd.vorwerk.organize.bookmark.mobile+json'},
+                )
             if not isinstance(payload, dict) or not isinstance(payload.get('bookmarks'), list):
                 raise ValueError('Invalid bookmark response')
             pagination = payload.get('page') or {}
@@ -1043,14 +1049,19 @@ class SyncService:
             return None
         return {'id': 'bookmarks:default', 'source_id': 'bookmark', 'kind': 'bookmarks', 'name': 'Merkliste', 'description': 'Deine in Cookidoo gemerkten Rezepte.', 'members': members}
 
-    async def collections(self):
+    async def collections(self, request_lock=None):
+        """Read a full snapshot, with the lock held by the caller or per request."""
+        request_lock = request_lock or nullcontext()
         result = []
         for kind in ('custom', 'managed'):
             count_method = getattr(self.client, f'count_{kind}_collections')
-            _, pages = await count_method()
+            async with request_lock:
+                _, pages = await count_method()
             for page in range(pages):
                 fetch_method = getattr(self.client, f'get_{kind}_collections')
-                for collection in await fetch_method(page=page):
+                async with request_lock:
+                    collections = await fetch_method(page=page)
+                for collection in collections:
                     members = []
                     for chapter in collection.chapters or []:
                         for recipe in chapter.recipes or []:
@@ -1059,8 +1070,10 @@ class SyncService:
                             members.append({'id': recipe.id, 'name': recipe.name, 'total_seconds': seconds(recipe.total_time), 'chapter': chapter.name})
                     result.append({'id': kind + ':' + collection.id, 'source_id': collection.id, 'kind': kind, 'name': collection.name, 'description': collection.description, 'members': members})
                 await asyncio.sleep(.15)
-        creations = await self.client.list_custom_recipes()
-        origins = await self.creation_origins()
+        async with request_lock:
+            creations = await self.client.list_custom_recipes()
+        async with request_lock:
+            origins = await self.creation_origins()
         members = []
         seen = set()
         for creation in creations:
@@ -1072,7 +1085,7 @@ class SyncService:
             members.append({'id': 'creation:' + creation.id, 'name': creation.name or creation.id, 'total_seconds': seconds(creation.total_time), 'chapter': '', 'origin_recipe_id': origins.get(creation.id)})
         if members:
             result.insert(0, {'id': 'creations:default', 'source_id': 'creations', 'kind': 'creations', 'name': 'Meine Kreationen', 'description': 'Deine eigenen Cookidoo-Rezepte.', 'members': members})
-        bookmarks = await self.bookmarks()
+        bookmarks = await self.bookmarks(request_lock)
         if bookmarks:
             result.insert(0, bookmarks)
         return result
@@ -1213,69 +1226,71 @@ class SyncService:
         return None
 
     async def synchronize(self):
-        async with self.lock:
-            self.database.set('last_attempt', now())
-            try:
-                collections = await self.collections()
-                recipes = {}
-                account = self.database.get('account') or {}
-                region = account.get('region', 'de')
-                language, _, website = REGIONS[region]
-                for collection in collections:
-                    for member in collection['members']:
-                        recipes.setdefault(member['id'], {'id': member['id'], 'name': member['name'] or member['id'], 'total_seconds': member.get('total_seconds'), 'source_url': (f'{website}/created-recipes/{language}/{quote(member["id"][9:])}/edit' if collection['kind'] == 'creations' else f'{website}/recipes/recipe/{language}/{quote(member["id"])}'), 'updated_at': now()})
-                        if collection['kind'] == 'creations':
-                            recipes[member['id']]['origin_recipe_id'] = member.get('origin_recipe_id')
-                self.state.update(phase='recipes', total=len(recipes), message='Rezeptdetails und Bilder werden gespeichert …')
-                with self.database.connect() as db:
-                    existing = {row['id']: dict(row) for row in db.execute('SELECT * FROM recipes')}
-                async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
-                    for recipe_id, recipe in recipes.items():
-                        previous = existing.get(recipe_id)
-                        # A cached image and details can be reused for fourteen days.
-                        recent = previous and previous.get('detail_updated_at') and datetime.now(timezone.utc) - datetime.fromisoformat(previous['detail_updated_at']) < timedelta(days=14)
-                        is_creation = recipe_id.startswith('creation:')
-                        if not is_creation and recent and previous.get('instructions_json') is not None and previous.get('image_file') and (self.images / previous['image_file']).exists():
-                            for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'instructions_json', 'tips_json', 'detail_updated_at'):
-                                recipe[key] = previous[key]
-                        else:
-                            try:
+        try:
+            # Wait for an existing account operation before reading the collection.
+            async with self.lock:
+                self.database.set('last_attempt', now())
+            collections = await self.collections(self.lock)
+            recipes = {}
+            account = self.database.get('account') or {}
+            region = account.get('region', 'de')
+            language, _, website = REGIONS[region]
+            for collection in collections:
+                for member in collection['members']:
+                    recipes.setdefault(member['id'], {'id': member['id'], 'name': member['name'] or member['id'], 'total_seconds': member.get('total_seconds'), 'source_url': (f'{website}/created-recipes/{language}/{quote(member["id"][9:])}/edit' if collection['kind'] == 'creations' else f'{website}/recipes/recipe/{language}/{quote(member["id"])}'), 'updated_at': now()})
+                    if collection['kind'] == 'creations':
+                        recipes[member['id']]['origin_recipe_id'] = member.get('origin_recipe_id')
+            self.state.update(phase='recipes', total=len(recipes), message='Rezeptdetails und Bilder werden gespeichert …')
+            with self.database.connect() as db:
+                existing = {row['id']: dict(row) for row in db.execute('SELECT * FROM recipes')}
+            async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
+                for recipe_id, recipe in recipes.items():
+                    previous = existing.get(recipe_id)
+                    # A cached image and details can be reused for fourteen days.
+                    recent = previous and previous.get('detail_updated_at') and datetime.now(timezone.utc) - datetime.fromisoformat(previous['detail_updated_at']) < timedelta(days=14)
+                    is_creation = recipe_id.startswith('creation:')
+                    if not is_creation and recent and previous.get('instructions_json') is not None and previous.get('image_file') and (self.images / previous['image_file']).exists():
+                        for key in ('image_file', 'active_seconds', 'servings', 'difficulty', 'ingredients_json', 'instructions_json', 'tips_json', 'detail_updated_at'):
+                            recipe[key] = previous[key]
+                    else:
+                        try:
+                            async with self.lock:
                                 detail = await (self.client.get_custom_recipe(recipe_id[9:]) if is_creation else self.client.get_recipe_details(recipe_id))
-                                recipe.update(name=detail.name or recipe['name'], total_seconds=seconds(detail.total_time), active_seconds=seconds(detail.active_time), servings=str(detail.serving_size) if detail.serving_size else None, difficulty=str(getattr(detail, 'difficulty', '') or '') or None, ingredients_json=json.dumps(detail.ingredients, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False), detail_updated_at=now())
-                                recipe['tips_json'] = json.dumps(recipe_tips(detail, is_creation), ensure_ascii=False)
-                                if is_creation:
-                                    recipe['instructions_json'] = json.dumps(detail.instructions, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False)
-                                else:
-                                    groups = [{'title': group.title, 'steps': [plain_step(step.formatted_text) for step in group.recipe_steps]} for group in getattr(detail, 'step_groups', [])]
-                                    recipe['instructions_json'] = json.dumps(groups, ensure_ascii=False)
-                                try:
-                                    recipe['image_file'] = await self.cache_image(detail.image or detail.thumbnail, http)
-                                    if not recipe['image_file']:
-                                        self.state['warnings'] += 1
-                                except Exception as error:
-                                    logger.warning('Recipe image unavailable: %s', type(error).__name__)
+                            recipe.update(name=detail.name or recipe['name'], total_seconds=seconds(detail.total_time), active_seconds=seconds(detail.active_time), servings=str(detail.serving_size) if detail.serving_size else None, difficulty=str(getattr(detail, 'difficulty', '') or '') or None, ingredients_json=json.dumps(detail.ingredients, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False), detail_updated_at=now())
+                            recipe['tips_json'] = json.dumps(recipe_tips(detail, is_creation), ensure_ascii=False)
+                            if is_creation:
+                                recipe['instructions_json'] = json.dumps(detail.instructions, default=lambda value: dataclasses.asdict(value) if dataclasses.is_dataclass(value) else str(value), ensure_ascii=False)
+                            else:
+                                groups = [{'title': group.title, 'steps': [plain_step(step.formatted_text) for step in group.recipe_steps]} for group in getattr(detail, 'step_groups', [])]
+                                recipe['instructions_json'] = json.dumps(groups, ensure_ascii=False)
+                            try:
+                                recipe['image_file'] = await self.cache_image(detail.image or detail.thumbnail, http)
+                                if not recipe['image_file']:
                                     self.state['warnings'] += 1
                             except Exception as error:
-                                if 'Auth' in type(error).__name__:
-                                    raise
-                                logger.warning('Recipe details unavailable: %s', type(error).__name__)
+                                logger.warning('Recipe image unavailable: %s', type(error).__name__)
                                 self.state['warnings'] += 1
-                            await asyncio.sleep(.2)
-                        self.state['done'] += 1
-                # One transaction replaces list membership only after every list was read.
-                self.database.backup()
-                self.database.save_snapshot(collections, recipes)
-                message = 'Deine Sammlung ist aktuell.' if not self.state['warnings'] else 'Listen gespeichert. Einige Rezeptdetails oder Bilder waren nicht verfügbar.'
-                if not collections:
-                    message = 'Cookidoo hat keine Rezeptlisten, Kollektionen oder gemerkten Rezepte zurückgegeben. Bitte prüfe das verbundene Konto und dessen Land.'
-                self.state.update(phase='done', message=message)
-                self.database.set('last_result', {**self.state, 'running': False, 'finished_at': now()})
-            except asyncio.CancelledError:
-                self.state.update(phase='error', message='Synchronisierung unterbrochen. Deine bisherige Sammlung bleibt erhalten.')
-                raise
-            except Exception as error:
-                logger.warning('Cookidoo synchronization failed: %s', type(error).__name__)
-                self.state.update(phase='error', message=friendly_error(error))
-                self.database.set('last_result', {**self.state, 'running': False, 'finished_at': now()})
-            finally:
-                self.state['running'] = False
+                        except Exception as error:
+                            if 'Auth' in type(error).__name__:
+                                raise
+                            logger.warning('Recipe details unavailable: %s', type(error).__name__)
+                            self.state['warnings'] += 1
+                        await asyncio.sleep(.2)
+                    self.state['done'] += 1
+            # One transaction replaces list membership only after every list was read.
+            self.database.backup()
+            self.database.save_snapshot(collections, recipes)
+            message = 'Deine Sammlung ist aktuell.' if not self.state['warnings'] else 'Listen gespeichert. Einige Rezeptdetails oder Bilder waren nicht verfügbar.'
+            if not collections:
+                message = 'Cookidoo hat keine Rezeptlisten, Kollektionen oder gemerkten Rezepte zurückgegeben. Bitte prüfe das verbundene Konto und dessen Land.'
+            self.state.update(phase='done', message=message)
+            self.database.set('last_result', {**self.state, 'running': False, 'finished_at': now()})
+        except asyncio.CancelledError:
+            self.state.update(phase='error', message='Synchronisierung unterbrochen. Deine bisherige Sammlung bleibt erhalten.')
+            raise
+        except Exception as error:
+            logger.warning('Cookidoo synchronization failed: %s', type(error).__name__)
+            self.state.update(phase='error', message=friendly_error(error))
+            self.database.set('last_result', {**self.state, 'running': False, 'finished_at': now()})
+        finally:
+            self.state['running'] = False

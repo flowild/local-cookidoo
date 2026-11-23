@@ -66,6 +66,11 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
 
 Bei relevanten Änderungen diesen Skill und die Projekthinweise aktuell halten.
 
+- Der Sammlungsabgleich gibt den gemeinsamen Cookidoo-Lock zwischen
+  Listenseiten und Rezeptanfragen frei. Ein Wochenabruf kann dadurch während des
+  Sammlungsabgleichs lesen. Bilder werden ohne diesen Lock geladen. Konto- und
+  Kalender-Schreibvorgänge bleiben während des Sammlungsabgleichs gesperrt.
+
 - „Meine Woche“ liest die aktuelle Woche direkt über denselben Client und Lock aus Cookidoo. Leere Tage werden ergänzt; lokale Rezepte sind anklickbar, eigene Kreationen werden bei Bedarf nachgeladen. Verschiebungen in derselben Woche werden auf dem Server vorgemerkt und fünf Minuten nach der letzten Änderung über den gemeinsamen Client und Lock an Cookidoo übertragen, auch bei geschlossener App. Erst nach Bestätigung am Zieltag wird am Ursprung entfernt; unklare Teilergebnisse melden und die Woche erneut laden.
 
 - Für die Wochenwahl wird der Montag der ausgewählten Woche an Cookidoo übergeben. Nicht lokal vorhandene Wochenrezepte öffnen intern und laden Details über den bestehenden Cookidoo-Client und Lock, bevor der reguläre Listenabgleich sie lokal übernimmt. Nur „In Cookidoo öffnen“ führt nach außen; Bilder nutzen den bestehenden abgesicherten Bild-Cache.
