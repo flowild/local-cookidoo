@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .catalog import CatalogUnavailable, RecipeCatalog
 from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, cooking_days, friendly_error
@@ -148,6 +149,7 @@ def create_app(directory=None, secure_cookies=None):
     telegram_pending = {}
     telegram_account_lock = asyncio.Lock()
     service = SyncService(database, vault)
+    catalog = RecipeCatalog(service)
     @asynccontextmanager
     async def lifespan(app):
         # Remove retired bot pairings while retaining the server token and user session.
@@ -196,7 +198,7 @@ def create_app(directory=None, secure_cookies=None):
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if request.url.path.startswith('/api/'):
-            is_image = bool(re.fullmatch(r'/api/images/[a-f0-9]{40}\.webp', request.url.path))
+            is_image = bool(re.fullmatch(r'/api/(?:images|cookidoo/images)/[a-f0-9]{40}\.webp', request.url.path))
             if not (is_image and request.method == 'GET' and response.status_code == 200):
                 response.headers['Cache-Control'] = 'no-store'
             elif 'Cache-Control' not in response.headers:
@@ -830,6 +832,19 @@ def create_app(directory=None, secure_cookies=None):
     def library_filter_options():
         return database.recipe_filter_options()
 
+    def recipe_ingredient_metadata(result):
+        try:
+            ingredients = json.loads(result.get('ingredients_json') or '[]')
+        except (TypeError, ValueError):
+            ingredients = []
+        names = [ingredient_name(value) or (ingredient_name(value.get('description')) if isinstance(value, dict) else '')
+                 for value in ingredients] if isinstance(ingredients, list) else []
+        keys = [ingredient_group_key(name) for name in names]
+        item_icons = pantry_item_icons(database.pantry()['items'])
+        result['hidden_ingredient_positions'] = [index for index, key in enumerate(keys) if key == 'wasser']
+        result['ingredient_icons'] = {index: item_icons[key] for index, key in enumerate(keys) if key in item_icons}
+        return result
+
     @app.get('/api/recipes/{recipe_id}')
     async def recipe(recipe_id: str, calendar: bool = False):
         result = database.recipe(recipe_id)
@@ -845,17 +860,61 @@ def create_app(directory=None, secure_cookies=None):
                 raise HTTPException(502, 'Die Rezeptdetails konnten nicht aus Cookidoo geladen werden.') from None
         else:
             result['is_local'] = True
+        return recipe_ingredient_metadata(result)
+
+    async def read_catalog(request, message):
         try:
-            ingredients = json.loads(result.get('ingredients_json') or '[]')
-        except (TypeError, ValueError):
-            ingredients = []
-        names = [ingredient_name(value) or (ingredient_name(value.get('description')) if isinstance(value, dict) else '')
-                 for value in ingredients] if isinstance(ingredients, list) else []
-        keys = [ingredient_group_key(name) for name in names]
-        item_icons = pantry_item_icons(database.pantry()['items'])
-        result['hidden_ingredient_positions'] = [index for index, key in enumerate(keys) if key == 'wasser']
-        result['ingredient_icons'] = {index: item_icons[key] for index, key in enumerate(keys) if key in item_icons}
-        return result
+            return await asyncio.wait_for(request, timeout=12)
+        except CatalogUnavailable as error:
+            raise HTTPException(409, str(error)) from None
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo catalogue read failed: %s', type(error).__name__)
+            raise HTTPException(502, message) from None
+
+    @app.get('/api/cookidoo/search')
+    async def search_catalog(q: str = Query('', max_length=200),
+                             page: int = Query(1, ge=1, le=RecipeCatalog.max_pages)):
+        return await read_catalog(catalog.search(q.strip(), page), 'Cookidoo konnte gerade nicht durchsucht werden.')
+
+    @app.get('/api/cookidoo/recipes/{recipe_id}')
+    async def catalog_recipe(recipe_id: str):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', recipe_id):
+            raise HTTPException(404, 'Dieses Cookidoo-Rezept wurde nicht gefunden.')
+        result = await read_catalog(catalog.details(recipe_id), 'Dieses Rezept konnte gerade nicht aus Cookidoo geladen werden.')
+        return recipe_ingredient_metadata(result)
+
+    async def catalogue_suggestion(refresh=False):
+        try:
+            result = await asyncio.wait_for(catalog.featured(refresh=refresh), timeout=12)
+            if result['recipe']:
+                return {**result, 'source': 'cookidoo'}
+            message = 'Cookidoo hat gerade keine Rezeptvorschläge geliefert.'
+        except CatalogUnavailable as error:
+            message = str(error)
+        except Exception as error:
+            logging.getLogger(__name__).warning('Cookidoo catalogue suggestion failed: %s', type(error).__name__)
+            message = 'Der Cookidoo-Vorschlag konnte gerade nicht geladen werden.'
+        return {**database.featured_recipe(), 'source': 'local', 'message': message}
+
+    @app.get('/api/cookidoo/featured')
+    async def catalogue_featured():
+        return await catalogue_suggestion()
+
+    @app.post('/api/cookidoo/featured/shuffle')
+    async def shuffle_catalogue_featured():
+        return await catalogue_suggestion(refresh=True)
+
+    @app.get('/api/cookidoo/images/{filename}')
+    async def catalogue_image(filename: str, size: Literal['thumb'] | None = None):
+        if not re.fullmatch(r'[a-f0-9]{40}\.webp', filename):
+            raise HTTPException(404)
+        try:
+            image = await asyncio.wait_for(catalog.image(filename[:-5], size == 'thumb'), timeout=12)
+        except Exception:
+            raise HTTPException(404) from None
+        if image is None:
+            raise HTTPException(404)
+        return Response(image, media_type='image/webp', headers={'Cache-Control': 'private, max-age=120'})
 
     @app.get('/api/recipes/{recipe_id}/tips')
     async def recipe_tips(recipe_id: str):

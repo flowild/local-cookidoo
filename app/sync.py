@@ -35,6 +35,22 @@ REGIONS = {
 }
 
 
+def recipe_image_url(url):
+    if not url:
+        return None
+    url = str(url)
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        if (parsed.scheme == 'https' and not parsed.username and not parsed.password
+                and parsed.port in (None, 443)
+                and (host == 'assets.tmecosys.com' or host.endswith('.tmecosys.com'))):
+            return url
+    except ValueError:
+        pass
+    return None
+
+
 class NoteRequestError(RuntimeError):
     def __init__(self, status):
         super().__init__('Cookidoo note request failed')
@@ -743,16 +759,22 @@ class SyncService:
 
     async def calendar_recipe_details(self, recipe_id):
         """Load a calendar recipe without changing the local library."""
-        custom = recipe_id.startswith('creation:')
+        return await self.remote_recipe_details(recipe_id)
+
+    async def remote_recipe_details(self, recipe_id, *, catalog_reference=None, expected_client=None):
+        custom = recipe_id.startswith('creation:') and catalog_reference is None
         source_id = recipe_id.removeprefix('creation:') if custom else recipe_id
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', source_id):
             raise ValueError('Ungültige Rezeptkennung.')
-        if self.lock.locked() or self.state['running']:
+        if catalog_reference is None and (self.lock.locked() or self.state['running']):
             raise ValueError('Bitte warte, bis die aktuelle Synchronisierung fertig ist.')
         async with self.lock:
             if not self.client:
                 raise ValueError('Bitte verbinde zuerst dein Cookidoo-Konto.')
-            detail = await (self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id))
+            if expected_client is not None and self.client is not expected_client:
+                raise ValueError('Das Cookidoo-Konto wurde gewechselt. Bitte versuche es erneut.')
+            request = self.client.get_custom_recipe(source_id) if custom else self.client.get_recipe_details(source_id)
+            detail = await request if catalog_reference is None else await asyncio.wait_for(request, timeout=8)
             ingredients = [dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item for item in detail.ingredients]
             if custom:
                 instructions = readable_instructions([dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item for item in detail.instructions])
@@ -760,11 +782,15 @@ class SyncService:
                 instructions = [{'title': group.title, 'steps': [plain_step(step.formatted_text) for step in group.recipe_steps]} for group in getattr(detail, 'step_groups', [])]
                 instructions = readable_instructions(instructions)
             image_file = None
-            try:
-                async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
-                    image_file = await self.cache_image(detail.image or detail.thumbnail, http)
-            except Exception as error:
-                logger.warning('Calendar recipe detail image unavailable: %s', type(error).__name__)
+            catalog_image = None
+            if catalog_reference is not None:
+                catalog_image = catalog_reference(detail.image or detail.thumbnail)
+            else:
+                try:
+                    async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as http:
+                        image_file = await self.cache_image(detail.image or detail.thumbnail, http)
+                except Exception as error:
+                    logger.warning('Calendar recipe detail image unavailable: %s', type(error).__name__)
             pantry_names = [item['name'] for item in self.database.pantry()['items']]
             availability = {}
             for index, ingredient in enumerate(ingredients):
@@ -782,7 +808,8 @@ class SyncService:
                     'ingredients_json': json.dumps(ingredients, ensure_ascii=False),
                     'tips_json': json.dumps(recipe_tips(detail, custom), ensure_ascii=False),
                     'instructions_json': json.dumps(instructions, ensure_ascii=False),
-                    'ingredient_availability': availability, 'collections': [], 'versions': [], 'is_local': False}
+                    'ingredient_availability': availability, 'collections': [], 'versions': [], 'is_local': False,
+                    **({'catalog_image': catalog_image} if catalog_reference is not None else {})}
 
     async def apply_calendar_placement(self, item):
         """Apply one add or removal and verify the resulting Cookidoo calendar."""
@@ -1182,19 +1209,10 @@ class SyncService:
             await asyncio.to_thread(create)
             return target
 
-    async def cache_image(self, url, http):
-        if not url:
-            return None
-        url = str(url)
-        filename = hashlib.sha256(url.encode()).hexdigest()[:40] + '.webp'
-        target = self.images / filename
-        if target.exists():
-            return filename
-        # Never forward Cookidoo credentials to image hosts or arbitrary URLs.
+    async def download_recipe_image(self, url, http):
         for _ in range(4):
-            parsed = urlparse(url)
-            host = (parsed.hostname or '').lower()
-            if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port not in (None, 443) or not (host == 'assets.tmecosys.com' or host.endswith('.tmecosys.com')):
+            url = recipe_image_url(url)
+            if not url:
                 return None
             async with http.stream('GET', url) as response:
                 if response.is_redirect:
@@ -1206,24 +1224,37 @@ class SyncService:
                     data.extend(chunk)
                     if len(data) > 10 * 1024 * 1024:
                         return None
-                image_bytes = bytes(data)
-            def convert():
-                temporary = None
-                try:
-                    with tempfile.NamedTemporaryFile(dir=self.images, suffix='.tmp', delete=False) as output:
-                        temporary = Path(output.name)
-                    with Image.open(io.BytesIO(image_bytes)) as original:
-                        image = ImageOps.exif_transpose(original).convert('RGB')
-                        image.thumbnail((960, 960))
-                        image.save(temporary, format='WEBP', quality=84)
-                    os.chmod(temporary, 0o600)
-                    os.replace(temporary, target)
-                finally:
-                    if temporary is not None:
-                        temporary.unlink(missing_ok=True)
-            await asyncio.to_thread(convert)
-            return filename
+                return bytes(data)
         return None
+
+    async def cache_image(self, url, http):
+        if not url:
+            return None
+        url = str(url)
+        filename = hashlib.sha256(url.encode()).hexdigest()[:40] + '.webp'
+        target = self.images / filename
+        if target.exists():
+            return filename
+        image_bytes = await self.download_recipe_image(url, http)
+        if image_bytes is None:
+            return None
+
+        def convert():
+            temporary = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=self.images, suffix='.tmp', delete=False) as output:
+                    temporary = Path(output.name)
+                with Image.open(io.BytesIO(image_bytes)) as original:
+                    image = ImageOps.exif_transpose(original).convert('RGB')
+                    image.thumbnail((960, 960))
+                    image.save(temporary, format='WEBP', quality=84)
+                os.chmod(temporary, 0o600)
+                os.replace(temporary, target)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+        await asyncio.to_thread(convert)
+        return filename
 
     async def synchronize(self):
         try:

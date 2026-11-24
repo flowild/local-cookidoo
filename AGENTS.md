@@ -406,6 +406,12 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 ## Listen, Vorrat und Navigation
 
 „Alle Rezepte“ bietet in der Web-App globale Zutaten-, Portions- und Zeitfilter.
+In der Web-Rezeptsammlung wechselt „Cookidoo“ zur Katalogsuche. Treffer und ihre
+Rezeptdetails werden lesend geladen. Katalogbilder werden privat und kurz
+zwischengespeichert. Die Katalogsuche verändert die Sammlung und ihre Listen
+nicht. In der Übersicht kann das Zufallsrezept aus dem Cookidoo-Katalog stammen.
+Bei einem fehlgeschlagenen Katalogabruf kennzeichnet die Übersicht einen
+verfügbaren Ersatz aus der lokalen Sammlung.
 Die Web-Kopfzeile zeigt die Einstellungen rechts neben dem Einkaufswagen.
 Die Suchleiste ist auf Desktop bis zu 560 Pixel breit. Die Lupe und der
 Platzhalter kennzeichnen die Suche. Platzhalter und Suchtext haben innen

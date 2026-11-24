@@ -9,7 +9,12 @@ const automaticSyncInterval = 5 * 60 * 1000;
 let nextAutomaticSync = 0, libraryRefreshPending = false;
 let suggestionTimer, suggestionRequest = 0, selectedIngredient = null, suggestionItems = [], suggestionIndex = -1;
 let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredientMatches = [], recipeIngredientIndex = -1;
-let featuredLocalDay = null;
+let featuredLocalDay = null, featuredRequest = 0;
+let featuredSource = 'local', recipeSource = 'local', catalogNextPage = null;
+try { if (localStorage.getItem('rezeptgarten-featured-source') === 'cookidoo') featuredSource = 'cookidoo'; } catch (_) {}
+const catalogPhoto = (token, name, thumb = true) => token
+  ? `<img data-recipe-image src="/api/cookidoo/images/${encodeURIComponent(token)}.webp${thumb ? '?size=thumb' : ''}" alt="${escapeHTML(name)}" loading="${thumb ? 'lazy' : 'eager'}" decoding="async">`
+  : photo(null);
 let weekOffset = 0;
 let weekVisibleDay = 0;
 try { const saved = localStorage.getItem('rezeptgarten-week-visible-day'); if (saved !== null && /^[0-6]$/.test(saved)) weekVisibleDay = Number(saved); } catch (_) {}
@@ -296,24 +301,50 @@ async function addPreviewToWeek(id) {
     if (previewNotePending.size) schedulePreviewNotes();
   }
 }
+function sourceSwitcher(action, current, group, localLabel, cookidooLabel) {
+  return `<div class="recipe-source" role="group" aria-label="${group}">
+    <button type="button" class="button" data-action="${action}" data-source="local" aria-pressed="${current === 'local'}">${localLabel}</button>
+    <button type="button" class="button" data-action="${action}" data-source="cookidoo" aria-pressed="${current === 'cookidoo'}">${cookidooLabel}</button>
+  </div>`;
+}
+
+function catalogRecipeCard(recipe) {
+  return `<button class="recipe-card" type="button" data-catalog-recipe="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} öffnen">
+    <div class="recipe-photo">${catalogPhoto(recipe.catalog_image, '')}</div>
+    <div class="recipe-info"><h3>${escapeHTML(recipe.name)}</h3></div>
+  </button>`;
+}
+
 function renderFeatured(result) {
   const container = $('#featured-recipe');
   if (!container || state.view !== 'uebersicht') return;
   featuredLocalDay = result.date;
   const recipe = result.recipe;
+  const fromCatalog = result.source === 'cookidoo';
+  const status = result.message ? `<p class="catalog-feedback" role="status">${escapeHTML(result.message)}${recipe ? ' Vorschlag aus deiner Sammlung.' : ''}</p>` : '';
   if (!recipe) {
-    container.innerHTML = `<section class="featured-recipe featured-empty"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>Hier wartet deine nächste Kochidee.</h1><p>Wenn Rezepte in deiner Sammlung sind, findest du hier jeden Tag einen Vorschlag.</p></div></section>`;
+    container.innerHTML = `${status}<section class="featured-recipe featured-empty"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>Hier wartet deine nächste Kochidee.</h1><p>Wenn Rezepte in deiner Sammlung sind, findest du hier jeden Tag einen Vorschlag.</p></div></section>`;
     return;
   }
   const time = duration(recipe.total_seconds);
   const portions = recipe.servings ? `${escapeHTML(recipe.servings)} ${String(recipe.servings) === '1' ? 'Portion' : 'Portionen'}` : '';
-  container.innerHTML = `<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" data-recipe="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button><button class="button featured-shuffle" data-action="shuffle-featured" ${result.can_shuffle ? '' : 'disabled'}>${icon('shuffle')}Anderes Rezept</button></div></div><div class="featured-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name, true)}${previewNote(recipe.id)}${previewWeekButton(recipe.id, recipe.name)}</div></section>`;
+  container.innerHTML = `${status}<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES${fromCatalog ? ' · COOKIDOO' : ''}</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" ${fromCatalog ? 'data-catalog-recipe' : 'data-recipe'}="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button><button class="button featured-shuffle" data-action="shuffle-featured" ${result.can_shuffle || (result.message && featuredSource === 'cookidoo') ? '' : 'disabled'}>${icon('shuffle')}Anderes Rezept</button></div></div><div class="featured-photo"${fromCatalog ? '' : ` data-preview-observe="${escapeHTML(recipe.id)}"`}>${fromCatalog ? catalogPhoto(recipe.catalog_image, recipe.name, false) : `${photo(recipe.image_file, recipe.name, true)}${previewNote(recipe.id)}${previewWeekButton(recipe.id, recipe.name)}`}</div></section>`;
 }
-async function loadFeatured(request = state.request) {
-  const result = await api('/api/featured-recipe');
-  if (request === state.request && state.view === 'uebersicht') renderFeatured(result);
+async function loadFeatured(request = state.request, refresh = false) {
+  const generation = ++featuredRequest;
+  const path = featuredSource === 'cookidoo' ? '/api/cookidoo/featured' : '/api/featured-recipe';
+  const result = refresh
+    ? await api(path + '/shuffle', {method:'POST', body:'{}', timeoutMs:14000})
+    : await api(path, {timeoutMs:14000});
+  if (generation === featuredRequest && request === state.request && state.view === 'uebersicht') renderFeatured(result);
 }
 function navActive(view) {
+  const sourceControls = $('#header-recipe-source');
+  sourceControls.hidden = view !== 'rezepte';
+  if (!sourceControls.hidden && sourceControls.dataset.selected !== recipeSource) {
+    sourceControls.dataset.selected = recipeSource;
+    sourceControls.innerHTML = sourceSwitcher('recipe-source', recipeSource, 'Rezeptquelle', 'Meine Sammlung', 'Cookidoo');
+  }
   document.querySelectorAll('[data-nav]').forEach(node => {
     const active = node.dataset.nav === (view === 'collection' ? 'listen' : view);
     node.classList.toggle('active', active);
@@ -690,12 +721,19 @@ async function renderRoute() {
   }
   if (state.view === 'uebersicht') {
     const stats = state.status.stats;
-    content.innerHTML = `<div id="featured-recipe" aria-live="polite"></div><section class="stats" aria-label="Deine Sammlung in Zahlen"><div class="stat"><span class="stat-icon">${icon('layers')}</span><div><div class="stat-value">${stats.collections}</div><div class="stat-label">Rezeptlisten</div></div></div><div class="stat"><span class="stat-icon">${icon('book')}</span><div><div class="stat-value">${stats.recipes}</div><div class="stat-label">Gespeicherte Rezepte</div></div></div><div class="stat"><span class="stat-icon">${icon('sync')}</span><div><div class="stat-value date">${escapeHTML(formatDate(stats.last_sync, true))}</div><div class="stat-label">Letzte Synchronisierung</div></div></div></section><div class="section-heading"><div><h2>Deine Rezeptlisten</h2><p>Gut sortiert. Schnell wiedergefunden.</p></div>${state.collections.length ? `<a class="text-link" href="#listen">Alle Listen ansehen${icon('arrow')}</a>` : ''}</div>${state.collections.length ? `${collectionSections()}<div class="section-heading"><div><h2>Ein Blick in deine Sammlung</h2><p>Vielleicht ist dein nächstes Lieblingsgericht schon dabei.</p></div><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div><div id="overview-recipes" class="recipe-grid"></div>` : emptyContent(state.status.connected ? 'Alles verbunden. Jetzt wird gesammelt.' : 'Deine Lieblingsgerichte ziehen ein.', state.status.connected ? (!state.status.sync.running && state.status.last_result?.message ? state.status.last_result.message : 'Beim ersten Laden holt Rezeptgarten deine gespeicherten Listen, Rezeptdetails und Bilder. Das kann bei einer großen Sammlung etwas dauern.') : 'Verbinde dein Cookidoo-Konto. Deine gespeicherten Rezeptlisten und Bilder werden anschließend in deiner lokalen Datenbank abgelegt.', !state.status.connected)}`;
+    content.innerHTML = `${sourceSwitcher('featured-source', featuredSource, 'Quelle des Zufallsrezepts', 'Aus meiner Sammlung', 'Aus Cookidoo')}<div id="featured-recipe" aria-live="polite"></div><section class="stats" aria-label="Deine Sammlung in Zahlen"><div class="stat"><span class="stat-icon">${icon('layers')}</span><div><div class="stat-value">${stats.collections}</div><div class="stat-label">Rezeptlisten</div></div></div><div class="stat"><span class="stat-icon">${icon('book')}</span><div><div class="stat-value">${stats.recipes}</div><div class="stat-label">Gespeicherte Rezepte</div></div></div><div class="stat"><span class="stat-icon">${icon('sync')}</span><div><div class="stat-value date">${escapeHTML(formatDate(stats.last_sync, true))}</div><div class="stat-label">Letzte Synchronisierung</div></div></div></section><div class="section-heading"><div><h2>Deine Rezeptlisten</h2><p>Gut sortiert. Schnell wiedergefunden.</p></div>${state.collections.length ? `<a class="text-link" href="#listen">Alle Listen ansehen${icon('arrow')}</a>` : ''}</div>${state.collections.length ? `${collectionSections()}<div class="section-heading"><div><h2>Ein Blick in deine Sammlung</h2><p>Vielleicht ist dein nächstes Lieblingsgericht schon dabei.</p></div><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div><div id="overview-recipes" class="recipe-grid"></div>` : emptyContent(state.status.connected ? 'Alles verbunden. Jetzt wird gesammelt.' : 'Deine Lieblingsgerichte ziehen ein.', state.status.connected ? (!state.status.sync.running && state.status.last_result?.message ? state.status.last_result.message : 'Beim ersten Laden holt Rezeptgarten deine gespeicherten Listen, Rezeptdetails und Bilder. Das kann bei einer großen Sammlung etwas dauern.') : 'Verbinde dein Cookidoo-Konto. Deine gespeicherten Rezeptlisten und Bilder werden anschließend in deiner lokalen Datenbank abgelegt.', !state.status.connected)}`;
     await loadFeatured(request);
     if (state.collections.length) {
       const result = await api('/api/recipes?limit=8');
       if (request === state.request && $('#overview-recipes')) $('#overview-recipes').innerHTML = result.items.map(recipeCard).join('');
     }
+    return;
+  }
+  if (state.view === 'rezepte' && recipeSource === 'cookidoo') {
+    content.innerHTML = `<div class="page-title"><h1>Alle Rezepte</h1></div>
+      <p id="result-count" role="status"></p><div id="recipe-grid" class="recipe-grid"></div>
+      <div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
+    await loadCatalogRecipes(false, request);
     return;
   }
   const collection = state.collections.find(item => item.id === state.collection);
@@ -1020,6 +1058,31 @@ function chooseRecipeIngredient(index) {
   input.value = parts.filter(Boolean).map(formatRecipeIngredient).join(', ') + ', ';
   input.focus(); showRecipeIngredientOptions();
 }
+async function loadCatalogRecipes(append = false, request = state.request) {
+  const page = append ? catalogNextPage : 1;
+  if (!page) return;
+  const status = $('#result-count');
+  status.textContent = 'Cookidoo wird durchsucht …';
+  try {
+    const params = new URLSearchParams({q:state.query, page});
+    const result = await api('/api/cookidoo/search?' + params, {timeoutMs:14000});
+    if (request !== state.request || !status.isConnected) return;
+    const grid = $('#recipe-grid');
+    if (!append) grid.innerHTML = '';
+    const shown = new Set([...grid.querySelectorAll('[data-catalog-recipe]')].map(button => button.dataset.catalogRecipe));
+    const newItems = result.items.filter(recipe => !shown.has(recipe.id));
+    grid.insertAdjacentHTML('beforeend', newItems.map(catalogRecipeCard).join(''));
+    catalogNextPage = newItems.length ? result.next_page : null;
+    status.textContent = grid.childElementCount ? 'Treffer aus Cookidoo' : 'Keine Cookidoo-Treffer gefunden.';
+    $('#recipe-empty').innerHTML = '';
+    $('#load-more').hidden = !catalogNextPage;
+  } catch (error) {
+    if (request !== state.request || !status.isConnected) return;
+    status.textContent = error.message;
+    if (!append) { catalogNextPage = null; $('#load-more').hidden = true; }
+    $('#recipe-empty').innerHTML = '<button type="button" class="button" data-action="retry-catalog-search">Erneut versuchen</button>';
+  }
+}
 async function loadRecipes(append = false, request = state.request) {
   const params = new URLSearchParams({q:state.query,sort:state.sort,offset:append ? state.offset : 0,limit:48});
   if (state.collection) { params.set('collection', state.collection); params.set('show_all', 'true'); }
@@ -1191,6 +1254,45 @@ async function ensureInlineNoteSaved() {
   const saved = await saveInlineNote(note);
   return saved && note.draft === note.original;
 }
+async function openCatalogRecipe(id, trigger) {
+  if (previewInteractionBusy) return;
+  previewInteractionBusy = true;
+  const request = state.request;
+  trigger.disabled = true;
+  try {
+    if ($('#recipe-dialog').open && !await ensureInlineNoteSaved()) return;
+    const recipe = await api('/api/cookidoo/recipes/' + encodeURIComponent(id), {timeoutMs:14000});
+    if (request !== state.request) return;
+    const time = duration(recipe.total_seconds);
+    inlineNote = null;
+    $('#recipe-content').innerHTML = `
+      <div class="recipe-detail-photo">${catalogPhoto(recipe.catalog_image, recipe.name, false)}</div>
+      <div class="recipe-detail-body">
+        <span class="eyebrow">COOKIDOO</span><h2 id="recipe-title">${escapeHTML(recipe.name)}</h2>
+        <div class="recipe-meta">
+          ${time ? `<span class="meta-chip">${icon('clock')}${time} gesamt</span>` : ''}
+          ${recipe.servings ? `<span class="meta-chip">${icon('portion')}${escapeHTML(recipe.servings)} Portionen</span>` : ''}
+          ${recipe.difficulty ? `<span class="meta-chip">${escapeHTML(difficultyLabel(recipe.difficulty))}</span>` : ''}
+        </div>
+        ${recipeDetails(recipe)}
+        <div id="recipe-tips-container"></div>
+        <a class="button button-primary button-full" href="${escapeHTML(recipe.source_url)}" target="_blank" rel="noopener noreferrer">
+          <span class="recipe-action-label">${icon('external')}In Cookidoo öffnen</span>
+        </a>
+      </div>`;
+    loadRecipeTips(recipe, null);
+    if (!$('#recipe-dialog').open) {
+      trigger.disabled = false;
+      trigger.focus({preventScroll:true});
+      $('#recipe-dialog').showModal();
+    }
+    $('#recipe-dialog').scrollTop = 0;
+  } finally {
+    trigger.disabled = false;
+    previewInteractionBusy = false;
+  }
+}
+
 async function openRecipe(id, fromWeek = false) {
   previewInteractionBusy = true;
   try {
@@ -1578,6 +1680,8 @@ document.addEventListener('click', async event => {
         }
       } finally { addRecipe.disabled = false; }
     }
+    const catalogRecipe = event.target.closest('[data-catalog-recipe]');
+    if (catalogRecipe) await openCatalogRecipe(catalogRecipe.dataset.catalogRecipe, catalogRecipe);
     if (recipe) await openRecipe(recipe.dataset.recipe, !!recipe.closest('[data-week-recipe], [data-cart-recipe]'));
     const cartRemove = event.target.closest('[data-cart-remove]');
     if (cartRemove) {
@@ -1618,10 +1722,28 @@ document.addEventListener('click', async event => {
         case 'pantry-expand-all': setAllPantryCollapsed(false); $('[data-action="pantry-expand-all"]')?.focus(); break;
         case 'shuffle-featured': {
           action.disabled = true;
-          try { const result = await post('/api/featured-recipe/shuffle'); if (state.view === 'uebersicht') renderFeatured(result); }
-          finally { action.disabled = false; }
+          try { await loadFeatured(state.request, true); }
+          finally { if (action.isConnected) action.disabled = false; }
+          $('[data-action="shuffle-featured"]')?.focus();
           break;
         }
+        case 'featured-source':
+          featuredSource = action.dataset.source;
+          try { localStorage.setItem('rezeptgarten-featured-source', featuredSource); } catch (_) {}
+          action.closest('.recipe-source').querySelectorAll('[data-source]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button === action));
+          });
+          $('#featured-recipe').textContent = 'Rezeptvorschlag wird geladen …';
+          await loadFeatured();
+          break;
+        case 'recipe-source':
+          recipeSource = action.dataset.source;
+          clearTimeout(searchTimer);
+          state.query = $('#search').value.trim();
+          await renderRoute();
+          $('[data-action="recipe-source"][aria-pressed="true"]')?.focus();
+          break;
+        case 'retry-catalog-search': await loadCatalogRecipes(); break;
         case 'previous-week': weekOffset--; await renderRoute(); $('[data-action="previous-week"]')?.focus(); break;
         case 'next-week': weekOffset++; await renderRoute(); $('[data-action="next-week"]')?.focus(); break;
         case 'current-week': {
@@ -1674,7 +1796,7 @@ document.addEventListener('click', async event => {
 
       }
     }
-    if (event.target.closest('#load-more')) { $('#load-more').disabled = true; try { await loadRecipes(true); } finally { if ($('#load-more')) $('#load-more').disabled = false; } }
+    if (event.target.closest('#load-more')) { $('#load-more').disabled = true; try { await (state.view === 'rezepte' && recipeSource === 'cookidoo' ? loadCatalogRecipes(true) : loadRecipes(true)); } finally { if ($('#load-more')) $('#load-more').disabled = false; } }
     if (event.target.closest('#candidate-more')) { const button = $('#candidate-more'); button.disabled = true; try { await loadCandidates(true); } finally { button.disabled = false; } }
   } catch (error) { toast(error.message); }
 });
@@ -1733,7 +1855,13 @@ $('#connect-form').addEventListener('submit', async event => {
 });
 $('#search').addEventListener('input', event => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.query = event.target.value.trim(); renderRoute().catch(error => toast(error.message)); }, 260);
+  const inCatalog = state.view === 'rezepte' && recipeSource === 'cookidoo';
+  if (inCatalog) { ++state.request; catalogNextPage = null; $('#load-more').hidden = true; }
+  searchTimer = setTimeout(() => {
+    state.query = event.target.value.trim();
+    const search = inCatalog ? loadCatalogRecipes() : renderRoute();
+    search.catch(error => toast(error.message));
+  }, inCatalog ? 400 : 260);
 });
 document.addEventListener('input', event => {
   if (event.target.id === 'accent-color') {
@@ -1839,6 +1967,7 @@ document.addEventListener('change', async event => {
   } catch (error) { toast(error.message); }
 });
 window.addEventListener('hashchange', () => {
+  clearTimeout(searchTimer);
   state.query = ''; state.candidateQuery = ''; state.pantryFilter = ''; state.filters = {ingredient:'',minServings:'',maxMinutes:''}; state.sort = 'name'; clearTimeout(candidateTimer); $('#search').value = '';
   renderRoute().catch(error => toast(error.message));
   window.scrollTo({top:0,behavior:'instant'});
@@ -1874,7 +2003,8 @@ setInterval(async () => {
     if (previous.stats.last_sync !== state.status.stats.last_sync) libraryRefreshPending = true;
     if (libraryRefreshPending && !$('dialog[open]') &&
         !document.activeElement?.matches('#content input, #content textarea, #content select')) {
-      const collectionView = ['uebersicht','listen','rezepte','collection'].includes(state.view);
+      const collectionView = ['uebersicht','listen','rezepte','collection'].includes(state.view) &&
+        !(state.view === 'rezepte' && recipeSource === 'cookidoo');
       await loadLibrary(collectionView);
       libraryRefreshPending = false;
     }

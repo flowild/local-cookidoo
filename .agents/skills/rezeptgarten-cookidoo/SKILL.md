@@ -5,6 +5,8 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
 
 # Cookidoo-Anbindung
 
+Die Web-Katalogsuche verwendet search_recipes des bestehenden Clients. Katalogdetails verwenden die gemeinsame Aufbereitung für Live-Rezepte. Der Katalog speichert eine kontobezogene Rezept-ID für den Berliner Tagesvorschlag. Suchseiten und Bildreferenzen bleiben begrenzt im Arbeitsspeicher. Katalogbilder verwenden denselben HTTPS-Hostfilter wie andere Rezeptbilder.
+
 - Der native Android-Testclient nutzt die vorhandenen Kalender- und
   Einkaufswagen-APIs. Er teilt den serverseitigen Cookidoo-Client und dessen
   Kontostand mit der Web-App.

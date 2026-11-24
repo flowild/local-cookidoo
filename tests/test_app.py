@@ -296,6 +296,96 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.json()['items'][0]['difficulty'], 'medium')
         service.client.get_recipe_details.assert_not_awaited()
 
+    def test_cookidoo_catalogue_displays_remote_recipes_without_saving_them(self):
+        service = self.app.state.sync
+        database = service.database
+        database.save_snapshot(*snapshot())
+        database.set('account', {'email': 'first@example.invalid', 'region': 'de'})
+        base_stats = database.stats()
+        url = 'https://assets.tmecosys.com/recipe-thumb'
+
+        def hit(identifier, thumbnail=None):
+            return NS(id=identifier, name=identifier, thumbnail=thumbnail, image=None)
+
+        async def search(query, *, languages, page, page_size):
+            self.assertEqual(languages, 'de')
+            self.assertEqual(page_size, 20)
+            if query == 'Reis':
+                return NS(total=3, recipes=[hit('remote-a', url), hit('r1')] if page == 0 else [hit('remote-b')])
+            return NS(total=3, recipes=[hit('r1', 'http://example.invalid/forbidden'), hit('remote-a', url), hit('remote-b')])
+
+        detail = NS(name='Externes Rezept', ingredients=['2 Eier'], instructions=[], total_time=900, active_time=300,
+                    serving_size=2, image=url, thumbnail=None,
+                    step_groups=[NS(title='Zubereitung', recipe_steps=[NS(formatted_text='<b>Verrühren</b>')])])
+        service.client = NS(search_recipes=AsyncMock(side_effect=search), get_recipe_details=AsyncMock(return_value=detail))
+
+        first = self.client.get('/api/cookidoo/search?q=Reis')
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.headers['cache-control'], 'no-store')
+        first = first.json()
+        self.assertEqual([item['id'] for item in first['items']], ['remote-a', 'r1'])
+        self.assertEqual(first['next_page'], 2)
+        self.assertEqual(self.client.get('/api/cookidoo/search?q=Reis&page=2').json()['items'][0]['id'], 'remote-b')
+        self.assertIsNone(self.client.get('/api/cookidoo/search?q=Reis&page=2').json()['next_page'])
+        self.assertEqual(service.client.search_recipes.await_count, 2)
+
+        recipe = self.client.get('/api/cookidoo/recipes/remote-a').json()
+        self.assertFalse(recipe['is_local'])
+        self.assertEqual(json.loads(recipe['ingredients_json']), ['2 Eier'])
+        self.assertEqual(json.loads(recipe['instructions_json'])[0]['steps'], ['Verrühren'])
+        self.assertEqual(recipe['source_url'], 'https://cookidoo.de/recipes/recipe/de-DE/remote-a')
+        self.assertEqual(self.client.get('/api/recipes/remote-a').status_code, 404)
+
+        path = f"/api/cookidoo/images/{recipe['catalog_image']}.webp?size=thumb"
+        png = io.BytesIO()
+        Image.new('RGB', (800, 600)).save(png, format='PNG')
+        with patch.object(service, 'download_recipe_image', AsyncMock(return_value=png.getvalue())) as image:
+            response = self.client.get(path)
+            self.assertEqual(response.headers['cache-control'], 'private, max-age=120')
+            self.assertEqual(Image.open(io.BytesIO(response.content)).size, (480, 360))
+            self.assertEqual(image.await_args.args[0], url)
+
+        first_feature = self.client.get('/api/cookidoo/featured').json()
+        self.assertEqual(first_feature['source'], 'cookidoo')
+        self.assertIn(first_feature['recipe']['id'], {'remote-a', 'remote-b'})
+        self.assertEqual(self.client.get('/api/cookidoo/featured').json(), first_feature)
+        second = self.client.post('/api/cookidoo/featured/shuffle', json={}, headers=ORIGIN).json()
+        self.assertIn(second['recipe']['id'], {'remote-a', 'remote-b'})
+        self.assertNotEqual(second['recipe']['id'], first_feature['recipe']['id'])
+        self.assertEqual(database.stats(), base_stats)
+        self.assertIsNone(database.recipe('remote-a'))
+        self.assertIsNone(database.recipe('remote-b'))
+
+        database.set('account', {'email': 'second@example.invalid', 'region': 'de'})
+        self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_cookidoo_catalogue_paginates_when_total_only_counts_the_current_page(self):
+        def page(query, *, languages, page, page_size):
+            recipes = [
+                NS(id=f'catalog-{page}-{index}', name=f'Rezept {index}', thumbnail=None, image=None)
+                for index in range(page_size)
+            ] if page < 2 else []
+            return NS(total=len(recipes), recipes=recipes)
+
+        self.app.state.sync.client = NS(search_recipes=AsyncMock(side_effect=page))
+        first = self.client.get('/api/cookidoo/search?q=Pasta').json()
+        self.assertEqual(first['next_page'], 2)
+        second = self.client.get('/api/cookidoo/search?q=Pasta&page=2').json()
+        self.assertEqual(second['next_page'], 3)
+        self.assertNotEqual(first['items'][0]['id'], second['items'][0]['id'])
+        self.assertIsNone(self.client.get('/api/cookidoo/search?q=Pasta&page=3').json()['next_page'])
+
+    def test_cookidoo_catalogue_reports_offline_search_and_falls_back_for_suggestions(self):
+        self.app.state.database.save_snapshot(*snapshot())
+        self.assertEqual(self.client.get('/api/cookidoo/search?q=Reis').status_code, 409)
+        suggestion = self.client.get('/api/cookidoo/featured').json()
+        self.assertEqual(suggestion['source'], 'local')
+        self.assertIsNotNone(suggestion['recipe'])
+        self.assertIn('Verbinde', suggestion['message'])
+        self.assertEqual(self.client.get('/api/cookidoo/search?page=101').status_code, 422)
+        self.assertEqual(self.client.get('/api/cookidoo/recipes/creation:other').status_code, 404)
+        self.assertEqual(self.client.post('/api/cookidoo/featured/shuffle', json={}, headers={'Origin':'https://evil.example'}).status_code, 403)
+
     def test_calendar_recipe_opens_details_without_adding_to_library(self):
         detail = NS(name='Externes Rezept', ingredients=['2 Eier'], instructions=[], total_time=900, active_time=300,
                     serving_size=2, image=None, thumbnail=None,

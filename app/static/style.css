@@ -161,3 +161,16 @@
 .changelog section h2 { margin: 0 0 8px; }
 .changelog section ul { padding-inline-start: 22px; margin-bottom: 0; }
 .changelog section li + li { margin-top: 6px; }
+
+.recipe-source{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.recipe-source .button{border-radius:999px}
+.recipe-source .button[aria-pressed="true"]{background:var(--soft);border-color:var(--green);color:var(--ink);font-weight:700}
+.catalog-feedback{margin:0 0 12px;color:var(--muted)}
+
+.header-search{display:flex;align-items:center;gap:10px;width:100%;max-width:560px;min-width:0}
+.header-search:has(#header-recipe-source:not([hidden])){max-width:800px}
+.header-search .recipe-source{flex-wrap:nowrap;margin:0}
+.header-search .recipe-source .button{white-space:nowrap}
+@media(max-width:700px){
+  .header-search{grid-row:2;grid-column:1/-1;max-width:none;align-items:stretch;flex-direction:column}
+}

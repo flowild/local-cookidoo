@@ -360,6 +360,14 @@ class Database:
             }
         return {**counts, 'last_sync': self.get('last_sync')}
 
+    def catalogued_families(self, identifiers):
+        placeholders = ','.join('?' for _ in identifiers)
+        with self.connect() as db:
+            rows = db.execute(f"""SELECT DISTINCT COALESCE(r.origin_recipe_id, r.id) AS family
+                FROM recipes r JOIN members m ON m.recipe_id=r.id
+                WHERE COALESCE(r.origin_recipe_id, r.id) IN ({placeholders})""", tuple(identifiers))
+            return {row['family'] for row in rows}
+
     def featured_recipe(self, refresh=False, day=None):
         day = day or datetime.now(ZoneInfo('Europe/Berlin')).date().isoformat()
         with self.connect() as db:
