@@ -407,7 +407,7 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 
 „Alle Rezepte“ bietet in der Web-App globale Zutaten-, Portions- und Zeitfilter.
 „Alle Rezepte“ zeigt die gespeicherte Sammlung. An der Web-Suchleiste wählt
-„Lokal / Cookidoo“ die Quelle der separaten Suche. Kommas kombinieren Zutaten,
+„Lokal / Cookidoo“ die Quelle der separaten Suche. Kommas und Leerzeichen kombinieren Zutaten,
 Gesamtzeit, Portionszahl und Schwierigkeitsgrad. Treffer und ihre Rezeptdetails werden lesend geladen. Katalogbilder werden privat und kurz
 zwischengespeichert. Die Katalogsuche verändert die Sammlung und ihre Listen
 nicht. In der Übersicht kann das Zufallsrezept aus dem Cookidoo-Katalog stammen.

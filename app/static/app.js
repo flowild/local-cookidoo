@@ -725,7 +725,7 @@ async function renderRoute() {
   }
   if (state.view === 'suche') {
     content.innerHTML = `<div class="page-title"><h1>Rezeptsuche</h1>
-      <p>Zutaten und Eigenschaften mit Kommas trennen. Zum Beispiel „Reis, Tomaten, 30 Min., einfach“.</p></div>
+      <p>Zutaten und Eigenschaften mit Leerzeichen oder Kommas trennen. Zum Beispiel „Reis, Tomaten, 30 Min., einfach“.</p></div>
       <p id="result-count" role="status"></p><div id="recipe-grid" class="recipe-grid"></div>
       <div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
     await loadSearchResults(false, request);

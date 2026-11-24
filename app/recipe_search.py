@@ -43,7 +43,16 @@ class RecipeSearch:
 
 
 def parse_recipe_search(query):
-    terms = [part.strip() for part in query.split(',') if part.strip()]
+    terms = []
+    for part in query.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if part.casefold().startswith(('titel:', 'zutat:')):
+            terms.append(part)
+            continue
+        pattern = r'(?:bis\s+|max(?:imal)?\.?\s*|<=\s*)?\d+\s*(?:min(?:uten)?\.?|minute|portion(?:en)?)|\S+'
+        terms.extend(re.findall(pattern, part, flags=re.IGNORECASE))
     text = ''
     title_only = False
     ingredients = []
