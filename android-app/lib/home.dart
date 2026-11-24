@@ -1231,21 +1231,28 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.section,
       children: [
-        _heading('Dein Rezeptmix'),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.related,
           children: [
-            Switch(
-              value: _catalogFeatured,
-              onChanged: (value) {
-                setState(() {
-                  _catalogFeatured = value;
-                  _featured = null;
-                  _areaData[0] = _loadOverview();
-                });
-              },
+            _heading('Dein Rezeptmix'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Switch(
+                  value: _catalogFeatured,
+                  onChanged: (value) {
+                    setState(() {
+                      _catalogFeatured = value;
+                      _featured = null;
+                      _areaData[0] = _loadOverview();
+                    });
+                  },
+                ),
+                Text(_catalogFeatured ? 'Cookidoo' : 'Lokal'),
+              ],
             ),
-            Text(_catalogFeatured ? 'Cookidoo' : 'Lokal'),
           ],
         ),
         if (featured?['message'] is String)

@@ -163,6 +163,22 @@ void main() {
               .first,
         );
         await tester.pumpAndSettle();
+        final title = tester.getRect(find.text('Dein Rezeptmix'));
+        final sourceSwitch = find.byType(Switch);
+        await tester.tap(sourceSwitch);
+        await tester.pumpAndSettle();
+        final toggle = tester.getRect(sourceSwitch);
+        final label = tester.getRect(find.text('Cookidoo'));
+        expect(toggle.center.dy, closeTo(label.center.dy, 0.01));
+        if (width == 1100) {
+          expect(toggle.left, greaterThan(title.right));
+          expect(toggle.center.dy, closeTo(title.center.dy, 0.01));
+        } else if (scale > 1) {
+          expect(toggle.top, greaterThanOrEqualTo(title.bottom));
+        }
+        await tester.tap(sourceSwitch);
+        await tester.pumpAndSettle();
+        expect(find.text('Lokal'), findsOneWidget);
         final grid = find.byType(ActionPillGrid);
         final buttons = find.descendant(
           of: grid,

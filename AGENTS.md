@@ -81,6 +81,8 @@ Sammlungsabgleich lädt Android die Vorschaubilder der Sammlung im Hintergrund.
 Der Telegram-Modus nutzt gespeicherte Bilder und zeigt für fehlende Bilder
 einen Platzhalter bis zum nächsten Heimnetzabruf. Andere API-Antworten verwenden
 keinen HTTP-Cache.
+Auf der Android-Startseite steht die Quellenwahl für das Zufallsrezept rechts
+neben „Dein Rezeptmix“. Bei knapper Breite darf sie unter den Titel umbrechen.
 Die Übersichtskarte „Deine Sammlung“ steht direkt unter dem Zufallsrezept.
 Sie bietet Direktzugriffe auf Rezeptlisten,
 alle Rezepte, die Woche und den Einkaufswagen. Die vier Schaltflächen teilen
@@ -108,7 +110,8 @@ oder Telegram. Beim Ausschalten folgt die normale Verbindungsprüfung.
 Die native Flutter-App entsteht unter `android-app/`. Die
 [Flutter-Portierung](docs/android/FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
-Downloadseite `https://192.168.184.30/android/test/`. Das
+Downloadseite `https://192.168.184.30/android/test/`. Künftige Veröffentlichungen
+verwenden standardmäßig ausschließlich den regulären Release-Kanal. Das
 Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptmix“. Android und
 PWA verwenden das Motiv Schale mit Keimling. Das adaptive Android-Launcher-Icon
 verwendet ein größeres Motiv auf einem fast schwarzen Hintergrund. Bei

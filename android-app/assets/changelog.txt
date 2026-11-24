@@ -1,3 +1,6 @@
+1.24.1
+• Auf der Startseite steht der Umschalter „Lokal / Cookidoo“ rechts neben „Dein Rezeptmix“.
+
 1.24.0
 • Die Suche findet Zutaten und Eigenschaften in der lokalen Sammlung und im Heimnetz bei Cookidoo.
 • Das Zufallsrezept kann aus der eigenen Sammlung oder dem Cookidoo-Katalog stammen.
