@@ -215,6 +215,80 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
     };
   }
 
+  Json _search(Uri uri, {bool catalog = false}) {
+    final query = (uri.queryParameters['q'] ?? '').trim().toLowerCase();
+    final pattern = RegExp(
+      r'(?:bis\s+|max(?:imal)?\.?\s*|<=\s*)?\d+\s*(?:min(?:uten)?\.?|minute|portion(?:en)?)|[^,\s]+',
+      caseSensitive: false,
+    );
+    final terms = <String>[];
+    for (final part in query.split(',')) {
+      final trimmed = part.trim();
+      if (trimmed.startsWith('titel:') || trimmed.startsWith('zutat:')) {
+        terms.add(trimmed);
+      } else {
+        terms.addAll(
+          pattern.allMatches(trimmed).map((match) => match.group(0)!),
+        );
+      }
+    }
+    final rows = _recipes.values.where((recipe) {
+      final name = text(recipe['name']).toLowerCase();
+      final ingredients = objects(recipe['ingredients_json'])
+          .map((item) => text(item['name']).toLowerCase())
+          .toList();
+      if (terms.length == 1 &&
+          !terms.first.startsWith('titel:') &&
+          !terms.first.startsWith('zutat:') &&
+          !RegExp(r'^\d').hasMatch(terms.first) &&
+          ![
+            'einfach',
+            'leicht',
+            'mittel',
+            'schwer',
+            'anspruchsvoll',
+          ].contains(terms.first)) {
+        return name.contains(terms.first) ||
+            ingredients.any((item) => item.contains(terms.first));
+      }
+      return terms.every((term) {
+        if (term.startsWith('titel:')) {
+          return name.contains(term.substring(6).trim());
+        }
+        if (term.startsWith('zutat:')) {
+          return ingredients.any(
+            (item) => item.contains(term.substring(6).trim()),
+          );
+        }
+        final number = int.tryParse(
+          RegExp(r'\d+').firstMatch(term)?.group(0) ?? '',
+        );
+        if (number != null && term.contains('min')) {
+          return (recipe['total_seconds'] as int) <= number * 60;
+        }
+        if (number != null && term.contains('portion')) {
+          return recipe['servings'] == number;
+        }
+        if (['einfach', 'leicht'].contains(term)) {
+          return recipe['difficulty'] == 'easy';
+        }
+        if (term == 'mittel') return recipe['difficulty'] == 'medium';
+        if (['schwer', 'anspruchsvoll'].contains(term)) {
+          return recipe['difficulty'] == 'hard';
+        }
+        return ingredients.any((item) => item.contains(term));
+      });
+    }).toList();
+    final offset = int.tryParse(uri.queryParameters['offset'] ?? '') ?? 0;
+    return {
+      'items': rows.skip(offset).take(48).toList(),
+      'offset': offset,
+      'total': rows.length,
+      'match_total': rows.length,
+      if (catalog) 'next_page': null,
+    };
+  }
+
   Json _detail(String id) {
     final recipe = _preview(id);
     return {
@@ -327,6 +401,14 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
             .toList(),
       },
       ['api', 'recipes'] => _browse(uri),
+      ['api', 'search', 'local'] => _search(uri),
+      ['api', 'cookidoo', 'search'] => _search(uri, catalog: true),
+      ['api', 'cookidoo', 'featured'] => {
+        ..._featuredRecipe(),
+        'source': 'cookidoo',
+      },
+      ['api', 'cookidoo', 'recipes', final id] when _recipes.containsKey(id) =>
+        _detail(id),
       ['api', 'recipes', final id] when _recipes.containsKey(id) => _detail(id),
       ['api', 'notes', final id] => {'text': _notes[id] ?? ''},
       ['api', 'featured-recipe'] => _featuredRecipe(),
@@ -366,6 +448,9 @@ class DebugRezeptgartenApi extends RezeptgartenApi {
     switch ((method, segments)) {
       case ('POST', ['api', 'sync']):
         return {'started': true};
+      case ('POST', ['api', 'cookidoo', 'featured', 'shuffle']):
+        _featured = (_featured + 1) % _recipes.length;
+        return {..._featuredRecipe(), 'source': 'cookidoo'};
       case ('POST', ['api', 'featured-recipe', 'shuffle']):
         _featured = (_featured + 1) % _recipes.length;
         return _featuredRecipe();

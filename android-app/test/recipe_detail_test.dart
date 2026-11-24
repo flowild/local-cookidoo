@@ -9,6 +9,31 @@ import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/recipe_detail.dart';
 
 void main() {
+  testWidgets('catalog details are read only', (tester) async {
+    final api = _CatalogDetailApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecipeDetail(
+          api: api,
+          preview: const {'id': 'r1', 'name': 'Reis'},
+          calendar: false,
+          catalog: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.paths, ['/api/cookidoo/recipes/r1']);
+    expect(find.text('Meine Notiz'), findsNothing);
+    expect(find.text('Zutaten'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('In Cookidoo \u00f6ffnen'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Zum Einkaufswagen hinzuf\u00fcgen'), findsNothing);
+    expect(find.text('Zu lokalen Listen hinzuf\u00fcgen'), findsNothing);
+    expect(api.paths, ['/api/cookidoo/recipes/r1']);
+  });
   testWidgets('opens the recipe preview before the detail response', (
     tester,
   ) async {
@@ -501,5 +526,22 @@ class _DetailApi extends RezeptgartenApi {
       throw const ApiException('Die Notiz wurde inzwischen geändert.');
     }
     return {'text': body['text']};
+  }
+}
+
+class _CatalogDetailApi extends RezeptgartenApi {
+  final paths = <String>[];
+  @override
+  Future<dynamic> get(String path, {Duration? timeout}) async {
+    paths.add(path);
+    return {
+      'id': 'r1',
+      'name': 'Reis',
+      'source_url': 'https://cookidoo.de/recipes/recipe/de-DE/r1',
+      'ingredients_json': ['Reis'],
+      'instructions_json': ['Kochen.'],
+      'tips_json': ['Warm servieren.'],
+      'is_local': false,
+    };
   }
 }

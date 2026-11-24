@@ -270,7 +270,7 @@ void main() {
     expect(custom.scaffoldBackgroundColor, light.scaffoldBackgroundColor);
   });
 
-  testWidgets('returning to recipes keeps the search and avoids a new load', (
+  testWidgets('reopening search keeps the query and avoids a new load', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(412, 915);
@@ -288,10 +288,9 @@ void main() {
     expect(find.text('Reis'), findsOneWidget);
     final reads = api.recipeReads;
 
-    await tester.tap(find.text('Woche'));
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.text('Rezepte'));
+    await tester.tap(find.byTooltip('Rezepte suchen'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<EditableText>(find.byType(EditableText)).controller.text,
@@ -945,9 +944,9 @@ class _RecipeSearchApi extends _TestApi {
 
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
-    if (Uri.parse(path).path == '/api/recipes') {
+    if (Uri.parse(path).path == '/api/search/local') {
       recipeReads++;
-      return {'items': <Json>[], 'total': 0, 'match_total': 0};
+      return {'items': <Json>[], 'offset': 0, 'total': 0, 'match_total': 0};
     }
     return super.get(path, timeout: timeout);
   }

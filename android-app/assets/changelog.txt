@@ -1,3 +1,8 @@
+1.24.0
+• Die Suche findet Zutaten und Eigenschaften in der lokalen Sammlung und im Heimnetz bei Cookidoo.
+• Das Zufallsrezept kann aus der eigenen Sammlung oder dem Cookidoo-Katalog stammen.
+• Über Telegram steht die lokale Suche zur Verfügung.
+
 1.21.6
 • In der Übersicht folgt „Deine Sammlung“ direkt auf das Zufallsrezept.
 

@@ -46,6 +46,13 @@ class TelegramApiTests(unittest.TestCase):
         compressed = self.cipher.decrypt(packed[:12], packed[12:], ('response:' + envelope['nonce']).encode())
         return json.loads(zlib.decompress(compressed))
 
+    def test_local_search_is_available_and_catalog_search_is_denied(self):
+        local = self.post(self.envelope('GET', '/api/search/local?q=Reis'))
+        self.assertEqual(local['status'], 200)
+        self.assertEqual(local['body']['items'], [])
+        denied = self.post(self.envelope('GET', '/api/cookidoo/search?q=Reis'))
+        self.assertEqual(denied['status'], 403)
+
     def test_recipe_revision_avoids_returning_unchanged_text(self):
         original = self.post(self.envelope('GET', '/api/recipes?limit=8'))
         self.assertEqual(original['status'], 200)

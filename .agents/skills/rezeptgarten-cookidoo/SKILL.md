@@ -5,6 +5,8 @@ description: Entwickle oder diagnostiziere die Cookidoo-Anbindung von Rezeptgart
 
 # Cookidoo-Anbindung
 
+Android verwendet die gemeinsame Katalogsuche im Heimnetz und die lokale Suche in beiden Verbindungsmodi. Über Telegram ist die Katalogsuche gesperrt, Katalogvorschläge und ihre lesenden Details sind erreichbar.
+
 Die Web-Katalogsuche verwendet search_recipes des bestehenden Clients. Kombinierte Anfragen prüfen Zutaten und Eigenschaften anhand der Rezeptdetails; die Suche lädt Cookidoo-Treffer in kleinen Gruppen. Katalogdetails verwenden die gemeinsame Aufbereitung für Live-Rezepte. Der Katalog speichert eine kontobezogene Rezept-ID für den Berliner Tagesvorschlag. Suchseiten und Bildreferenzen bleiben begrenzt im Arbeitsspeicher. Katalogbilder verwenden denselben HTTPS-Hostfilter wie andere Rezeptbilder.
 
 - Der native Android-Testclient nutzt die vorhandenen Kalender- und

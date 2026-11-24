@@ -55,7 +55,7 @@ zweispaltigen Raster mit Rezeptbildern abgesetzt. Lokale Listen haben ein
 Bearbeiten-Symbol. Importierte Cookidoo-Listen zeigen an derselben Stelle
 „Zu Cookidoo“. Öffentliche Kollektionen öffnen direkt, persönliche Listen
 führen zu „Meine Rezepte“ bei Cookidoo.
-Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter.
+Die globale Rezeptsammlung bündelt Suche, Sortierung und Filter. Die Lupe öffnet eine separate Android-Suche mit Quellenwahl für lokale Rezepte und den Cookidoo-Katalog. Über Telegram steht nur die lokale Suche zur Verfügung. Das Zufallsrezept auf Start kann aus der Sammlung oder dem Cookidoo-Katalog stammen. Katalogdetails sind lesend und Katalogbilder im Heimnetz verfügbar.
 Einkaufs-Häkchen reagieren in beiden Android-Verbindungsmodi sofort. Während
 der Server die Änderung im Hintergrund speichert, bleibt die Zutatenzeile
 an ihrer Position und weitere Zutaten bleiben bedienbar. Der Cookidoo-Transfer

@@ -129,7 +129,10 @@ class _RecipeCardState extends State<RecipeCard> {
                   curve: Curves.easeOut,
                   child: RecipeImage(
                     api: widget.api,
-                    filename: widget.recipe['image_file'],
+                    filename:
+                        widget.recipe['catalog_image'] ??
+                        widget.recipe['image_file'],
+                    catalog: widget.recipe['catalog_image'] != null,
                     full: widget.detail,
                   ),
                 ),
@@ -310,27 +313,31 @@ class RecipeImage extends StatefulWidget {
     required this.api,
     required this.filename,
     this.full = false,
+    this.catalog = false,
   });
   final RezeptgartenApi api;
   final Object? filename;
   final bool full;
+  final bool catalog;
   @override
   State<RecipeImage> createState() => _RecipeImageState();
 }
 
 class _RecipeImageState extends State<RecipeImage> {
-  late Future<Uint8List?> image = widget.api.image(
-    widget.filename,
-    full: widget.full,
-  );
+  late Future<Uint8List?> image = _loadImage();
+
+  Future<Uint8List?> _loadImage() => widget.catalog
+      ? widget.api.catalogImage(widget.filename, full: widget.full)
+      : widget.api.image(widget.filename, full: widget.full);
 
   @override
   void didUpdateWidget(RecipeImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.api != oldWidget.api ||
         widget.filename != oldWidget.filename ||
+        widget.catalog != oldWidget.catalog ||
         widget.full != oldWidget.full) {
-      image = widget.api.image(widget.filename, full: widget.full);
+      image = _loadImage();
     }
   }
 

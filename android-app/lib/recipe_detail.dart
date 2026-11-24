@@ -18,6 +18,7 @@ class RecipeDetail extends StatefulWidget {
     required this.api,
     required this.preview,
     required this.calendar,
+    this.catalog = false,
     this.onSync,
     this.onRecipeCardsChanged,
     this.onWeekChanged,
@@ -27,6 +28,7 @@ class RecipeDetail extends StatefulWidget {
   final RezeptgartenApi api;
   final Json preview;
   final bool calendar;
+  final bool catalog;
   final Future<void> Function()? onSync;
   final VoidCallback? onRecipeCardsChanged;
   final VoidCallback? onWeekChanged;
@@ -111,13 +113,16 @@ class _RecipeDetailState extends State<RecipeDetail> {
     });
     try {
       final suffix = widget.calendar ? '?calendar=true' : '';
-      final recipe = await widget.api.get('$_recipePath$suffix') as Json;
+      final path = widget.catalog
+          ? '/api/cookidoo/recipes/${Uri.encodeComponent(id)}'
+          : '$_recipePath$suffix';
+      final recipe = await widget.api.get(path) as Json;
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _recipe = recipe;
         _working = false;
       });
-      unawaited(_loadNote());
+      if (!widget.catalog) unawaited(_loadNote());
       unawaited(_loadTips());
     } on Exception catch (error) {
       if (mounted && generation == _loadGeneration) {
@@ -275,7 +280,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
     setState(() => _working = true);
     try {
       if (!await _flushNote() || !mounted) return;
-      await widget.onSync?.call();
+      if (!widget.catalog) await widget.onSync?.call();
       if (mounted) await _load(_id);
     } on Exception catch (error) {
       if (mounted) _message(error.toString());
@@ -690,7 +695,7 @@ class _RecipeDetailState extends State<RecipeDetail> {
             if (difficulty != null) InfoPill(difficulty),
           ],
         ),
-      _noteEditor(),
+      if (!widget.catalog) _noteEditor(),
       if (_ingredients(recipe) case final Widget ingredients) ingredients,
       if (_preparation(recipe) case final Widget preparation) preparation,
       if (_tips case final List<String> tips when tips.isNotEmpty)
@@ -712,52 +717,55 @@ class _RecipeDetailState extends State<RecipeDetail> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: AppSpacing.related,
         children: [
-          FilledButton.icon(
-            onPressed: canAct ? () => _action(_addToShelf) : null,
-            style: _buttonStyle,
-            icon: const Icon(Icons.playlist_add),
-            label: const Text(
-              'Zur Ablage hinzufügen',
-              textAlign: TextAlign.center,
+          if (!widget.catalog)
+            FilledButton.icon(
+              onPressed: canAct ? () => _action(_addToShelf) : null,
+              style: _buttonStyle,
+              icon: const Icon(Icons.playlist_add),
+              label: const Text(
+                'Zur Ablage hinzufügen',
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-          FilledButton.icon(
-            onPressed: canAct ? () => _action(_planWeek) : null,
-            style: _buttonStyle,
-            icon: const Icon(Icons.calendar_today_outlined),
-            label: const Text(
-              'Diese Woche kochen',
-              textAlign: TextAlign.center,
+          if (!widget.catalog)
+            FilledButton.icon(
+              onPressed: canAct ? () => _action(_planWeek) : null,
+              style: _buttonStyle,
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: const Text(
+                'Diese Woche kochen',
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-          FilledButton.icon(
-            onPressed: !canAct
-                ? null
-                : () => _action(() async {
-                    final result = await widget.api.write(
-                      'POST',
-                      '/api/cart/recipes',
-                      {'recipe_id': _id, 'calendar': _calendarRecipe},
-                    ) as Json;
-                    if (mounted) {
-                      if (result['added'] != false) {
-                        widget.onCartChanged?.call();
+          if (!widget.catalog)
+            FilledButton.icon(
+              onPressed: !canAct
+                  ? null
+                  : () => _action(() async {
+                      final result = await widget.api.write(
+                        'POST',
+                        '/api/cart/recipes',
+                        {'recipe_id': _id, 'calendar': _calendarRecipe},
+                      ) as Json;
+                      if (mounted) {
+                        if (result['added'] != false) {
+                          widget.onCartChanged?.call();
+                        }
+                        _message(
+                          result['added'] == false
+                              ? 'Rezept bereits im Einkaufswagen.'
+                              : 'Rezept im Einkaufswagen.',
+                        );
                       }
-                      _message(
-                        result['added'] == false
-                            ? 'Rezept bereits im Einkaufswagen.'
-                            : 'Rezept im Einkaufswagen.',
-                      );
-                    }
-                  }),
-            style: _buttonStyle,
-            icon: const Icon(Icons.add_shopping_cart),
-            label: const Text(
-              'Zum Einkaufswagen hinzufügen',
-              textAlign: TextAlign.center,
+                    }),
+              style: _buttonStyle,
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text(
+                'Zum Einkaufswagen hinzufügen',
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-          if (loaded && !_calendarRecipe)
+          if (loaded && !_calendarRecipe && !widget.catalog)
             OutlinedButton.icon(
               onPressed: canAct ? () => _action(_editLocalLists) : null,
               style: _buttonStyle,

@@ -276,6 +276,26 @@ class RezeptgartenApi {
     });
   }
 
+  Future<Uint8List?> catalogImage(Object? token, {bool full = false}) {
+    if (token is! String ||
+        !RegExp(r'^[a-f0-9]{40}$').hasMatch(token) ||
+        _viaTelegram ||
+        localAllowed?.call() == false) {
+      return Future.value();
+    }
+    final path = '/api/cookidoo/images/$token.webp${full ? '' : '?size=thumb'}';
+    final entry = _photos[path];
+    if (entry != null && entry.expires.isAfter(DateTime.now())) {
+      return Future.value(entry.bytes);
+    }
+    return _photoRequests.putIfAbsent(path, () {
+      final generation = _photoGeneration;
+      return _loadPhoto(path, generation).whenComplete(() {
+        if (generation == _photoGeneration) _photoRequests.remove(path);
+      });
+    });
+  }
+
   Future<void> warmRecipeImages({bool afterCurrent = false}) {
     final generation = _photoGeneration;
     final current = _warmingImages;

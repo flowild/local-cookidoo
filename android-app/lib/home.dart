@@ -14,6 +14,7 @@ import 'pill_widgets.dart';
 import 'recipe_card.dart';
 import 'recipe_detail.dart';
 import 'recipe_library.dart';
+import 'recipe_search.dart';
 import 'settings_view.dart';
 import 'symbol_field.dart';
 import 'week_view.dart';
@@ -97,6 +98,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   ConnectionMode? _lastMode;
   final pantryExpanded = <int>{};
   final recipeSearch = FocusNode();
+  late final searchState = RecipeSearchState(api, widget.connection);
+  bool _catalogFeatured = false;
   final cartItem = TextEditingController();
   final _areaData = <int, Future<dynamic>>{};
   Json? _featured;
@@ -285,16 +288,24 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     final session = _session;
     final revision = ++_overviewRevision;
     Future<void> read(String path, void Function(Json) apply) async {
-      final result = await api.get(path, timeout: shortRead) as Json;
+      final result = await api.get(
+        path,
+        timeout: path.contains('cookidoo/featured')
+            ? const Duration(seconds: 30)
+            : shortRead,
+      ) as Json;
       if (mounted && session == _session && revision == _overviewRevision) {
         apply(result);
       }
     }
 
     await Future.wait<void>([
-      read('/api/featured-recipe', (result) {
-        setState(() => _featured = result);
-      }),
+      read(
+        _catalogFeatured ? '/api/cookidoo/featured' : '/api/featured-recipe',
+        (result) {
+          setState(() => _featured = result);
+        },
+      ),
       read('/api/status', (status) {
         _adoptStatus(status);
         setState(() => _overviewStats = status['stats'] as Json?);
@@ -416,6 +427,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             if (!mounted) return;
             setState(() {
               _resetSession();
+              searchState.reset();
               serverCartCount = null;
               _areaData[area] = _load(area);
             });
@@ -747,11 +759,16 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     widget.connection?.removeListener(_connectionChanged);
     syncPoll?.cancel();
     recipeSearch.dispose();
+    searchState.dispose();
     cartItem.dispose();
     super.dispose();
   }
 
-  Future<void> _recipe(Json recipe, {bool calendar = false}) async {
+  Future<void> _recipe(
+    Json recipe, {
+    bool calendar = false,
+    bool catalog = false,
+  }) async {
     if (recipe['id'] is! String) return;
     final session = _session;
     await Navigator.of(context).push(
@@ -760,6 +777,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           api: api,
           preview: recipe,
           calendar: calendar,
+          catalog: catalog,
           onSync: _syncFromPull,
           onRecipeCardsChanged: () {
             if (session != _session) return;
@@ -1214,17 +1232,41 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       spacing: AppSpacing.section,
       children: [
         _heading('Dein Rezeptmix'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Switch(
+              value: _catalogFeatured,
+              onChanged: (value) {
+                setState(() {
+                  _catalogFeatured = value;
+                  _featured = null;
+                  _areaData[0] = _loadOverview();
+                });
+              },
+            ),
+            Text(_catalogFeatured ? 'Cookidoo' : 'Lokal'),
+          ],
+        ),
+        if (featured?['message'] is String)
+          Text(featured!['message'] as String),
         if ((featured?['recipe'] ?? featured?['featured'])
             case final Json recipe)
           RecipeCard(
             api: api,
             recipe: recipe,
-            onTap: () => _recipe(recipe),
+            onTap: () =>
+                _recipe(recipe, catalog: featured?['source'] == 'cookidoo'),
             cornerAction: RecipeCornerAction(
               tooltip: 'Anderes Rezept',
               onPressed: busy || featured?['can_shuffle'] == false
                   ? null
-                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+                  : () => _mutate(
+                      'POST',
+                      _catalogFeatured
+                          ? '/api/cookidoo/featured/shuffle'
+                          : '/api/featured-recipe/shuffle',
+                    ),
               icon: Icons.shuffle,
             ),
           )
@@ -1453,8 +1495,15 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             onPressed: busy || !_available
                 ? null
                 : () async {
-                    await _navigate(2);
-                    if (mounted && area == 2) recipeSearch.requestFocus();
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => RecipeSearchPage(
+                          state: searchState,
+                          openRecipe: (recipe, catalog) =>
+                              _recipe(recipe, catalog: catalog),
+                        ),
+                      ),
+                    );
                   },
             icon: const Icon(Icons.search),
           ),
