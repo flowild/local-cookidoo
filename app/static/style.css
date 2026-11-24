@@ -167,10 +167,10 @@
 .recipe-source .button[aria-pressed="true"]{background:var(--soft);border-color:var(--green);color:var(--ink);font-weight:700}
 .catalog-feedback{margin:0 0 12px;color:var(--muted)}
 
-.header-search{display:flex;align-items:center;gap:10px;width:100%;max-width:560px;min-width:0}
-.header-search:has(#header-recipe-source:not([hidden])){max-width:800px}
-.header-search .recipe-source{flex-wrap:nowrap;margin:0}
-.header-search .recipe-source .button{white-space:nowrap}
+.header-search{display:flex;align-items:center;gap:10px;width:100%;max-width:680px;min-width:0}
+.search-scope{flex:none;margin:0}
+.search-scope select{width:auto;margin:0;min-height:42px;padding:7px 10px}
 @media(max-width:700px){
-  .header-search{grid-row:2;grid-column:1/-1;max-width:none;align-items:stretch;flex-direction:column}
+  .header-search{grid-row:2;grid-column:1/-1;max-width:none}
+  .header-search .search-box{min-width:0}
 }

@@ -407,7 +407,7 @@ class Database:
                 results.append(item)
         return results
 
-    def recipes(self, collection=None, query='', sort='name', offset=0, limit=48, exclude_collection=None, ingredient='', min_servings=None, max_minutes=None, show_all=False, candidate_query=''):
+    def recipes(self, collection=None, query='', sort='name', offset=0, limit=48, exclude_collection=None, ingredient='', min_servings=None, max_minutes=None, show_all=False, candidate_query='', *, exact_servings=None, difficulty=None, title_only=False):
         clauses = ['EXISTS(SELECT 1 FROM members WHERE recipe_id=r.id)']
         params = []
         matches = []
@@ -427,8 +427,12 @@ class Database:
             title_needle = '%' + query.casefold().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
             ingredient_needle = '%' + ingredient_key(query).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
             search_params = [title_needle, ingredient_needle, ingredient_needle]
-            matches.append(f'({title_match} OR {ingredient_match})')
-            match_params.extend(search_params)
+            if title_only:
+                matches.append(title_match)
+                match_params.append(title_needle)
+            else:
+                matches.append(f'({title_match} OR {ingredient_match})')
+                match_params.extend(search_params)
             search_rank = f'CASE WHEN {title_match} THEN 2 WHEN {ingredient_match} THEN 1 ELSE 0 END'
         else:
             search_rank, search_params = '0', []
@@ -445,6 +449,15 @@ class Database:
         if max_minutes is not None:
             matches.append('r.total_seconds <= ?')
             match_params.append(max_minutes * 60)
+        if exact_servings is not None:
+            matches.append('CAST(r.servings AS REAL) = ?')
+            match_params.append(exact_servings)
+        if difficulty is not None:
+            if difficulty == 'hard':
+                matches.append("casefold(r.difficulty) IN ('hard', 'advanced')")
+            else:
+                matches.append('casefold(r.difficulty) = ?')
+                match_params.append(difficulty)
         where = ' AND '.join(clauses)
         orders = {
             'name': 'casefold(name),id',

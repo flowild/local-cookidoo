@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import io
+import json
 import re
 import secrets
 import time
@@ -82,13 +83,14 @@ class RecipeCatalog:
         image = await asyncio.to_thread(convert)
         return image if self._account() == owner else None
 
-    async def search(self, query, page, *, owner=None):
+    async def search(self, query, page, *, owner=None, native=None):
         current_owner = self._account()
         if owner is not None and current_owner != owner:
             raise CatalogUnavailable('Das Cookidoo-Konto wurde gewechselt. Bitte versuche es erneut.')
         service = self.service
         client = service.client
-        key = (query.casefold(), page)
+        extra_key = (tuple(native.items()),) if native else ()
+        key = (query.casefold(), page, *extra_key)
         async with service.lock:
             self._check_session(current_owner, client)
             timestamp = time.monotonic()
@@ -100,7 +102,7 @@ class RecipeCatalog:
                 language, _, website = REGIONS.get(region, REGIONS['de'])
                 result = await asyncio.wait_for(client.search_recipes(
                     query or None, languages=language.split('-')[0], page=page - 1,
-                    page_size=self.page_size,
+                    page_size=self.page_size, **(native or {}),
                 ), timeout=8)
                 total = result.total
                 upstream_count = len(result.recipes)
@@ -122,7 +124,7 @@ class RecipeCatalog:
              'catalog_image': self.image_reference(recipe['image_url'])}
             for recipe in recipes.values()
         ]
-        first = self._pages.get((key[0], 1))
+        first = self._pages.get((key[0], 1, *extra_key))
         first_page_size = first[3] if first else self.page_size
         # Cookidoo can report only the size of the current page as its total.
         full_page = upstream_count >= max(self.page_size, first_page_size)
@@ -130,6 +132,55 @@ class RecipeCatalog:
             full_page or page * max(first_page_size, 1) < total
         )
         return {'items': items, 'total': total, 'next_page': page + 1 if has_more else None}
+
+    async def search_filtered(self, criteria, cursor):
+        owner = self._account()
+        client = self.service.client
+        # The cursor tracks position inside upstream pages; recipes are checked in small batches.
+        page_index, offset = divmod(cursor - 1, 100)
+        page = page_index + 1
+        filters = {}
+        if criteria.ingredients:
+            filters['ingredients'] = criteria.ingredients[0]
+        if criteria.minutes:
+            filters['total_time'] = criteria.minutes * 60
+        if criteria.portions:
+            filters['portions'] = criteria.portions
+        if criteria.difficulty:
+            filters['difficulty'] = criteria.difficulty
+        query = criteria.text
+        if filters:
+            try:
+                first = await self.search(query, 1, owner=owner, native=filters)
+            except CatalogUnavailable:
+                raise
+            except Exception:
+                first = None
+            if not first or not first['items']:
+                filters = {}
+                query = query or (criteria.ingredients[0] if criteria.ingredients else '')
+        found = []
+        result = await self.search(query, page, owner=owner, native=filters)
+        candidates = result['items'][:100]
+        end = min(offset + 6, len(candidates))
+        next_cursor = page_index * 100 + end + 1 if end < len(candidates) else (
+            page * 100 + 1 if result['next_page'] else None
+        )
+        for hit in candidates[offset:end]:
+            self._check_session(owner, client)
+            try:
+                detail = await self.details(hit['id'])
+            except CatalogUnavailable:
+                raise
+            except Exception:
+                self._check_session(owner, client)
+                continue
+            ingredients = json.loads(detail['ingredients_json'])
+            if criteria.matches(detail, ingredients):
+                found.append({**hit, 'total_seconds': detail['total_seconds'],
+                              'servings': detail['servings'], 'difficulty': detail['difficulty']})
+        self._check_session(owner, client)
+        return {'items': found, 'next_page': next_cursor, 'filtered': True}
 
     async def details(self, recipe_id):
         owner = self._account()

@@ -5,7 +5,7 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 # Rezeptgarten entwickeln
 
-In der Web-Bibliothek wechselt „Cookidoo“ in die paginierte Textsuche des Katalogs. Katalogdetails sind lesend. Die Katalogquelle für das Tagesrezept ist im Browser wählbar. Die Cookidoo-Suche speichert keine Rezepte oder Listenmitgliedschaften.
+An der Web-Suchleiste wählt „Lokal / Cookidoo“ die Quelle der separaten Suche. „Alle Rezepte“ zeigt die gespeicherte Sammlung. Kommagetrennte Suchbegriffe kombinieren Zutaten, Gesamtzeit, Portionen und Schwierigkeit. Katalogdetails sind lesend. Die Katalogquelle für das Tagesrezept ist im Browser wählbar. Die Cookidoo-Suche speichert keine Rezepte oder Listenmitgliedschaften.
 
 Die Desktop-Seitenleiste zeigt Verbindung und letzten Cookidoo-Abgleich. Die Web-Versionsnummer verlinkt den Änderungsverlauf unter /static/changelog.html. Relevante Änderungen ergänzen den Verlauf. Der Service Worker hält die öffentliche Seite offline bereit.
 

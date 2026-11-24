@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .catalog import CatalogUnavailable, RecipeCatalog
+from .recipe_search import parse_recipe_search
 from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, cooking_days, friendly_error
@@ -828,6 +829,19 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(400, 'Bitte wähle höchstens 20 Zutaten mit je maximal 100 Zeichen.')
         return database.recipes(collection, q.strip(), sort, offset, limit, exclude_collection, ingredient, min_servings, max_minutes, show_all, candidate_q.strip())
 
+    def web_search_criteria(query):
+        try:
+            return parse_recipe_search(query)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+
+    @app.get('/api/search/local')
+    def search_local(q: str = Query('', max_length=200), offset: int = Query(0, ge=0)):
+        criteria = web_search_criteria(q)
+        return database.recipes(query=criteria.text, ingredient=criteria.ingredients,
+                                max_minutes=criteria.minutes, exact_servings=criteria.portions,
+                                difficulty=criteria.difficulty, title_only=criteria.title_only, offset=offset, limit=48)
+
     @app.get('/api/recipe-filter-options')
     def library_filter_options():
         return database.recipe_filter_options()
@@ -862,9 +876,9 @@ def create_app(directory=None, secure_cookies=None):
             result['is_local'] = True
         return recipe_ingredient_metadata(result)
 
-    async def read_catalog(request, message):
+    async def read_catalog(request, message, timeout=12):
         try:
-            return await asyncio.wait_for(request, timeout=12)
+            return await asyncio.wait_for(request, timeout=timeout)
         except CatalogUnavailable as error:
             raise HTTPException(409, str(error)) from None
         except Exception as error:
@@ -873,8 +887,14 @@ def create_app(directory=None, secure_cookies=None):
 
     @app.get('/api/cookidoo/search')
     async def search_catalog(q: str = Query('', max_length=200),
-                             page: int = Query(1, ge=1, le=RecipeCatalog.max_pages)):
-        return await read_catalog(catalog.search(q.strip(), page), 'Cookidoo konnte gerade nicht durchsucht werden.')
+                             page: int = Query(1, ge=1, le=RecipeCatalog.max_pages * 100)):
+        criteria = web_search_criteria(q.strip())
+        if criteria.filtered:
+            return await read_catalog(catalog.search_filtered(criteria, page),
+                                      'Cookidoo konnte gerade nicht durchsucht werden.', timeout=28)
+        if page > RecipeCatalog.max_pages:
+            raise HTTPException(422, 'Die Cookidoo-Seitenzahl ist ungültig.')
+        return await read_catalog(catalog.search(criteria.text, page), 'Cookidoo konnte gerade nicht durchsucht werden.')
 
     @app.get('/api/cookidoo/recipes/{recipe_id}')
     async def catalog_recipe(recipe_id: str):

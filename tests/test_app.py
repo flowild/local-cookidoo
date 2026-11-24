@@ -359,6 +359,47 @@ class AppTests(unittest.TestCase):
         database.set('account', {'email': 'second@example.invalid', 'region': 'de'})
         self.assertEqual(self.client.get(path).status_code, 404)
 
+    def test_web_search_combines_ingredients_with_recipe_properties(self):
+        database = self.app.state.database
+        collections, recipes = snapshot()
+        recipes['r1'].update(total_seconds=1500, servings='4', difficulty='easy',
+                             ingredients_json=json.dumps([{'name':'Reis'}, {'name':'Tomaten'}]))
+        recipes['r2'].update(total_seconds=2400, servings='4', difficulty='hard',
+                             ingredients_json=json.dumps([{'name':'Reis'}, {'name':'Tomaten'}]))
+        database.save_snapshot(collections, recipes)
+        path = '/api/search/local'
+        self.assertEqual([item['id'] for item in self.client.get(path, params={
+            'q':'Reis, Tomaten, 30 Min., 4 Portionen, einfach',
+        }).json()['items']], ['r1'])
+        self.assertEqual(self.client.get(path, params={'q':'Reis, Salz, 30 Min.'}).json()['total'], 0)
+        self.assertEqual(self.client.get(path, params={'q':'Titel: Reis'}).json()['total'], 0)
+        self.assertEqual(self.client.get(path, params={'q':'Zutat: Reis'}).json()['total'], 2)
+        self.assertEqual(self.client.get(path, params={'q':'0 Portionen'}).status_code, 422)
+        self.assertEqual(self.client.get('/api/recipes').json()['total'], 2)
+
+    def test_cookidoo_advanced_search_verifies_all_search_terms(self):
+        def hit(identifier):
+            return NS(id=identifier, name=identifier, image=None, thumbnail=None)
+
+        def detail(identifier):
+            return NS(name=identifier, total_time=1200 if identifier == 'yes' else 3600,
+                      active_time=120, serving_size=4, difficulty='easy',
+                      ingredients=[{'name':'Reis'}, {'name':'Tomaten'}], image=None, thumbnail=None,
+                      step_groups=[])
+
+        service = self.app.state.sync
+        service.client = NS(search_recipes=AsyncMock(return_value=NS(total=2, recipes=[hit('no'), hit('yes')])),
+                            get_recipe_details=AsyncMock(side_effect=detail))
+        response = self.client.get('/api/cookidoo/search', params={'q':'Reis, Tomaten, 30 Min., 4 Portionen, einfach'})
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertEqual([item['id'] for item in result['items']], ['yes'])
+        self.assertIsNone(result['next_page'])
+        self.assertEqual(service.client.search_recipes.call_args.kwargs['ingredients'], 'Reis')
+        self.assertEqual(service.client.search_recipes.call_args.kwargs['total_time'], 1800)
+        self.assertEqual(service.client.search_recipes.call_args.kwargs['difficulty'], 'easy')
+        self.assertIsNone(service.database.recipe('yes'))
+
     def test_cookidoo_catalogue_paginates_when_total_only_counts_the_current_page(self):
         def page(query, *, languages, page, page_size):
             recipes = [
