@@ -936,10 +936,18 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(409, str(error)) from None
         return {'ok': True}
 
+    next_web_sync = 0.0
+
     @app.post('/api/sync')
-    async def sync():
+    async def sync(automatic: bool = False):
+        nonlocal next_web_sync
+        now = time.monotonic()
+        if automatic and (now < next_web_sync or service.lock.locked()):
+            return {'started': False}
         try:
-            started = service.begin(manual=True)
+            started = service.begin(manual=not automatic)
+            if started:
+                next_web_sync = now + 300
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
         return {'started': started}

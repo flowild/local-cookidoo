@@ -204,7 +204,7 @@ Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
 
 ## Telegram-Verbindung
 
-Die Einstellungen verwalten das verschlüsselt auf dem Server gespeicherte Token
+Die Server-API verwaltet das verschlüsselt auf dem Server gespeicherte Token
 des Rezeptgarten-Server-Bots. Die Android-App meldet sich mit dem Telegram-
 Benutzerkonto an und koppelt dieses im Heimnetz mit dem Server-Bot und dem
 aktuellen Cookidoo-Konto. Der Host-Dienst akzeptiert ausschließlich frische,
@@ -338,8 +338,8 @@ in der Ablage, bleibt dieser Eintrag erhalten und nur der Tageseintrag wird entf
 Auch nicht lokal gespeicherte Wochenrezepte werden bei Bedarf aus Cookidoo geprüft.
 Der Notizstatus wird für sichtbare Vorschauen kontobezogen im Hintergrund geladen;
 Notizinhalte werden dabei nicht ausgegeben. Der Ablageknopf plant keinen Cookidoo-Tag.
-Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort zum
-Abgleich frei; der Kalenderabgleich folgt nach der laufenden Sammlungssynchronisierung.
+Der automatische Web-Abgleich lässt die Wartezeit der Wochenänderungen bestehen.
+Der Kalenderabgleich folgt nach der laufenden Sammlungssynchronisierung.
 Fehlerhafte oder unklare Warteschlangeneinträge werden dabei nicht erneut ausgeführt.
 Unter der Wochenablage zeigen aufklappbare lokale Listen ihre Rezepte. Das Plus
 speichert ein ausgewähltes Listenrezept in der Ablage der angezeigten Woche; ein zusätzlicher Ablageknopf erscheint dort nicht.
@@ -395,6 +395,11 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 ## Listen, Vorrat und Navigation
 
 „Alle Rezepte“ bietet in der Web-App globale Zutaten-, Portions- und Zeitfilter.
+Die Web-Kopfzeile zeigt die Einstellungen rechts neben dem Einkaufswagen.
+Der Cookidoo-Abgleich startet beim Öffnen, bei Rückkehr und regelmäßig in der
+sichtbaren Web-App mit höchstens einem automatischen Start je fünf Minuten.
+Die Web-Einstellungen zeigen „App installieren“ auf Android und laden die reguläre
+APK oder, solange nur der Testkanal veröffentlicht ist, die Test-APK herunter.
 
 „Zutat hinzufügen“ nutzt in Android und Web-App die volle Inhaltsbreite
 der Vorratsansicht einschließlich der üblichen Seitenabstände.

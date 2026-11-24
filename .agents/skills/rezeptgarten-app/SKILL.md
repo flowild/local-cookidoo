@@ -15,7 +15,7 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
   Änderungen committen und nach `origin/main` pushen; keine fremden Änderungen
   überschreiben und keinen Force-Push verwenden. Die PWA-Cacheversion bleibt separat.
 
-- Die Einstellungen verwalten das verschlüsselte Server-Bot-Token für die
+- Die Server-API verwaltet das verschlüsselte Server-Bot-Token für die
   native Android-App. Der frühere Client-Bot und der Telegram-Abruf in der
   Web-App sind entfernt; alte Browser-Zugangsdaten werden beim Start gelöscht.
   Die Web-App benötigt für persönliche Daten eine Verbindung zum Heimnetz.
@@ -28,9 +28,9 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 Die App synchronisiert Cookidoo-Listen, Kollektionen, Merkliste und eigene Kreationen
 nach SQLite; Bilder werden lokal gespeichert. Das responsive Frontend in `app/static/`
-hat keinen Node-Build. Detailansichten sind vorhanden. Der
-zeitgesteuerte Sammlungsabgleich ist entfernt; die Web-App bietet weiter
-den manuellen Abgleich. Gespeicherte alte Intervalle haben keine Wirkung.
+hat keinen Node-Build. Die Web-App startet den Cookidoo-Abgleich beim Öffnen und
+regelmäßig, solange die Seite sichtbar ist. Der Server begrenzt automatische
+Starts auf einen je fünf Minuten. Alte gespeicherte Intervalle haben keine Wirkung.
 Die separate Warteschlange für Wochenänderungen bleibt aktiv.
 
 - Lokale Listen bleiben von Cookidoo-Listen getrennt und werden nicht mit Cookidoo
@@ -62,7 +62,7 @@ Die separate Warteschlange für Wochenänderungen bleibt aktiv.
   modalen Dialogen sichtbar sein.
 - Der Nutzer hat die lokale App-Anmeldung ausdrücklich entfernt. Nicht ungefragt
   wieder einführen; schreibende API-Anfragen erfordern denselben Origin.
-- Der in den Einstellungen hinterlegbare Google-API-Schlüssel liegt separat vom
+- Der über die Server-API hinterlegbare Google-API-Schlüssel liegt separat vom
   Cookidoo-Token verschlüsselt in `google-api-key.enc`; die API gibt nur seinen
   Vorhandenseinsstatus aus. Der Server kann ihn mit `vault.key` entschlüsseln.
   Noch ist keine Google-Funktion angebunden. Kein Geheimnis ausgeben oder loggen.
@@ -114,7 +114,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Unter der Woche gibt es eine lokale, kontobezogene Ablage ohne festen Tag. Das X verschiebt ein Tagesrezept dorthin; der Papierkorb entfernt ein Ablagerezept mit Rückgängig. Die Ablage gehört zur angezeigten Woche und zum Wocheneinkauf.
 
-- Der manuelle Synchronisieren-Knopf gibt wartende Wochenänderungen sofort frei; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
+- Der automatische Web-Abgleich verkürzt die Wartezeit der Wochenänderungen nicht; nach der Sammlungssynchronisierung verarbeitet sie der bestehende Kalender-Worker. Fehlgeschlagene oder unklare Schreibvorgänge werden nicht automatisch wiederholt.
 
 - Unter der Wochenablage sind lokale Listen aufklappbar; ihre Rezepte lassen sich per Plus in der Ablage der angezeigten Woche speichern. Ein zusätzlicher Ablageknopf erscheint dort nicht.
 
@@ -139,7 +139,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Wasser wird appweit in Zutatenansichten, Einkaufswagen, Vorrat und Zutaten-Auswahl ausgeblendet; Rezeptdaten und Zubereitung bleiben erhalten. Andere Zutaten wie Kokoswasser bleiben sichtbar.
 
-- Auf dem Handy stehen sechs Hauptbereiche in einer unteren Navigationszeile; die Einstellungen sind über das Zahnrad in der Kopfzeile erreichbar.
+- Auf dem Handy stehen sechs Hauptbereiche in einer unteren Navigationszeile. Auf Desktop und Mobil stehen die Einstellungen rechts neben dem Einkaufswagen. Unter Android zeigt die Web-App dort „App installieren“ für die reguläre APK oder den verfügbaren Testkanal.
 
 - Bei eigenen Kreationen steht die App-Notiz am Ende der Cookidoo-Tipps ab „Notiz:“. Das gezielte Cookidoo-PATCH ändert nur das Tippfeld; vor dem Schreiben werden Notiz und Tipps auf Konflikte geprüft, danach Antwort und übrige Rezeptfelder bestätigt. Mehrdeutige Markierungen und unbestätigte Schreibvorgänge werden gemeldet. Ein Test an einer isolierten Rezeptkopie am 02.11.2026 bestätigte den unveränderten Rezeptinhalt und das Bild; die Testkopie wurde gelöscht.
 

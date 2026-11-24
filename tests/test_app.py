@@ -1385,6 +1385,16 @@ class AppTests(unittest.TestCase):
         self.assertEqual(worker.headers['service-worker-allowed'], '/')
         self.assertIn("path.startsWith('/api/')", worker.text)
 
+    def test_web_sync_is_rate_limited_and_does_not_expedite_the_calendar(self):
+        service = self.app.state.sync
+        with patch.object(service, 'begin', return_value=True) as begin:
+            automatic = '/api/sync?automatic=true'
+            self.assertEqual(self.client.post(automatic, json={}, headers=ORIGIN).json(), {'started': True})
+            self.assertEqual(self.client.post(automatic, json={}, headers=ORIGIN).json(), {'started': False})
+            begin.assert_called_once_with(manual=False)
+            self.assertEqual(self.client.post('/api/sync', json={}, headers=ORIGIN).json(), {'started': True})
+            begin.assert_called_with(manual=True)
+
     def test_sync_endpoint_runs_on_event_loop(self):
         class Fake(EmptyBookmarks):
             async def count_custom_collections(self): return (0, 0)

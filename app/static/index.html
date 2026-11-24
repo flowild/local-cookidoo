@@ -12,8 +12,8 @@
   <link rel="icon" href="/static/icon-192.png?v=2" type="image/png">
   <link rel="apple-touch-icon" href="/static/icon-192.png?v=2">
   <script src="/static/theme.js?v=31"></script>
-  <link rel="stylesheet" href="/static/style.css?v=135">
-  <script src="/static/app.js?v=144" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=136">
+  <script src="/static/app.js?v=145" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -57,10 +57,7 @@
       <a href="#einkaufswagen" data-nav="einkaufswagen"><svg><use href="#i-cart"/></svg>Mein Einkaufswagen</a>
       <a href="#vorrat" data-nav="vorrat"><svg><use href="#i-bowl"/></svg>Mein Vorrat</a>
     </nav>
-    <div class="sidebar-note"><span class="note-icon"><svg><use href="#i-leaf"/></svg></span><strong>Ein Platz für deine<br>Lieblingsgerichte.</strong><p>Deine Listen und Rezeptbilder.<br>Bei dir zu Hause gespeichert.</p></div>
     <div class="sidebar-bottom">
-      <button class="nav-button install-trigger" hidden><svg><use href="#i-download"/></svg>App installieren</button>
-      <a href="#einstellungen" class="nav-button" data-nav="einstellungen"><svg><use href="#i-settings"/></svg>Einstellungen</a>
       <div class="server-note"><span class="status-dot"></span>Deine lokale Sammlung<span>Rezeptgarten · Version <!-- APP_VERSION --></span></div>
     </div>
   </aside>
@@ -68,7 +65,7 @@
     <header class="topbar">
       <a class="mobile-brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="32" height="32" alt="">rezeptgarten</a>
       <label class="search-box"><svg><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"><kbd>Suche</kbd></label>
-      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="mobile-settings" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a><button id="sync-button" class="button button-primary" aria-label="Synchronisieren"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
+      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="settings-shortcut" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a></div>
     </header>
     <main id="main" tabindex="-1">
       <div id="sync-progress" class="sync-progress" role="status" aria-live="polite" hidden><svg class="spinning"><use href="#i-sync"/></svg><div><strong id="sync-message">Rezeptlisten werden geladen …</strong><span id="sync-counter"></span></div><progress id="sync-meter" max="1" value="0" aria-label="Synchronisierungsfortschritt"></progress></div>
@@ -112,7 +109,6 @@
 <dialog id="new-list-dialog" class="modal" aria-labelledby="new-list-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="new-list-title">Neue Rezeptliste</h2><p>Diese Liste wird nur in deinem Rezeptgarten gespeichert.</p><form id="new-list-form"><label>Listenname<input id="new-list-name" maxlength="100" autofocus required autocomplete="off"></label><label>Symbol<select id="new-list-icon"></select></label><p id="new-list-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Liste erstellen</button></form></dialog>
 <dialog id="pantry-dialog" class="modal" aria-labelledby="pantry-dialog-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="pantry-dialog-title">Zutat hinzufügen</h2><form id="pantry-form"><div class="ingredient-combobox"><label for="pantry-name">Zutat</label><input id="pantry-name" maxlength="100" required autocomplete="off" placeholder="z. B. Paprika" role="combobox" aria-autocomplete="list" aria-controls="ingredient-suggestions" aria-expanded="false"><div id="ingredient-suggestions" class="ingredient-suggestions" role="listbox" aria-label="Zutaten aus deinen Rezepten" hidden></div></div><label>Kategorie<select id="pantry-category" required></select></label><label>Symbol<select id="pantry-icon"></select></label><label>Menge oder Notiz (optional)<input id="pantry-quantity" maxlength="80" autocomplete="off" placeholder="z. B. 2 Stück"></label><p id="pantry-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Speichern</button></form></dialog>
 <dialog id="pantry-category-dialog" class="modal" aria-labelledby="pantry-category-title"><button class="close-dialog icon-button" type="button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><h2 id="pantry-category-title">Neue Kategorie</h2><form id="pantry-category-form"><label>Kategoriename<input id="pantry-category-name" maxlength="60" autofocus required autocomplete="off"></label><label>Symbol<select id="pantry-category-icon"></select></label><p id="pantry-category-error" class="form-error" role="alert" hidden></p><button class="button button-primary button-full" type="submit">Kategorie erstellen</button></form></dialog>
-<dialog id="install-dialog" class="modal" aria-labelledby="install-title"><button class="close-dialog icon-button" aria-label="Schließen"><svg><use href="#i-close"/></svg></button><span class="dialog-symbol"><svg><use href="#i-download"/></svg></span><span class="eyebrow">IMMER GRIFFBEREIT</span><h2 id="install-title">Dein Rezeptgarten als App</h2><p>Öffne diese Seite in Chrome auf deinem Handy. Wähle im Drei-Punkte-Menü <strong>„App installieren“</strong> oder <strong>„Zum Startbildschirm hinzufügen“</strong>.</p><div class="info-box"><strong>Lokales HTTPS einrichten</strong><p>Falls Chrome eine Zertifikatswarnung zeigt: Lade das lokale CA-Zertifikat herunter und installiere es über die Zertifikatseinstellungen deines Geräts. Öffne danach diese HTTPS-Adresse erneut. Vertraue dem Zertifikat nur, wenn es von deinem eigenen Server stammt.</p><a id="certificate-link" class="text-link" href="http://192.168.184.30/zertifikat">CA-Zertifikat herunterladen<svg><use href="#i-download"/></svg></a></div><p class="form-footnote">Die App verbindet sich mit deinem Server im Heimnetz. Ohne Verbindung zum Server können keine Rezeptlisten geladen werden.</p></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <div id="week-undo-notices" class="week-undo-notices" aria-live="polite"></div>
 </body>

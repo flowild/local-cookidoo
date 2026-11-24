@@ -4,7 +4,9 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
 const photo = (file, alt = '', eager = false) => file ? `<img data-recipe-image draggable="false" src="/api/images/${encodeURIComponent(file)}${eager ? '' : '?size=thumb'}" alt="${escapeHTML(alt)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : `<span class="image-placeholder" aria-label="Kein Rezeptbild verfügbar">${icon('bowl')}</span>`;
 const state = {status:null, collections:[], recipes:[], total:0, offset:0, view:'uebersicht', collection:null, query:'', sort:'name', filters:{ingredient:'',minServings:'',maxMinutes:''}, request:0, candidateQuery:'', candidateOffset:0, candidateRequest:0, pantry:{categories:[],items:[]}, pantryFilter:'', pantryEdit:null};
-let deferredInstall = null, toastTimer, searchTimer, candidateTimer, polling = false;
+let toastTimer, searchTimer, candidateTimer, polling = false;
+const automaticSyncInterval = 5 * 60 * 1000;
+let nextAutomaticSync = 0, libraryRefreshPending = false;
 let suggestionTimer, suggestionRequest = 0, selectedIngredient = null, suggestionItems = [], suggestionIndex = -1;
 let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredientMatches = [], recipeIngredientIndex = -1;
 let featuredLocalDay = null;
@@ -51,7 +53,6 @@ function duration(seconds) {
   const minutes = Math.ceil(seconds / 60);
   return minutes >= 60 ? `${Math.floor(minutes / 60)} Std.${minutes % 60 ? ` ${minutes % 60} Min.` : ''}` : `${minutes} Min.`;
 }
-let serverReachable = false;
 async function api(path, options = {}) {
   let response;
   const {timeoutMs, ...fetchOptions} = options;
@@ -60,7 +61,6 @@ async function api(path, options = {}) {
   try {
     response = await fetch(path, {credentials:'same-origin', ...fetchOptions, ...(controller ? {signal:controller.signal} : {}), headers:{'Content-Type':'application/json', ...fetchOptions.headers}});
   } catch (_) {
-    serverReachable = false;
     $('#offline-banner').textContent = 'Keine Verbindung zu deinem Rezeptgarten-Server. Prüfe die Verbindung zum Heimnetz.';
     $('#offline-banner').hidden = false;
     const error = new Error('Dein Server ist gerade nicht erreichbar. Prüfe deine Verbindung zum Heimnetz.');
@@ -69,7 +69,6 @@ async function api(path, options = {}) {
   } finally {
     if (timer) clearTimeout(timer);
   }
-  serverReachable = true;
   if (navigator.onLine) $('#offline-banner').hidden = true;
   let payload;
   try { payload = await response.json(); } catch (_) { throw new Error('Die Serverantwort konnte nicht gelesen werden. Bitte versuche es erneut.'); }
@@ -172,14 +171,14 @@ async function refreshCartCount() {
   setCartCount(status.cart_recipe_count);
 }
 
-async function loadLibrary() {
+async function loadLibrary(render = true) {
   const [status, collections] = await Promise.all([api('/api/status', {timeoutMs:2500}), api('/api/collections', {timeoutMs:2500})]);
   state.status = status; state.collections = collections.items;
   adoptWeekQueue(status.calendar_queue);
   $('#nav-list-count').textContent = status.stats.collections;
   $('#nav-recipe-count').textContent = status.stats.recipes;
   updateSync();
-  await renderRoute();
+  if (render) await renderRoute();
 }
 function updateSync() {
   if (!state.status) return;
@@ -187,10 +186,6 @@ function updateSync() {
   if (state.status.connected && previewNotePending.size && !previewNoteBusy) schedulePreviewNotes();
   setCartCount(state.status.cart_recipe_count);
   const sync = state.status.sync;
-  const button = $('#sync-button');
-  button.disabled = sync.running;
-  button.querySelector('svg').classList.toggle('spinning', sync.running);
-  button.querySelector('span').textContent = sync.running ? 'Lädt …' : 'Synchronisieren';
   $('#connection-label').innerHTML = `<span><span class="status-dot"></span>${state.status.connected ? 'Mit Cookidoo verbunden' : 'Lokale Sammlung'}</span><span class="last-sync">${state.status.stats.last_sync ? `Letzter Abgleich: ${escapeHTML(formatDate(state.status.stats.last_sync))}` : 'Noch nicht synchronisiert'}</span>`;
   $('#sync-progress').hidden = !sync.running;
   $('#sync-message').textContent = sync.message;
@@ -199,7 +194,7 @@ function updateSync() {
   if (sync.total) $('#sync-meter').value = sync.done; else $('#sync-meter').removeAttribute('value');
 }
 function emptyContent(title, description, action = false, compact = false) {
-  return `<section class="empty-state ${compact ? 'compact' : ''}"><span class="empty-icon">${icon(action ? 'layers' : 'search')}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p>${action ? `<button class="button button-primary" data-action="${state.status?.connected ? 'sync' : 'connect'}">${icon(state.status?.connected ? 'sync' : 'link')}${state.status?.connected ? 'Rezeptlisten laden' : 'Cookidoo verbinden'}${icon('arrow')}</button>` : ''}</section>`;
+  return `<section class="empty-state ${compact ? 'compact' : ''}"><span class="empty-icon">${icon(action ? 'layers' : 'search')}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p>${action ? `<button class="button button-primary" data-action="connect">${icon('link')}Cookidoo verbinden${icon('arrow')}</button>` : ''}</section>`;
 }
 const symbolOptions = [
   ['🍎','Apfel'], ['🥕','Möhre'], ['🌿','Kräuter'], ['🧂','Gewürze'],
@@ -695,7 +690,7 @@ async function renderRoute() {
   }
   if (state.view === 'uebersicht') {
     const stats = state.status.stats;
-    content.innerHTML = `<div id="featured-recipe" aria-live="polite"></div><section class="stats" aria-label="Deine Sammlung in Zahlen"><div class="stat"><span class="stat-icon">${icon('layers')}</span><div><div class="stat-value">${stats.collections}</div><div class="stat-label">Rezeptlisten</div></div></div><div class="stat"><span class="stat-icon">${icon('book')}</span><div><div class="stat-value">${stats.recipes}</div><div class="stat-label">Gespeicherte Rezepte</div></div></div><div class="stat"><span class="stat-icon">${icon('sync')}</span><div><div class="stat-value date">${escapeHTML(formatDate(stats.last_sync, true))}</div><div class="stat-label">Letzte Synchronisierung</div></div></div></section><div class="section-heading"><div><h2>Deine Rezeptlisten</h2><p>Gut sortiert. Schnell wiedergefunden.</p></div>${state.collections.length ? `<a class="text-link" href="#listen">Alle Listen ansehen${icon('arrow')}</a>` : ''}</div>${state.collections.length ? `${collectionSections()}<div class="section-heading"><div><h2>Ein Blick in deine Sammlung</h2><p>Vielleicht ist dein nächstes Lieblingsgericht schon dabei.</p></div><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div><div id="overview-recipes" class="recipe-grid"></div>` : emptyContent(state.status.connected ? 'Alles verbunden. Jetzt wird gesammelt.' : 'Deine Lieblingsgerichte ziehen ein.', state.status.connected ? (!state.status.sync.running && state.status.last_result?.message ? state.status.last_result.message : 'Beim ersten Laden holt Rezeptgarten deine gespeicherten Listen, Rezeptdetails und Bilder. Das kann bei einer großen Sammlung etwas dauern.') : 'Verbinde dein Cookidoo-Konto. Deine gespeicherten Rezeptlisten und Bilder werden anschließend in deiner lokalen Datenbank abgelegt.', !state.status.sync.running)}`;
+    content.innerHTML = `<div id="featured-recipe" aria-live="polite"></div><section class="stats" aria-label="Deine Sammlung in Zahlen"><div class="stat"><span class="stat-icon">${icon('layers')}</span><div><div class="stat-value">${stats.collections}</div><div class="stat-label">Rezeptlisten</div></div></div><div class="stat"><span class="stat-icon">${icon('book')}</span><div><div class="stat-value">${stats.recipes}</div><div class="stat-label">Gespeicherte Rezepte</div></div></div><div class="stat"><span class="stat-icon">${icon('sync')}</span><div><div class="stat-value date">${escapeHTML(formatDate(stats.last_sync, true))}</div><div class="stat-label">Letzte Synchronisierung</div></div></div></section><div class="section-heading"><div><h2>Deine Rezeptlisten</h2><p>Gut sortiert. Schnell wiedergefunden.</p></div>${state.collections.length ? `<a class="text-link" href="#listen">Alle Listen ansehen${icon('arrow')}</a>` : ''}</div>${state.collections.length ? `${collectionSections()}<div class="section-heading"><div><h2>Ein Blick in deine Sammlung</h2><p>Vielleicht ist dein nächstes Lieblingsgericht schon dabei.</p></div><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div><div id="overview-recipes" class="recipe-grid"></div>` : emptyContent(state.status.connected ? 'Alles verbunden. Jetzt wird gesammelt.' : 'Deine Lieblingsgerichte ziehen ein.', state.status.connected ? (!state.status.sync.running && state.status.last_result?.message ? state.status.last_result.message : 'Beim ersten Laden holt Rezeptgarten deine gespeicherten Listen, Rezeptdetails und Bilder. Das kann bei einer großen Sammlung etwas dauern.') : 'Verbinde dein Cookidoo-Konto. Deine gespeicherten Rezeptlisten und Bilder werden anschließend in deiner lokalen Datenbank abgelegt.', !state.status.connected)}`;
     await loadFeatured(request);
     if (state.collections.length) {
       const result = await api('/api/recipes?limit=8');
@@ -1057,16 +1052,34 @@ async function loadCandidates(append = false, request = state.request) {
 }
 // Remove credentials and local snapshots left by the retired browser client bot.
 try { ['rezeptgarten-telegram-client-token', 'rezeptgarten-telegram-pair', 'rezeptgarten-telegram-cart-checks'].forEach(key => localStorage.removeItem(key)); } catch (_) {}
-function telegramSettings(serverStatus) {
-  const disabled = serverStatus === null;
-  const status = disabled ? 'Der Serverstatus ist unbekannt.' : serverStatus ? 'Ein Token ist gespeichert.' : 'Noch kein Token gespeichert.';
-  return `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Telegram: Server-Bot</h2><p>${status}</p><form data-telegram-form="server" autocomplete="off"><label for="telegram-server">${serverStatus ? 'Token ersetzen' : 'Bot-Token'}</label><input id="telegram-server" type="password" required maxlength="221" autocomplete="off" spellcheck="false" ${disabled ? 'disabled' : ''}><button class="button button-primary" type="submit" ${disabled ? 'disabled' : ''}>Token speichern</button></form>${serverStatus ? '<button class="text-link danger-link" type="button" data-telegram-delete="server">Token entfernen</button>' : ''}<p class="settings-small">Das Token wird verschlüsselt auf dem Rezeptgarten-Server gespeichert. Die Android-App verbindet sich mit deinem Telegram-Benutzerkonto.</p></section>`;
+function isAndroidDevice() {
+  return navigator.userAgentData?.platform === 'Android' || /\bAndroid\b/i.test(navigator.userAgent);
 }
+async function downloadAndroid(fallback) {
+  for (const [path, channel] of [['/android/', 'release'], ['/android/test/', 'test']]) {
+    try {
+      const response = await fetch(path + 'latest.json', {cache:'no-store'});
+      if (!response.ok) continue;
+      const {file} = await response.json();
+      if (typeof file === 'string' &&
+          file.startsWith(`rezeptgarten-${channel}-`) &&
+          /^rezeptgarten-(release|test)-\d+\.\d+\.\d+-\d+-[a-f0-9]{12}\.apk$/.test(file)) {
+        location.assign(path + file);
+        return;
+      }
+    } catch (_) { /* Try the next published Android channel. */ }
+  }
+  location.assign(fallback);
+}
+document.addEventListener('click', event => {
+  const link = event.target.closest('#download-android');
+  if (!link) return;
+  event.preventDefault();
+  void downloadAndroid(link.href);
+});
 function renderSettings() {
   const status = state.status, account = status.account;
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">ALLES NACH DEINEM GESCHMACK</span><h1>Dein Rezeptgarten</h1><p>Verbindung, Synchronisierung und deine App auf dem Startbildschirm.</p></div><div class="settings-grid"><section class="settings-card"><span class="dialog-symbol">${icon('leaf')}</span><h2>Darstellung</h2><p>Wähle eine angenehme Darstellung für dieses Gerät.</p><label class="theme-toggle" for="dark-mode"><span>Dunkelmodus</span><input id="dark-mode" type="checkbox" role="switch" ${document.documentElement.dataset.theme === 'dark' ? 'checked' : ''}></label><div class="accent-control"><label for="accent-color">Akzentfarbe</label><div class="accent-picker-row"><input id="accent-color" type="color" value="${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}" aria-describedby="accent-description"><span id="accent-value">${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}</span><button class="button" type="button" data-action="accent-reset">Standardfarbe</button></div><p id="accent-description" class="settings-small">Die Farbe gilt für diesen Browser.</p></div><p class="settings-small">Die Auswahl wird in diesem Browser gespeichert.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Dein Cookidoo-Konto</h2>${status.connected ? `<p class="account-email">${escapeHTML(account?.email)}</p><p>Verbunden mit Cookidoo ${escapeHTML(({de:'Deutschland',at:'Österreich',ch:'Schweiz'})[account?.region] || '')}.</p><button class="button" data-action="connect">Konto neu verbinden</button><button class="text-link danger-link" data-action="disconnect">Verbindung trennen</button><p class="settings-small">Deine lokale Sammlung bleibt beim Trennen erhalten.</p>` : `<p>Verbinde dein Konto, um persönliche Rezeptlisten und gespeicherte Cookidoo-Kollektionen zu laden.</p><button class="button button-primary" data-action="connect">${icon('link')}Cookidoo verbinden</button>`}</section><section class="settings-card"><span class="dialog-symbol">${icon('download')}</span><h2>Auch auf deinem Handy</h2><p>Installiere Rezeptgarten über Chrome und öffne deine Sammlung direkt vom Startbildschirm.</p><button class="button" data-action="install">${icon('download')}App installieren</button><button class="text-link" data-action="install-help">Installationshilfe</button><p class="settings-small">Die Verbindung zum eigenen Server im Heimnetz bleibt erforderlich.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('book')}</span><h2>Deine Daten bleiben bei dir</h2><p>${status.stats.recipes} Rezepte und ${status.stats.images} lokal gespeicherte Bilder. Vor jedem erfolgreichen Abgleich wird die Datenbank gesichert.</p><p class="settings-small">Rezeptgarten übernimmt aktuell Listen und Rezeptdetails aus Cookidoo. Zutaten werden in einer späteren Ansicht ergänzt.</p></section></div>`;
-  $('.settings-grid').insertAdjacentHTML('beforeend', `<section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Google API</h2><p>${status.google_api_key_set ? 'Ein API-Schlüssel ist gespeichert.' : 'Noch kein API-Schlüssel gespeichert.'}</p><form id="google-key-form" autocomplete="off"><label for="google-api-key">${status.google_api_key_set ? 'API-Schlüssel ersetzen' : 'API-Schlüssel'}</label><input id="google-api-key" type="password" required maxlength="512" autocomplete="off" spellcheck="false"><button class="button button-primary" type="submit">Schlüssel speichern</button></form>${status.google_api_key_set ? '<button class="text-link danger-link" type="button" data-action="google-key-delete">Schlüssel entfernen</button>' : ''}<p class="settings-small">Nach dem Speichern wird der Schlüssel nicht mehr angezeigt.</p></section>`);
-  $('.settings-grid').insertAdjacentHTML('beforeend', telegramSettings(serverReachable ? !!status.telegram_server_bot_set : null));
+  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">ALLES NACH DEINEM GESCHMACK</span><h1>Dein Rezeptgarten</h1></div><div class="settings-grid"><section class="settings-card"><span class="dialog-symbol">${icon('leaf')}</span><h2>Darstellung</h2><p>Wähle eine angenehme Darstellung für dieses Gerät.</p><label class="theme-toggle" for="dark-mode"><span>Dunkelmodus</span><input id="dark-mode" type="checkbox" role="switch" ${document.documentElement.dataset.theme === 'dark' ? 'checked' : ''}></label><div class="accent-control"><label for="accent-color">Akzentfarbe</label><div class="accent-picker-row"><input id="accent-color" type="color" value="${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}" aria-describedby="accent-description"><span id="accent-value">${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}</span><button class="button" type="button" data-action="accent-reset">Standardfarbe</button></div><p id="accent-description" class="settings-small">Die Farbe gilt für diesen Browser.</p></div><p class="settings-small">Die Auswahl wird in diesem Browser gespeichert.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Dein Cookidoo-Konto</h2>${status.connected ? `<p class="account-email">${escapeHTML(account?.email)}</p><p>Verbunden mit Cookidoo ${escapeHTML(({de:'Deutschland',at:'Österreich',ch:'Schweiz'})[account?.region] || '')}.</p><button class="button" data-action="connect">Konto neu verbinden</button><button class="text-link danger-link" data-action="disconnect">Verbindung trennen</button><p class="settings-small">Deine lokale Sammlung bleibt beim Trennen erhalten.</p>` : `<p>Verbinde dein Konto, um persönliche Rezeptlisten und gespeicherte Cookidoo-Kollektionen zu laden.</p><button class="button button-primary" data-action="connect">${icon('link')}Cookidoo verbinden</button>`}</section>${isAndroidDevice() ? `<section class="settings-card"><span class="dialog-symbol">${icon('download')}</span><h2>Rezeptmix für Android</h2><a class="button" href="/android/test/" id="download-android">${icon('download')}App installieren</a></section>` : ''}</div>`;
 }
 function recipeDetails(recipe) {
   const parse = value => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } };
@@ -1193,18 +1206,12 @@ async function openRecipe(id, fromWeek = false) {
   loadRecipeNote(currentNote).then(() => loadRecipeTips(recipe, currentNote));
   } finally { previewInteractionBusy = false; }
 }
-async function startSync() {
-  if (!state.status?.connected) { $('#connect-dialog').showModal(); return; }
-  if (weekQueueWriting) { toast('Bitte schließe zuerst die Änderung an der Woche ab.'); return; }
-  const result = await post('/api/sync');
-  state.status = await api('/api/status'); updateSync();
-  if (result.started && !state.status.sync.running) { await loadLibrary(); toast(state.status.sync.message); }
-}
-async function install() {
-  if (deferredInstall) {
-    await deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null;
-    document.querySelectorAll('.install-trigger').forEach(node => { node.hidden = true; });
-  } else $('#install-dialog').showModal();
+async function maybeSync() {
+  if (document.hidden || !navigator.onLine || !state.status?.connected ||
+      state.status.sync.running || weekQueueWriting || Date.now() < nextAutomaticSync) return;
+  nextAutomaticSync = Date.now() + automaticSyncInterval;
+  try { await post('/api/sync?automatic=true'); }
+  catch (error) { toast(error.message); }
 }
 document.addEventListener('input', event => {
   if (event.target.id !== 'recipe-note-text' || !inlineNote?.loaded) return;
@@ -1569,7 +1576,6 @@ document.addEventListener('click', async event => {
       try { await post(`/api/cart/${encodeURIComponent(cartResolve.dataset.cartResolve)}/resolve`, {status:cartResolve.dataset.status}); await renderCart(); }
       finally { cartResolve.disabled = false; }
     }
-    if (event.target.closest('.install-trigger')) await install();
     if (action) {
       switch (action.dataset.action) {
         case 'plan-week':
@@ -1643,16 +1649,8 @@ document.addEventListener('click', async event => {
         case 'pantry-category': showCategoryEditor(); break;
         case 'new-list': showListEditor(); break;
         case 'connect': errorMessage($('#connect-error'), ''); $('#cookidoo-email').value = state.status?.account?.email || ''; $('#connect-dialog').showModal(); break;
-        case 'sync': await startSync(); break;
-        case 'install': await install(); break;
-        case 'install-help': $('#install-dialog').showModal(); break;
         case 'disconnect': await post('/api/disconnect'); await loadLibrary(); toast('Verbindung getrennt. Deine lokale Sammlung bleibt erhalten.'); break;
-        case 'google-key-delete': {
-          action.disabled = true;
-          try { await api('/api/google-api-key', {method:'DELETE'}); state.status.google_api_key_set = false; if (state.view === 'einstellungen') renderSettings(); toast('Google API-Schlüssel entfernt.'); }
-          finally { action.disabled = false; }
-          break;
-        }
+
       }
     }
     if (event.target.closest('#load-more')) { $('#load-more').disabled = true; try { await loadRecipes(true); } finally { if ($('#load-more')) $('#load-more').disabled = false; } }
@@ -1712,7 +1710,6 @@ $('#connect-form').addEventListener('submit', async event => {
   } catch (error) { errorMessage($('#connect-error'), error.message); }
   finally { $('#cookidoo-password').value = ''; button.disabled = false; button.innerHTML = `Verbinden & Listen laden${icon('arrow')}`; }
 });
-$('#sync-button').addEventListener('click', () => startSync().catch(error => toast(error.message)));
 $('#search').addEventListener('input', event => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.query = event.target.value.trim(); renderRoute().catch(error => toast(error.message)); }, 260);
@@ -1759,49 +1756,7 @@ document.addEventListener('keydown', event => {
   } else if (event.key === 'Enter' && recipeIngredientIndex >= 0) { event.preventDefault(); chooseRecipeIngredient(recipeIngredientIndex); }
   else if (event.key === 'Escape') { event.preventDefault(); $('#recipe-ingredient-options').hidden = true; event.target.setAttribute('aria-expanded', 'false'); }
 });
-document.addEventListener('click', async event => {
-  const remove = event.target.closest('[data-telegram-delete]');
-  if (!remove) return;
-  remove.disabled = true;
-  try {
-    await api('/api/telegram-server-bot', {method:'DELETE'}); state.status.telegram_server_bot_set = false;
-    renderSettings(); toast('Bot-Token entfernt.');
-  } catch (error) { toast(error.message || 'Token konnte nicht entfernt werden.'); }
-  finally { remove.disabled = false; }
-});
 document.addEventListener('submit', async event => {
-  if (event.target.matches('[data-telegram-form]')) {
-    event.preventDefault();
-    const input = event.target.querySelector('input'), button = event.target.querySelector('button');
-    const token = input.value.trim(); input.value = '';
-    if (!/^[0-9]{1,20}:[A-Za-z0-9_-]{20,200}$/.test(token)) { toast('Bitte gib ein gültiges Bot-Token ein.'); return; }
-    button.disabled = true;
-    try {
-      await post('/api/telegram-server-bot', {token}); state.status.telegram_server_bot_set = true;
-      renderSettings(); toast('Bot-Token gespeichert.');
-    } catch (error) { toast(error.message || 'Token konnte nicht gespeichert werden.'); }
-    finally { button.disabled = false; }
-    return;
-  }
-  if (event.target.id === 'cart-item-form') {
-    event.preventDefault();
-    const form = event.target, input = $('#cart-item-name'), button = form.querySelector('button');
-    button.disabled = true;
-    try { await post('/api/cart/items', {name:input.value}); await renderCart(); $('#cart-item-name')?.focus(); }
-    catch (error) { toast(error.message); }
-    finally { button.disabled = false; }
-    return;
-  }
-  if (event.target.id === 'google-key-form') {
-    event.preventDefault();
-    const input = $('#google-api-key'), button = event.target.querySelector('button[type="submit"]');
-    const key = input.value;
-    input.value = ''; button.disabled = true;
-    try { await post('/api/google-api-key', {key}); state.status.google_api_key_set = true; if (state.view === 'einstellungen') renderSettings(); toast('Google API-Schlüssel gespeichert.'); }
-    catch (error) { toast(error.message); }
-    finally { input.value = ''; button.disabled = false; }
-    return;
-  }
   if (event.target.id !== 'recipe-filters') return;
   event.preventDefault();
   const form = new FormData(event.target);
@@ -1870,12 +1825,15 @@ window.addEventListener('hashchange', () => {
 document.addEventListener('error', event => {
   if (event.target.matches?.('img[data-recipe-image]')) { const placeholder = document.createElement('span'); placeholder.className = 'image-placeholder'; placeholder.innerHTML = icon('bowl'); placeholder.setAttribute('aria-label', 'Rezeptbild nicht verfügbar'); event.target.replaceWith(placeholder); }
 }, true);
-window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferredInstall = event; document.querySelectorAll('.install-trigger').forEach(node => { node.hidden = false; }); });
-window.addEventListener('appinstalled', () => { deferredInstall = null; toast('Rezeptgarten wurde installiert. Viel Freude mit deiner Sammlung!'); });
 function offlineStatus() { $('#offline-banner').hidden = navigator.onLine; }
 window.addEventListener('online', offlineStatus); window.addEventListener('offline', offlineStatus); offlineStatus();
-window.addEventListener('online', () => { if (!state.status) loadLibrary().catch(() => {}); });
+window.addEventListener('online', async () => {
+  try { if (!state.status) await loadLibrary(); }
+  catch (_) { return; }
+  await maybeSync();
+});
 document.addEventListener('visibilitychange', () => {
+  void maybeSync();
   if (!document.hidden && navigator.onLine && state.view === 'uebersicht' && featuredLocalDay !== berlinDay()) loadFeatured().catch(error => toast(error.message));
 });
 setInterval(async () => {
@@ -1891,15 +1849,22 @@ setInterval(async () => {
       else await renderRoute();
     }
     if (state.view === 'uebersicht' && featuredLocalDay !== berlinDay()) await loadFeatured(state.request);
-    if ((previous.sync.running && !state.status.sync.running) || previous.stats.last_sync !== state.status.stats.last_sync) {
-      await loadLibrary(); if (previous.sync.running) toast(state.status.sync.message);
+    if (previous.sync.running && state.status.sync.phase === 'error') toast(state.status.sync.message);
+    if (previous.stats.last_sync !== state.status.stats.last_sync) libraryRefreshPending = true;
+    if (libraryRefreshPending && !$('dialog[open]') &&
+        !document.activeElement?.matches('#content input, #content textarea, #content select')) {
+      const collectionView = ['uebersicht','listen','rezepte','collection'].includes(state.view);
+      await loadLibrary(collectionView);
+      libraryRefreshPending = false;
     }
+    void maybeSync();
   } catch (_) { /* Keep the last visible collection when the server is temporarily unreachable. */ }
   finally { polling = false; }
 }, 2500);
 async function initialize() {
   try {
     await loadLibrary();
+    void maybeSync();
   } catch (error) { await renderRoute(); }
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
