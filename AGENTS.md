@@ -130,7 +130,8 @@ Kopfzeile und Einstellungen verwenden denselben Updatestatus.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
-über die gemeinsamen APIs. „Zu lokalen Listen hinzufügen“ öffnet die
+über die gemeinsamen APIs. „Zu lokalen Listen hinzufügen“ steht zwischen
+„Zum Einkaufswagen hinzufügen“ und „In Cookidoo öffnen“. Die Aktion öffnet die
 Listenauswahl von unten. Die Liste wird beim Öffnen geladen und jede Änderung
 nach Serverbestätigung in der Auswahl und den Rezeptdetails angezeigt.
 Ein Notizkonflikt erhält den Entwurf im Feld.

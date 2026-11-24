@@ -106,10 +106,11 @@ void main() {
       await tester.pumpAndSettle();
       final button = find.text('Zu lokalen Listen hinzufügen');
       await tester.scrollUntilVisible(
-        button,
+        button.hitTestable(),
         150,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       expect(api.listReads, 0);
       expect(find.byType(CheckboxListTile), findsNothing);
       await tester.tap(button);
@@ -129,6 +130,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
 
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
       await tester.tap(button);
       await tester.pumpAndSettle();
       expect(tester.widget<CheckboxListTile>(guests).value, isTrue);
@@ -211,6 +214,7 @@ void main() {
       ('Zur Ablage hinzufügen', Icons.playlist_add, FilledButton),
       ('Diese Woche kochen', Icons.calendar_today_outlined, FilledButton),
       ('Zum Einkaufswagen hinzufügen', Icons.add_shopping_cart, FilledButton),
+      ('Zu lokalen Listen hinzufügen', Icons.playlist_add, OutlinedButton),
       ('In Cookidoo öffnen', Icons.open_in_new, OutlinedButton),
     ]) {
       final text = find.text(label);
@@ -233,6 +237,11 @@ void main() {
         lessThan(tester.getRect(text).left),
       );
     }
+    final cart = tester.getCenter(find.text('Zum Einkaufswagen hinzufügen'));
+    final lists = tester.getCenter(find.text('Zu lokalen Listen hinzufügen'));
+    final cookidoo = tester.getCenter(find.text('In Cookidoo öffnen'));
+    expect(cart.dy, lessThan(lists.dy));
+    expect(lists.dy, lessThan(cookidoo.dy));
     await tester.tap(add);
     await tester.pumpAndSettle();
     expect(api.placements.single, {

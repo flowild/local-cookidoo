@@ -1,3 +1,6 @@
+1.21.2
+• In der Rezeptansicht steht „Zu lokalen Listen hinzufügen“ zwischen Einkaufswagen und „In Cookidoo öffnen“.
+
 1.21.0
 • Rezeptmix prüft beim Öffnen im Heimnetz automatisch auf Updates. Ein Download-Symbol neben der Suche erscheint, sobald ein neuer Build verfügbar ist.
 • Die installierte Versionsnummer in den Einstellungen öffnet diesen Änderungsverlauf.

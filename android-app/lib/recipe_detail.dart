@@ -712,16 +712,6 @@ class _RecipeDetailState extends State<RecipeDetail> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: AppSpacing.related,
         children: [
-          if (loaded && !_calendarRecipe)
-            OutlinedButton.icon(
-              onPressed: canAct ? () => _action(_editLocalLists) : null,
-              style: _buttonStyle,
-              icon: const Icon(Icons.playlist_add),
-              label: const Text(
-                'Zu lokalen Listen hinzufügen',
-                textAlign: TextAlign.center,
-              ),
-            ),
           FilledButton.icon(
             onPressed: canAct ? () => _action(_addToShelf) : null,
             style: _buttonStyle,
@@ -767,6 +757,16 @@ class _RecipeDetailState extends State<RecipeDetail> {
               textAlign: TextAlign.center,
             ),
           ),
+          if (loaded && !_calendarRecipe)
+            OutlinedButton.icon(
+              onPressed: canAct ? () => _action(_editLocalLists) : null,
+              style: _buttonStyle,
+              icon: const Icon(Icons.playlist_add),
+              label: const Text(
+                'Zu lokalen Listen hinzufügen',
+                textAlign: TextAlign.center,
+              ),
+            ),
           if (recipe['source_url'] case final String url)
             OutlinedButton.icon(
               onPressed: !canAct

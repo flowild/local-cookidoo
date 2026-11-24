@@ -130,7 +130,8 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   aktuellen Berliner Kalenderwoche hinzu. Aktionsschaltflächen zeigen ein
   passendes Symbol und den Text als zentrierte Gruppe.
   „Diese Woche kochen“ bietet mehrere Termine von heute bis Sonntag zur Auswahl.
-  „Zu lokalen Listen hinzufügen“ öffnet ein scrollbares Fenster von unten,
+  „Zu lokalen Listen hinzufügen“ steht zwischen Einkaufswagen und Cookidoo-Link.
+  Die Aktion öffnet ein scrollbares Fenster von unten,
   lädt darin die lokalen Listen und aktualisiert nach Serverbestätigung die
   Auswahl und die Listenzuordnungen über dem Rezepttitel.
 - Der Schalter „Debug-Modus“ ist auch offline in den Einstellungen verfügbar.
