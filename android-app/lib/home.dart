@@ -1502,6 +1502,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
             onPressed: busy || !_available
                 ? null
                 : () async {
+                    final catalog = _catalogFeatured && !searchState.telegram;
+                    if (searchState.catalog != catalog) {
+                      searchState.setCatalog(catalog);
+                    }
                     await Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => RecipeSearchPage(

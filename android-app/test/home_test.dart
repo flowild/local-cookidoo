@@ -286,6 +286,31 @@ void main() {
     expect(custom.scaffoldBackgroundColor, light.scaffoldBackgroundColor);
   });
 
+  testWidgets('overview source is used when search opens', (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Übersicht').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Rezepte suchen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cookidoo'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Rezepte suchen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lokal'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+  });
+
   testWidgets('reopening search keeps the query and avoids a new load', (
     tester,
   ) async {

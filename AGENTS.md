@@ -83,6 +83,8 @@ einen Platzhalter bis zum nächsten Heimnetzabruf. Andere API-Antworten verwende
 keinen HTTP-Cache.
 Auf der Android-Startseite steht die Quellenwahl für das Zufallsrezept rechts
 neben „Dein Rezeptmix“. Bei knapper Breite darf sie unter den Titel umbrechen.
+Die Suche übernimmt beim Öffnen die dort gewählte Quelle. Über Telegram sucht
+sie lokal.
 Die Übersichtskarte „Deine Sammlung“ steht direkt unter dem Zufallsrezept.
 Sie bietet Direktzugriffe auf Rezeptlisten,
 alle Rezepte, die Woche und den Einkaufswagen. Die vier Schaltflächen teilen
