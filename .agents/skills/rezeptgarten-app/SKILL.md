@@ -5,6 +5,8 @@ description: Entwickle oder prüfe Rezeptgarten-Funktionen für Rezepte, lokale 
 
 # Rezeptgarten entwickeln
 
+Die Desktop-Webansicht nutzt eine schmale Seitenleiste ab 701 CSS-Pixeln und eine erweiterte ab 1200. Die Startseite bietet vier Direktzugriffe. Rezeptlisten öffnen ihre Vorschauen unter getönten Gruppenüberschriften. Alle Rezepte bündelt Suche, Sortierung und globale Filter. Die Woche zeigt die ISO-Kalenderwoche zwischen den Pfeilen. Offene Einkaufszutaten stehen vor abgehakten Zutaten und den Rezepten.
+
 - Für Android-Widgets, APK-Builds und Geräteprüfungen verwende
   [rezeptgarten-android](../rezeptgarten-android/SKILL.md). Änderungen an
   gemeinsamen Rezeptgarten-APIs mit beiden Clients prüfen.
@@ -125,7 +127,7 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Nach einem fehlgeschlagenen Wochenwechsel bleiben Listenrezepte gesperrt, bis die ausgewählte Woche geladen wurde; niemals die vorherige Woche still weiterverwenden.
 
-- Rezepte im Einkaufswagen erscheinen als responsive Bildkacheln nebeneinander; der Papierkorb oben rechts entfernt das Rezept. Dauer und Portionsangaben stehen, soweit verfügbar, auf dem Bild und beim Darüberfahren bewegt sich das Bild leicht. Ältere Einkaufswageneinträge ergänzen fehlende Rezeptangaben beim Anzeigen aus der lokalen Sammlung. Abweichende Übertragungsstatus und Hinweise bleiben sichtbar; der Status „Bereit“ und der Wochenknopf entfallen in diesen Kacheln.
+- Rezepte im Einkaufswagen erscheinen auf Desktop als kompakte Zeilen mit runder Vorschau und mobil als Bildkacheln. Der Papierkorb entfernt das Rezept. Dauer und Portionen stehen auf Desktop neben dem Bild und mobil auf dem Bild. Ältere Einkaufswageneinträge ergänzen fehlende Rezeptangaben beim Anzeigen aus der lokalen Sammlung. Abweichende Übertragungsstatus und Hinweise bleiben sichtbar; der Status „Bereit“ und der Wochenknopf entfallen in diesen Kacheln.
 
 - Einkaufszutaten erscheinen nach Warenbereichen gruppiert. Vorhandene Vorratszuordnungen haben Vorrang, weitere Zutaten erhalten eine passende Standardgruppe oder „Sonstiges“. Wasser wird weder bei benötigten noch bei vorhandenen Zutaten angezeigt; gespeicherte Einkaufsdaten bleiben erhalten.
 - Alle Warenbereiche im Einkaufswagen haben ein Gruppensymbol. Die gemeinsamen

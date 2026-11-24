@@ -12,8 +12,8 @@
   <link rel="icon" href="/static/icon-192.png?v=2" type="image/png">
   <link rel="apple-touch-icon" href="/static/icon-192.png?v=2">
   <script src="/static/theme.js?v=31"></script>
-  <link rel="stylesheet" href="/static/style.css?v=133">
-  <script src="/static/app.js?v=142" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=134">
+  <script src="/static/app.js?v=143" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -47,9 +47,7 @@
 <div id="offline-banner" class="offline-banner" hidden>Du bist offline. Zum Laden deiner Sammlung brauchst du eine Verbindung zu deinem Server.</div>
 <div class="app-shell">
   <aside class="sidebar" aria-label="Hauptnavigation">
-    <a class="brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="40" height="40" alt=""><span>rezeptgarten<span class="brand-caption">Dein persönliches Rezeptregal</span></span></a>
-    <div class="nav-label">DEINE SAMMLUNG</div>
-    <nav class="desktop-nav">
+    <nav class="desktop-nav" aria-label="Hauptbereiche">
       <a href="#uebersicht" data-nav="uebersicht"><svg><use href="#i-home"/></svg>Übersicht</a>
       <a href="#listen" data-nav="listen"><svg><use href="#i-layers"/></svg>Rezeptlisten<span id="nav-list-count" class="nav-count">0</span></a>
       <a href="#rezepte" data-nav="rezepte"><svg><use href="#i-book"/></svg>Alle Rezepte<span id="nav-recipe-count" class="nav-count">0</span></a>
@@ -57,23 +55,22 @@
       <a href="#einkaufswagen" data-nav="einkaufswagen"><svg><use href="#i-cart"/></svg>Mein Einkaufswagen</a>
       <a href="#vorrat" data-nav="vorrat"><svg><use href="#i-bowl"/></svg>Mein Vorrat</a>
     </nav>
-    <div class="sidebar-note"><span class="note-icon"><svg><use href="#i-leaf"/></svg></span><strong>Ein Platz für deine<br>Lieblingsgerichte.</strong><p>Deine Listen und Rezeptbilder.<br>Bei dir zu Hause gespeichert.</p></div>
     <div class="sidebar-bottom">
       <button class="nav-button install-trigger" hidden><svg><use href="#i-download"/></svg>App installieren</button>
       <a href="#einstellungen" class="nav-button" data-nav="einstellungen"><svg><use href="#i-settings"/></svg>Einstellungen</a>
-      <div class="server-note"><span class="status-dot"></span>Deine lokale Sammlung<span>Rezeptgarten · Version <!-- APP_VERSION --></span></div>
+      <div class="desktop-version">Rezeptgarten · Version <!-- APP_VERSION --></div>
     </div>
   </aside>
   <div class="workspace">
     <header class="topbar">
+      <a class="desktop-brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="32" height="32" alt="">Rezeptgarten</a>
       <a class="mobile-brand" href="#uebersicht"><img src="/static/icon-192.png?v=2" width="32" height="32" alt="">rezeptgarten</a>
       <label class="search-box"><svg><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"><kbd>Suche</kbd></label>
-      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="mobile-settings" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a><button id="sync-button" class="button button-primary" aria-label="Synchronisieren"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
+      <div class="top-actions"><span id="connection-label" class="connection-label"><span class="status-dot"></span>Lokale Sammlung</span><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="header-settings" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a><button id="sync-button" class="button button-primary" aria-label="Synchronisieren"><svg><use href="#i-sync"/></svg><span>Synchronisieren</span></button></div>
     </header>
     <main id="main" tabindex="-1">
       <div id="sync-progress" class="sync-progress" role="status" aria-live="polite" hidden><svg class="spinning"><use href="#i-sync"/></svg><div><strong id="sync-message">Rezeptlisten werden geladen …</strong><span id="sync-counter"></span></div><progress id="sync-meter" max="1" value="0" aria-label="Synchronisierungsfortschritt"></progress></div>
       <div id="content" aria-live="polite"><div class="initial-loading"><svg class="spinning"><use href="#i-sync"/></svg><p>Deine Sammlung wird geladen …</p></div></div>
-      <footer class="page-footer"><span>Mit Freude sammeln. Mit Ruhe kochen.</span><span>Privater Rezeptmanager · unabhängig von Vorwerk</span></footer>
     </main>
   </div>
 </div>

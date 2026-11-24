@@ -480,16 +480,22 @@ class Database:
             items.append(item)
         return {'items': items, 'total': totals['total'], 'match_total': totals['matching'], 'offset': offset, 'limit': limit}
 
-    def recipe_filter_options(self, collection_id):
+    def recipe_filter_options(self, collection_id=None):
+        membership = "EXISTS(SELECT 1 FROM members m WHERE m.recipe_id=r.id"
+        params = ()
+        if collection_id is not None:
+            membership += " AND m.collection_id=?"
+            params = (collection_id,)
+        membership += ")"
         with self.connect() as db:
-            if not db.execute('SELECT 1 FROM collections WHERE id=?', (collection_id,)).fetchone():
+            if collection_id is not None and not db.execute('SELECT 1 FROM collections WHERE id=?', params).fetchone():
                 return None
-            names = [r['name'] for r in db.execute('''SELECT DISTINCT c.name,c.name_key FROM members m
-                JOIN recipe_ingredients ri ON ri.recipe_id=m.recipe_id
+            names = [r['name'] for r in db.execute(f'''SELECT DISTINCT c.name,c.name_key FROM recipes r
+                JOIN recipe_ingredients ri ON ri.recipe_id=r.id
                 JOIN ingredient_catalog c ON c.id=ri.ingredient_id
-                WHERE m.collection_id=? ORDER BY c.name_key''', (collection_id,))]
-            rows = db.execute('''SELECT r.servings,r.total_seconds FROM members m JOIN recipes r ON r.id=m.recipe_id
-                WHERE m.collection_id=?''', (collection_id,)).fetchall()
+                WHERE {membership} ORDER BY c.name_key''', params)]
+            rows = db.execute(f'''SELECT DISTINCT r.servings,r.total_seconds FROM recipes r
+                WHERE {membership}''', params).fetchall()
         servings = set()
         minutes = set()
         for row in rows:

@@ -826,6 +826,10 @@ def create_app(directory=None, secure_cookies=None):
             raise HTTPException(400, 'Bitte wähle höchstens 20 Zutaten mit je maximal 100 Zeichen.')
         return database.recipes(collection, q.strip(), sort, offset, limit, exclude_collection, ingredient, min_servings, max_minutes, show_all, candidate_q.strip())
 
+    @app.get('/api/recipe-filter-options')
+    def library_filter_options():
+        return database.recipe_filter_options()
+
     @app.get('/api/recipes/{recipe_id}')
     async def recipe(recipe_id: str, calendar: bool = False):
         result = database.recipe(recipe_id)

@@ -1042,6 +1042,13 @@ class AppTests(unittest.TestCase):
         self.assertEqual(options['ingredients'], ['Chili', 'Hähnchen'])
         self.assertEqual(options['servings'], [2, 4])
         self.assertEqual(options['minutes'], [15, 30])
+        library = self.client.get('/api/recipe-filter-options')
+        self.assertEqual(library.status_code, 200)
+        self.assertEqual(library.json(), options)
+        global_result = self.client.get('/api/recipes', params={
+            'ingredient': 'Chili', 'min_servings': 4, 'max_minutes': 30,
+        }).json()
+        self.assertEqual([item['id'] for item in global_result['items']], ['r1'])
         scoped = self.client.get('/api/collections/managed:list2/filter-options').json()
         self.assertEqual(scoped['servings'], [4])
         params = [('collection','custom:list1'), ('ingredient','Chicken'), ('ingredient','Chili, gemahlen')]

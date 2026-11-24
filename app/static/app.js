@@ -262,6 +262,85 @@ function recipeCard(recipe) {
   const portionsLabel = servings.length === 1 && servings[0] === '1' ? 'Portion' : 'Portionen';
   return `<div class="preview-card"><button class="recipe-card${outsideFilter ? ' outside-filter' : ''}" data-recipe="${escapeHTML(recipe.id)}" aria-label="${escapeHTML(recipe.name)} öffnen${servings.length ? ` · ${escapeHTML(servingsText)} ${portionsLabel}` : ''}${outsideFilter ? ' · entspricht nicht dem Filter' : ''}"><div class="recipe-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name)}${previewNote(recipe.id)}${time ? `<span class="recipe-time">${icon('clock')}${time}</span>` : ''}${servings.length ? `<span class="recipe-portions${time ? ' with-time' : ''}">${icon('portion')}<span>${escapeHTML(servingsText)} ${portionsLabel}</span></span>` : ''}</div><div class="recipe-info"><h3>${escapeHTML(recipe.name)}</h3><p>${escapeHTML(difficulty)}</p></div></button>${previewWeekButton(recipe.id, recipe.name)}</div>`;
 }
+function desktopCollections() {
+  const groups = [
+    ['Meine lokalen Listen', state.collections.filter(list => list.kind === 'local')],
+    ['Aus Cookidoo', state.collections.filter(list => list.kind !== 'local')],
+  ];
+  return `<div class="desktop-collections">
+    <button class="button button-primary" data-action="new-list">Neue Liste</button>
+    <label class="library-search">Listentitel suchen<input type="search" id="list-title-search" maxlength="200"></label>
+    <p id="list-title-empty" role="status" hidden>Keine passende Liste gefunden.</p>
+    ${groups.map(([title, lists]) => `<section class="desktop-list-group">
+      <h2>${title}</h2>
+      ${lists.length ? lists.map(list => {
+        const id = escapeHTML(list.id);
+        const name = escapeHTML(list.name);
+        return `<article class="desktop-list" data-list-title="${name}">
+          <div class="group-heading">
+            <button type="button" class="list-disclosure" data-list-preview="${id}" aria-expanded="false" aria-controls="list-preview-${id}">
+              ${symbolPrefix(list) || icon('layers')}<strong>${name}</strong><span>${list.recipe_count}</span><span aria-hidden="true">▾</span>
+            </button>
+            ${list.kind === 'local'
+              ? `<button type="button" class="icon-button" data-edit-local-list="${id}" aria-label="${name} bearbeiten" title="Liste bearbeiten">${icon('edit')}</button>`
+              : list.source_url ? `<a class="icon-button" href="${escapeHTML(list.source_url)}" target="_blank" rel="noopener noreferrer" aria-label="${name} bei Cookidoo öffnen" title="Zu Cookidoo">${icon('external')}</a>` : ''}
+          </div>
+          <div id="list-preview-${id}" class="list-preview" hidden></div>
+        </article>`;
+      }).join('') : '<p>Hier sind noch keine Listen gespeichert.</p>'}
+    </section>`).join('')}
+  </div>`;
+}
+
+document.addEventListener('click', async event => {
+  const filterToggle = event.target.closest('.library-filter-toggle');
+  if (filterToggle) {
+    const filters = $('#library-filters');
+    filters.hidden = !filters.hidden;
+    filterToggle.setAttribute('aria-expanded', String(!filters.hidden));
+    return;
+  }
+  const trigger = event.target.closest('[data-list-preview], [data-list-more]');
+  if (!trigger || trigger.getAttribute('aria-disabled') === 'true') return;
+  const list = trigger.closest('.desktop-list');
+  const button = list.querySelector('[data-list-preview]');
+  const panel = list.querySelector('.list-preview');
+  const more = trigger.hasAttribute('data-list-more');
+  if (!more) {
+    panel.hidden = !panel.hidden;
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+    if (panel.hidden || panel.querySelector('.recipe-grid, .list-preview-empty')) return;
+    panel.innerHTML = '<p role="status">Rezepte werden geladen …</p>';
+  }
+  trigger.setAttribute('aria-disabled', 'true');
+  const params = new URLSearchParams({collection:button.dataset.listPreview, offset:more ? trigger.dataset.listMore : 0, limit:48});
+  try {
+    const result = await api('/api/recipes?' + params);
+    if (!panel.isConnected) return;
+    if (!more) panel.innerHTML = result.items.length
+      ? '<div class="recipe-grid"></div>'
+      : '<p class="list-preview-empty">Diese Liste enthält noch keine Rezepte.</p>';
+    panel.querySelector('[role="status"]')?.remove();
+    panel.querySelector('.recipe-grid')?.insertAdjacentHTML('beforeend', result.items.map(recipeCard).join(''));
+    const next = result.offset + result.items.length;
+    const hasMore = next < result.total;
+    if (more && hasMore) trigger.dataset.listMore = next;
+    if (!more && hasMore) panel.insertAdjacentHTML('beforeend', `<button class="button" data-list-more="${next}">Weitere Rezepte laden</button>`);
+    if (!more && result.items.length) {
+      panel.insertAdjacentHTML('beforeend', `<a class="text-link" href="#liste/${encodeURIComponent(button.dataset.listPreview)}">Liste mit Filtern öffnen</a>`);
+    }
+    if (more && !hasMore) {
+      if (document.activeElement === trigger) panel.querySelector('.text-link')?.focus();
+      trigger.remove();
+    }
+  } catch (error) {
+    panel.querySelector('[role="status"]')?.remove();
+    panel.insertAdjacentHTML('beforeend', `<p role="status">${escapeHTML(error.message)}</p>`);
+  } finally {
+    trigger.removeAttribute('aria-disabled');
+  }
+});
+
 function berlinDay() {
   const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Europe/Berlin', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
@@ -312,7 +391,9 @@ function renderFeatured(result) {
   }
   const time = duration(recipe.total_seconds);
   const portions = recipe.servings ? `${escapeHTML(recipe.servings)} ${String(recipe.servings) === '1' ? 'Portion' : 'Portionen'}` : '';
-  container.innerHTML = `<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" data-recipe="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button><button class="button featured-shuffle" data-action="shuffle-featured" ${result.can_shuffle ? '' : 'disabled'}>${icon('shuffle')}Anderes Rezept</button></div></div><div class="featured-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name, true)}${previewNote(recipe.id)}${previewWeekButton(recipe.id, recipe.name)}</div></section>`;
+  container.innerHTML = `<section class="featured-recipe"><div class="featured-copy"><span class="eyebrow">DEIN REZEPT DES TAGES</span><h1>${escapeHTML(recipe.name)}</h1><div class="featured-meta">${time ? `<span>${icon('clock')}${escapeHTML(time)}</span>` : ''}${portions ? `<span>${icon('portion')}${portions}</span>` : ''}</div><div class="featured-actions"><button class="button button-primary" data-recipe="${escapeHTML(recipe.id)}">Rezept ansehen${icon('arrow')}</button></div></div><div class="featured-photo" data-preview-observe="${escapeHTML(recipe.id)}">${photo(recipe.image_file, recipe.name, true)}${previewNote(recipe.id)}${previewWeekButton(recipe.id, recipe.name)}
+    <button type="button" class="featured-shuffle icon-button" data-action="shuffle-featured" aria-label="Anderes Rezept" title="Anderes Rezept" ${result.can_shuffle ? '' : 'disabled'}>${icon('shuffle')}</button>
+  </div></section>`;
 }
 async function loadFeatured(request = state.request) {
   const result = await api('/api/featured-recipe');
@@ -362,11 +443,20 @@ function weekDays(week, unavailable = false) {
   const short = new Intl.DateTimeFormat('de-DE', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
   const narrow = new Intl.DateTimeFormat('de-DE', {weekday:'narrow', day:'numeric', month:'numeric', timeZone:'UTC'});
   const renderRecipe = (recipe, source) => `<li class="week-preview" data-week-recipe="${escapeHTML(recipe.calendar_id)}" data-week-custom="${recipe.custom ? '1' : '0'}" data-week-source="${source}"><button class="week-recipe" type="button" draggable="${weekNativeDrag()}" data-recipe="${escapeHTML(recipe.id)}"><span class="week-recipe-photo">${photo(recipe.image_file)}<span class="week-badge-layer">${weekRecipeBadges(recipe)}</span></span><span class="week-recipe-info"><span class="week-recipe-name">${escapeHTML(recipe.name)}</span><span class="week-recipe-difficulty">${escapeHTML(difficultyLabel(recipe.difficulty))}</span></span></button>${weekPreviewAction(recipe, source)}</li>`;
-  return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span></h2>${day.recipes.length || week.placeholder_placements?.some(item => item.target === day.date) ? `<ul>${day.recipes.map(recipe => renderRecipe(recipe, day.date)).join('')}${(week.placeholder_placements || []).filter(item => item.target === day.date).map(item => renderWeekPlaceholder(item, day.date, week)).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div><section class="week-shelf" data-week-day="shelf"><h2>Ablage für diese Woche</h2>${week.shelf?.length || week.placeholders?.length ? `<ul>${(week.shelf || []).map(recipe => renderRecipe(recipe, 'shelf')).join('')}${(week.placeholder_placements || []).filter(item => item.target === 'shelf').map(item => renderWeekPlaceholder(item, 'shelf', week)).join('')}</ul>` : '<p>Rezepte hier ablegen, wenn der Tag noch offen ist.</p>'}</section>`;
+  return `<div class="week-scroll" tabindex="0" role="region" aria-label="Wochentage"><div class="week-grid">${week.days.map(day => { const date = new Date(day.date + 'T12:00:00Z'); const fullDate = escapeHTML(format.format(date)); return `<section class="week-day${day.date === week.today ? ' is-today' : ''}" data-week-day="${day.date}"${day.date === week.today ? ' aria-current="date"' : ''}><h2 aria-label="${day.date === week.today ? 'Heute, ' : ''}${fullDate}"><span class="week-date-full" aria-hidden="true">${fullDate}</span><span class="week-date-short" aria-hidden="true">${escapeHTML(short.format(date))}</span><span class="week-date-narrow" aria-hidden="true">${escapeHTML(narrow.format(date))}</span>${day.date === week.today ? '<span class="week-today-label" aria-hidden="true">Heute</span>' : ''}</h2>${day.recipes.length || week.placeholder_placements?.some(item => item.target === day.date) ? `<ul>${day.recipes.map(recipe => renderRecipe(recipe, day.date)).join('')}${(week.placeholder_placements || []).filter(item => item.target === day.date).map(item => renderWeekPlaceholder(item, day.date, week)).join('')}</ul>` : `<p>${unavailable ? 'Kalender nicht geladen' : 'Noch nichts geplant'}</p>`}</section>`; }).join('')}</div></div><section class="week-shelf" data-week-day="shelf"><h2>Ablage für diese Woche</h2>${week.shelf?.length || week.placeholders?.length ? `<ul>${(week.shelf || []).map(recipe => renderRecipe(recipe, 'shelf')).join('')}${(week.placeholder_placements || []).filter(item => item.target === 'shelf').map(item => renderWeekPlaceholder(item, 'shelf', week)).join('')}</ul>` : '<p>Rezepte hier ablegen, wenn der Tag noch offen ist.</p>'}</section>`;
 }
-function weekToolbar(message, error = false) {
+function isoWeekLabel(date) {
+  const thursday = new Date(date + 'T12:00:00Z');
+  thursday.setUTCDate(thursday.getUTCDate() + 3 - (thursday.getUTCDay() + 6) % 7);
+  const year = thursday.getUTCFullYear();
+  const week = Math.ceil((thursday - Date.UTC(year, 0, 1)) / 604800000);
+  return `KW ${week}`;
+}
+
+function weekToolbar(message, error = false, week = displayedWeek || emptyCurrentWeek()) {
+  const current = week.days.some(day => day.date === berlinDay());
   const disabled = weekQueueWriting || weekSaving || weekShoppingBusy ? 'disabled' : '';
-  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Heute</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary" type="button" data-action="week-shopping" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}In den Einkaufswagen</button>`}${weekQueueError && weekMoves.length ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
+  return `<div class="week-toolbar${error || weekQueueError ? ' week-error' : ''}">${message ? `<p>${escapeHTML(message)}</p>` : ''}<div class="week-controls"><button class="button week-arrow" type="button" data-action="previous-week" aria-label="Vorherige Woche" ${disabled}>${icon('back')}</button><span class="week-number${current ? ' current-week' : ''}">${isoWeekLabel(week.days[0].date)}</span><button class="button week-arrow" type="button" data-action="next-week" aria-label="Nächste Woche" ${disabled}>${icon('arrow')}</button><button class="button" type="button" data-action="current-week" ${disabled}>Heute</button>${error ? '<button class="button" type="button" data-action="retry-week">Erneut versuchen</button>' : `<button class="button button-primary week-shopping" type="button" data-action="week-shopping" aria-label="In den Einkaufswagen" title="In den Einkaufswagen" ${disabled || (weekQueueError ? 'disabled' : '')}>${icon('cart')}<span>In den Einkaufswagen</span></button>`}${weekQueueError && weekMoves.length ? '<button class="button" type="button" data-action="discard-week-moves">Vorgemerkte Änderungen verwerfen</button>' : ''}</div></div>`;
 }
 function adoptWeekQueue(queue) {
   if (!queue || weekQueueWriting) return false;
@@ -664,7 +754,7 @@ async function renderRoute() {
   if (state.view === 'einstellungen') { renderSettings(); return; }
   if (state.view === 'einkaufswagen') { await renderCart(request); return; }
   if (state.view === 'meine-woche') {
-    content.innerHTML = `<div class="week-heading"><div class="page-title"><span class="eyebrow">ZEIT FÜR GUTE IDEEN</span><h1>Meine Woche</h1></div><div id="week-heading-toolbar" aria-live="polite"></div></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div><section id="week-placeholders" class="week-local-lists week-placeholder-list"></section><section id="week-lists" class="week-local-lists"></section>`;
+    content.innerHTML = `<div class="week-heading"><div class="page-title"><h1>Meine Woche</h1></div><div id="week-heading-toolbar" aria-live="polite"></div></div><div id="week-content" aria-live="polite">Deine Woche wird geladen …</div><section id="week-placeholders" class="week-local-lists week-placeholder-list"></section><section id="week-lists" class="week-local-lists"></section>`;
     renderWeekPlaceholders();
     renderWeekLists();
     if ((weekSaving || weekQueueWriting || weekShoppingBusy) && displayedWeek) { showWeek(); return; }
@@ -680,7 +770,7 @@ async function renderRoute() {
       setTimeout(() => { if (displayedWeek === week) saveUnfiledWeek(week); }, 300);
       scheduleWeekBadges(week);
     } catch (error) {
-      if (request === state.request) { $('#week-heading-toolbar').innerHTML = weekToolbar(error.message, true); $('#week-content').innerHTML = weekDays(emptyCurrentWeek(), true); restoreWeekPosition(); }
+      if (request === state.request) { $('#week-heading-toolbar').innerHTML = weekToolbar(error.message, true, emptyCurrentWeek()); $('#week-content').innerHTML = weekDays(emptyCurrentWeek(), true); restoreWeekPosition(); }
     }
     return;
   }
@@ -690,28 +780,53 @@ async function renderRoute() {
     state.pantry = result; renderPantry(); return;
   }
   if (state.view === 'listen') {
-    content.innerHTML = `<div class="page-title"><span class="eyebrow">ALLES HAT SEINEN PLATZ</span><h1>Deine Rezeptlisten</h1><p>Deine lokalen Listen und deine Sammlungen aus Cookidoo.</p></div>${collectionSections()}`;
+    content.innerHTML = `<div class="page-title"><h1>Deine Rezeptlisten</h1></div>${desktopCollections()}<div class="mobile-collections">${collectionSections()}</div>`;
     return;
   }
   if (state.view === 'uebersicht') {
     const stats = state.status.stats;
-    content.innerHTML = `<div id="featured-recipe" aria-live="polite"></div><section class="stats" aria-label="Deine Sammlung in Zahlen"><div class="stat"><span class="stat-icon">${icon('layers')}</span><div><div class="stat-value">${stats.collections}</div><div class="stat-label">Rezeptlisten</div></div></div><div class="stat"><span class="stat-icon">${icon('book')}</span><div><div class="stat-value">${stats.recipes}</div><div class="stat-label">Gespeicherte Rezepte</div></div></div><div class="stat"><span class="stat-icon">${icon('sync')}</span><div><div class="stat-value date">${escapeHTML(formatDate(stats.last_sync, true))}</div><div class="stat-label">Letzte Synchronisierung</div></div></div></section><div class="section-heading"><div><h2>Deine Rezeptlisten</h2><p>Gut sortiert. Schnell wiedergefunden.</p></div>${state.collections.length ? `<a class="text-link" href="#listen">Alle Listen ansehen${icon('arrow')}</a>` : ''}</div>${state.collections.length ? `${collectionSections()}<div class="section-heading"><div><h2>Ein Blick in deine Sammlung</h2><p>Vielleicht ist dein nächstes Lieblingsgericht schon dabei.</p></div><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div><div id="overview-recipes" class="recipe-grid"></div>` : emptyContent(state.status.connected ? 'Alles verbunden. Jetzt wird gesammelt.' : 'Deine Lieblingsgerichte ziehen ein.', state.status.connected ? (!state.status.sync.running && state.status.last_result?.message ? state.status.last_result.message : 'Beim ersten Laden holt Rezeptgarten deine gespeicherten Listen, Rezeptdetails und Bilder. Das kann bei einer großen Sammlung etwas dauern.') : 'Verbinde dein Cookidoo-Konto. Deine gespeicherten Rezeptlisten und Bilder werden anschließend in deiner lokalen Datenbank abgelegt.', !state.status.sync.running)}`;
-    await loadFeatured(request);
-    if (state.collections.length) {
-      const result = await api('/api/recipes?limit=8');
-      if (request === state.request && $('#overview-recipes')) $('#overview-recipes').innerHTML = result.items.map(recipeCard).join('');
-    }
+    const destinations = [
+      ['listen', 'layers', 'Rezeptlisten'], ['rezepte', 'book', 'Alle Rezepte'],
+      ['meine-woche', 'calendar', 'Meine Woche'], ['einkaufswagen', 'cart', 'Einkaufswagen'],
+    ];
+    content.innerHTML = `<div class="overview-layout">
+      <section class="overview-collection" aria-labelledby="overview-title">
+        <h1 id="overview-title">Deine Sammlung</h1>
+        <div class="overview-links">${destinations.map(([route, symbol, label]) =>
+          `<a class="button tonal-button" href="#${route}">${icon(symbol)}${label}</a>`).join('')}</div>
+        <p>${stats.collections} Rezeptlisten · ${stats.recipes} gespeicherte Rezepte</p>
+        <p>Letzter Abgleich: ${escapeHTML(formatDate(stats.last_sync, true))}</p>
+      </section>
+      <div id="featured-recipe" aria-live="polite"></div>
+      ${stats.recipes ? `<section><div class="section-heading"><h2>Ein Blick in deine Sammlung</h2><a class="text-link" href="#rezepte">Alle Rezepte${icon('arrow')}</a></div>
+        <div id="overview-recipes" class="recipe-grid"></div></section>` : emptyContent(
+          state.status.connected ? 'Deine Sammlung ist noch leer.' : 'Mit Cookidoo verbinden',
+          state.status.connected ? 'Starte den Abgleich, um deine gespeicherten Rezepte zu laden.' : 'Verbinde dein Cookidoo-Konto, um deine Rezepte zu laden.',
+          !state.status.sync.running)}
+    </div>`;
+    await Promise.all([
+      loadFeatured(request).catch(error => { if (request === state.request) toast(error.message); }),
+      stats.recipes ? api('/api/recipes?limit=8').then(result => {
+        if (request === state.request && $('#overview-recipes')) $('#overview-recipes').innerHTML = result.items.map(recipeCard).join('');
+      }) : Promise.resolve(),
+    ]);
     return;
   }
   const collection = state.collections.find(item => item.id === state.collection);
-  const filterOptions = collection ? await api(`/api/collections/${encodeURIComponent(collection.id)}/filter-options`) : null;
+  const filterOptions = await api(collection
+    ? `/api/collections/${encodeURIComponent(collection.id)}/filter-options`
+    : '/api/recipe-filter-options');
   if (request !== state.request) return;
   recipeIngredientOptions = filterOptions?.ingredients || [];
   recipeIngredientAliases = filterOptions?.ingredient_aliases || {};
-  const title = state.query ? `Rezepte für „${state.query}“` : (collection?.name || 'Alle deine Rezepte');
-  const description = collection ? collection.description || (collection.kind === 'local' ? 'Deine lokal gespeicherte Rezeptliste.' : 'Alle Rezepte aus dieser Cookidoo-Rezeptliste.') : 'Deine gespeicherten Rezepte. Einmal gesammelt, überall griffbereit.';
-  const filterPanel = collection ? `<form id="recipe-filters" class="recipe-filters"><div class="recipe-ingredient-combobox"><label for="recipe-ingredient-filter">Zutaten (alle enthalten)</label><input id="recipe-ingredient-filter" name="ingredient" type="text" maxlength="2000" autocomplete="off" placeholder="Zutaten auswählen oder eingeben" value="${escapeHTML(state.filters.ingredient)}" role="combobox" aria-autocomplete="list" aria-controls="recipe-ingredient-options" aria-expanded="false"><div id="recipe-ingredient-options" class="ingredient-suggestions" role="listbox" aria-label="Zutaten in dieser Liste" hidden></div></div><label>Mindestens Portionen<select name="min_servings"><option value="">Beliebig</option>${filterOptions.servings.map(n => `<option value="${n}" ${String(n) === state.filters.minServings ? 'selected' : ''}>${n} Portionen</option>`).join('')}</select></label><div class="filter-actions"><button class="button button-primary" type="submit">Filtern</button><button class="button" type="button" data-action="reset-filters">Zurücksetzen</button></div><fieldset class="time-filter"><legend>Gesamtzeit höchstens</legend><div class="time-options">${[['','Beliebig'],['20','20 Min.'],['30','30 Min.'],['40','40 Min.'],['60','60 Min.']].map(([value, label]) => `<label class="time-choice"><input type="radio" name="max_minutes" value="${value}" ${state.filters.maxMinutes === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</div></fieldset></form>` : '';
-  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${collection ? symbolPrefix(collection) : ''}${escapeHTML(title)}</h1><p>${escapeHTML(description)}</p>${collection?.kind === 'local' ? `<button class="button" type="button" data-edit-local-list="${escapeHTML(collection.id)}">${icon('edit')}Liste bearbeiten</button><button class="button list-delete" type="button" data-delete-local-list="${escapeHTML(collection.id)}">${icon('trash')}Liste löschen</button>` : ''}</div>${filterPanel}<div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option>${collection ? `<option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option>` : ''}</select></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
+  const title = collection?.name || 'Alle Rezepte';
+  const description = collection ? collection.description || (collection.kind === 'local' ? 'Deine lokal gespeicherte Rezeptliste.' : 'Alle Rezepte aus dieser Cookidoo-Rezeptliste.') : '';
+  const filterPanel = `<form id="recipe-filters" class="recipe-filters"><div class="recipe-ingredient-combobox"><label for="recipe-ingredient-filter">Zutaten (alle enthalten)</label><input id="recipe-ingredient-filter" name="ingredient" type="text" maxlength="2000" autocomplete="off" placeholder="Zutaten auswählen oder eingeben" value="${escapeHTML(state.filters.ingredient)}" role="combobox" aria-autocomplete="list" aria-controls="recipe-ingredient-options" aria-expanded="false"><div id="recipe-ingredient-options" class="ingredient-suggestions" role="listbox" aria-label="Passende Zutaten" hidden></div></div><label>Mindestens Portionen<select name="min_servings"><option value="">Beliebig</option>${filterOptions.servings.map(n => `<option value="${n}" ${String(n) === state.filters.minServings ? 'selected' : ''}>${n} Portionen</option>`).join('')}</select></label><div class="filter-actions"><button class="button button-primary" type="submit">Filtern</button><button class="button" type="button" data-action="reset-filters">Zurücksetzen</button></div><fieldset class="time-filter"><legend>Gesamtzeit höchstens</legend><div class="time-options">${[['','Beliebig'],['20','20 Min.'],['30','30 Min.'],['40','40 Min.'],['60','60 Min.']].map(([value, label]) => `<label class="time-choice"><input type="radio" name="max_minutes" value="${value}" ${state.filters.maxMinutes === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</div></fieldset></form>`;
+  content.innerHTML = `<div class="page-title">${state.collection ? `<a class="back-link" href="#listen">${icon('back')}Zurück zu deinen Listen</a>` : `<span class="eyebrow">GUTE IDEEN FÜR DEINE KÜCHE</span>`}<h1>${collection ? symbolPrefix(collection) : ''}${escapeHTML(title)}</h1>${description ? `<p>${escapeHTML(description)}</p>` : ''}${collection?.kind === 'local' ? `<button class="button" type="button" data-edit-local-list="${escapeHTML(collection.id)}">${icon('edit')}Liste bearbeiten</button><button class="button list-delete" type="button" data-delete-local-list="${escapeHTML(collection.id)}">${icon('trash')}Liste löschen</button>` : ''}</div><div class="library-controls">
+    ${collection ? '' : `<label class="library-search">Rezepte suchen<input type="search" id="library-search" maxlength="200" value="${escapeHTML(state.query)}" placeholder="Titel oder Zutat"></label>`}
+    <button type="button" class="button tonal-button library-filter-toggle" aria-expanded="false" aria-controls="library-filters">Filtern${Object.values(state.filters).some(Boolean) ? ' · aktiv' : ''}</button>
+    <div id="library-filters" hidden>${filterPanel}</div>
+    <div class="results-toolbar"><span id="result-count">Rezepte werden geladen …</span><label class="sr-only" for="sort">Rezepte sortieren</label><select id="sort" class="sort-select"><option value="name" ${state.sort === 'name' ? 'selected' : ''}>Name · A bis Z</option><option value="time" ${state.sort === 'time' ? 'selected' : ''}>Kürzeste Gesamtzeit</option><option value="servings" ${state.sort === 'servings' ? 'selected' : ''}>Wenigste Portionen</option><option value="ingredients" ${state.sort === 'ingredients' ? 'selected' : ''}>Wenigste Zutaten</option></select></div></div><div id="recipe-grid" class="recipe-grid"></div><div id="recipe-empty"></div><button id="load-more" class="button load-more" hidden>Weitere Rezepte laden${icon('arrow')}</button>`;
   if (collection?.kind === 'local') {
     content.insertAdjacentHTML('beforeend', `<section class="add-recipes"><div class="section-heading"><div><h2>Weitere Rezepte hinzufügen</h2><p>Diese Rezepte sind noch nicht in dieser Liste.</p></div></div><label class="candidate-search">Rezepte suchen<input id="candidate-search" type="search" maxlength="200" autocomplete="off" placeholder="Rezeptname eingeben" value="${escapeHTML(state.candidateQuery)}"></label><div id="candidate-list" class="candidate-list"></div><p id="candidate-empty" class="candidate-empty" hidden></p><button id="candidate-more" class="button load-more" hidden>Weitere Rezepte anzeigen${icon('arrow')}</button></section>`);
   }
@@ -736,7 +851,11 @@ async function renderCart(request = state.request) {
   const status = {pending:'Bereit', processing:'Wird übertragen', done:'Übertragen', existing:'Bereits in Cookidoo', uncertain:'Übertragung ungeklärt'};
   const rowStatus = entry => `<span class="cart-status ${entry.status === 'uncertain' ? 'cart-status-error' : ''}">${escapeHTML(status[entry.status] || entry.status)}</span>`;
   const resolve = entry => entry.status === 'uncertain' ? `<div class="cart-resolve"><p>Bitte prüfe den Eintrag in Cookidoo.</p><button type="button" class="button" data-cart-resolve="${entry.id}" data-status="done">Dort vorhanden</button><button type="button" class="button" data-cart-resolve="${entry.id}" data-status="pending">Dort nicht vorhanden</button></div>` : '';
-  const recipeRows = recipes.map(entry => `<article class="cart-recipe" data-cart-recipe><button type="button" class="cart-recipe-link" data-recipe="${escapeHTML(entry.recipe_id)}"><span class="cart-preview-photo" data-preview-observe="${escapeHTML(entry.recipe_id)}">${photo(entry.data.image_file, entry.data.name)}${previewNote(entry.recipe_id)}<span class="week-badge-layer">${weekRecipeBadges({...entry.data, has_note:false})}</span></span><span><strong>${escapeHTML(entry.data.name)}</strong>${entry.data.difficulty ? `<small>${escapeHTML(difficultyLabel(entry.data.difficulty))}</small>` : ''}</span></button>${entry.data.ingredients_complete === false ? '<span class="cart-status-error">Zutaten fehlen · bitte nach Synchronisierung erneut hinzufügen</span>' : ''}${entry.status === 'pending' ? '' : rowStatus(entry)}<button type="button" class="cart-recipe-remove" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} aus dem Einkaufswagen entfernen" title="Aus dem Einkaufswagen entfernen">${icon('trash')}</button>${resolve(entry)}</article>`).join('');
+  const recipeMeta = ({data}) => [
+    duration(data.total_seconds),
+    data.servings ? `${data.servings} ${String(data.servings) === '1' ? 'Portion' : 'Portionen'}` : '',
+  ].filter(Boolean).join(' · ');
+  const recipeRows = recipes.map(entry => `<article class="cart-recipe" data-cart-recipe><button type="button" class="cart-recipe-link" data-recipe="${escapeHTML(entry.recipe_id)}"><span class="cart-preview-photo" data-preview-observe="${escapeHTML(entry.recipe_id)}">${photo(entry.data.image_file, entry.data.name)}${previewNote(entry.recipe_id)}<span class="week-badge-layer">${weekRecipeBadges({...entry.data, has_note:false})}</span></span><span><strong>${escapeHTML(entry.data.name)}</strong><small class="cart-recipe-meta">${escapeHTML(recipeMeta(entry))}</small>${entry.data.difficulty ? `<small>${escapeHTML(difficultyLabel(entry.data.difficulty))}</small>` : ''}</span></button>${entry.data.ingredients_complete === false ? '<span class="cart-status-error">Zutaten fehlen · bitte nach Synchronisierung erneut hinzufügen</span>' : ''}${entry.status === 'pending' ? '' : rowStatus(entry)}<button type="button" class="cart-recipe-remove" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} aus dem Einkaufswagen entfernen" title="Aus dem Einkaufswagen entfernen">${icon('trash')}</button>${resolve(entry)}</article>`).join('');
   const ingredientRows = owned => {
     const byCategory = new Map();
     [...groups.values()].filter(items => !!items[0].ingredient.owned === owned).sort((a,b) => (a[0].ingredient.name || a[0].ingredient.text).localeCompare(b[0].ingredient.name || b[0].ingredient.text, 'de')).forEach(items => {
@@ -754,7 +873,25 @@ async function renderCart(request = state.request) {
   };
   const neededIngredients = ingredientRows(false), ownedIngredients = ingredientRows(true);
   const extraRows = owned => extras.filter(entry => !entry.data.is_water && !!entry.data.owned === owned).map(entry => `<div class="cart-extra"><label><input type="checkbox" data-cart-owned="${entry.id}" data-owned-revision="${entry.data.owned_revision ?? 0}" ${entry.data.owned ? 'checked' : ''} ${entry.status !== 'pending' || cart.transferring ? 'disabled' : ''}><span class="cart-ingredient-icon" aria-hidden="true">${pantryIcon(entry.data.name, entry.data.category, entry.data.icon)}</span><span>${escapeHTML(entry.data.name)}</span></label>${rowStatus(entry)}<button type="button" class="icon-button" data-cart-remove="${entry.id}" aria-label="${escapeHTML(entry.data.name)} entfernen">${icon('trash')}</button>${resolve(entry)}</div>`).join('');
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">GUT VORBEREITET</span><h1>Mein Einkaufswagen</h1><p>Hier sammelst du deine Einkäufe. Ein Häkchen bedeutet: bereits vorhanden.</p></div><div class="cart-toolbar"><button type="button" class="button button-primary" data-action="cart-transfer" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}An Cookidoo übertragen</button><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div><section class="cart-section"><h2>Rezepte</h2>${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}</section><section class="cart-section"><h2>Zutaten</h2>${neededIngredients}${extraRows(false) ? `<h3><span aria-hidden="true">&#x1F9FA;</span> Weitere Artikel</h3>${extraRows(false)}` : ''}${ownedIngredients || extraRows(true) ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${extraRows(true)}` : ''}${!neededIngredients && !ownedIngredients && !extraRows(false) && !extraRows(true) ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}</section><section class="cart-section"><h2>Artikel hinzufügen</h2><form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" autocomplete="off" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form><div id="cart-item-suggestions" class="cart-item-suggestions" role="group" aria-label="Vorschläge aus dem Vorrat" hidden></div></section>`;
+  const openExtras = extraRows(false), ownedExtras = extraRows(true);
+  $('#content').innerHTML = `<div class="page-title cart-heading">
+    <h1>Mein Einkaufswagen</h1>
+    <button type="button" class="button button-primary cart-transfer" data-action="cart-transfer" aria-label="An Cookidoo übertragen" title="An Cookidoo übertragen" ${!cart.items.some(item => item.status === 'pending') || cart.transferring ? 'disabled' : ''}>${icon('cart')}<span>An Cookidoo übertragen</span></button>
+  </div>
+  <section class="cart-section"><h2>Zutaten</h2>
+    ${neededIngredients}
+    ${openExtras ? `<h3><span aria-hidden="true">&#x1F9FA;</span> Weitere Artikel</h3>${openExtras}` : ''}
+    ${ownedIngredients || ownedExtras ? `<h3 class="cart-owned-heading">Abgehakt</h3>${ownedIngredients}${ownedExtras}` : ''}
+    ${!neededIngredients && !ownedIngredients && !openExtras && !ownedExtras ? '<p>Keine Einkaufszutaten vorhanden.</p>' : ''}
+  </section>
+  <section class="cart-section"><h2>Artikel hinzufügen</h2>
+    <form id="cart-item-form" class="cart-add"><label class="sr-only" for="cart-item-name">Artikel hinzufügen</label><input id="cart-item-name" name="name" autocomplete="off" maxlength="100" placeholder="Artikel hinzufügen" required><button class="button button-primary" type="submit">Hinzufügen</button></form>
+    <div id="cart-item-suggestions" class="cart-item-suggestions" role="group" aria-label="Vorschläge aus dem Vorrat" hidden></div>
+  </section>
+  <section class="cart-section">
+    <div class="section-heading"><h2>Rezepte</h2><button type="button" class="button" data-action="cart-clear" ${!cart.items.length || cart.transferring ? 'disabled' : ''}>Einkaufswagen leeren</button></div>
+    ${recipeRows ? `<div class="cart-recipe-grid">${recipeRows}</div>` : '<p>Noch keine Rezepte im Einkaufswagen.</p>'}
+  </section>`;
   setupCartItemSuggestions();
 }
 
@@ -838,13 +975,13 @@ function pantryCategoryCard(group, query) {
   const collapsed = !query && !expandedPantry.has(group.id);
   const disabled = query || pantryReordering ? 'disabled' : '';
   const list = group.items.length ? `<ul class="pantry-items">${group.items.map(item => `<li><span class="pantry-item-icon" aria-hidden="true">${escapeHTML(item.icon || pantryIcon(item.name, group.name))}</span><div class="pantry-item-text"><strong>${escapeHTML(item.name)}</strong>${item.quantity ? `<span>${escapeHTML(item.quantity)}</span>` : ''}</div><button class="pantry-edit" data-pantry-edit="${item.id}" aria-label="${escapeHTML(item.name)} bearbeiten">Bearbeiten</button><button class="pantry-remove" data-pantry-remove="${item.id}" aria-label="${escapeHTML(item.name)} entfernen">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="pantry-empty">Noch keine Zutaten eingetragen.</p>';
-  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" ${query ? 'disabled' : ''} aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${symbolPrefix(group)}${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><div class="pantry-card-actions"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-edit" type="button" data-pantry-edit-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} bearbeiten" title="Kategorie bearbeiten">${icon('edit')}</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
+  return `<section class="pantry-card" data-pantry-category="${group.id}"><div class="pantry-card-heading group-heading"><button class="pantry-drag" type="button" data-pantry-drag="${group.id}" aria-label="${escapeHTML(group.name)} sortieren: ziehen oder Pfeiltasten verwenden" title="Zum Sortieren ziehen" ${disabled}>☰</button><h2><button class="pantry-toggle" type="button" data-pantry-toggle="${group.id}" ${query ? 'disabled' : ''} aria-expanded="${!collapsed}" aria-controls="pantry-category-items-${group.id}"><span class="pantry-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span><span>${symbolPrefix(group)}${escapeHTML(group.name)}</span><span class="pantry-count">${group.items.length}</span></button></h2><details class="pantry-card-actions"><summary class="icon-button" aria-label="Aktionen für ${escapeHTML(group.name)}" title="Kategorieaktionen">⋯</summary><div class="pantry-category-menu"><button class="pantry-add-small" data-pantry-add-category="${group.id}" aria-label="Zutat zu ${escapeHTML(group.name)} hinzufügen">+</button><button class="pantry-category-edit" type="button" data-pantry-edit-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} bearbeiten" title="Kategorie bearbeiten">${icon('edit')}</button><button class="pantry-category-delete" type="button" data-pantry-delete-category="${group.id}" aria-label="Kategorie ${escapeHTML(group.name)} löschen" title="Kategorie löschen">${icon('trash')}</button></div></details></div><div id="pantry-category-items-${group.id}" ${collapsed ? 'hidden' : ''}>${list}</div></section>`;
 }
 function renderPantry() {
   if (state.view !== 'vorrat') return;
   const query = state.pantryFilter.toLocaleLowerCase('de-DE');
   const groups = state.pantry.categories.map(category => ({...category, items:state.pantry.items.filter(item => item.category_id === category.id && item.name.toLocaleLowerCase('de-DE').includes(query))}));
-  $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">DEINE KÜCHE, DEIN ÜBERBLICK</span><h1>Mein Vorrat</h1><p>Halte fest, welche Zutaten du zu Hause hast. Deine Angaben bleiben lokal gespeichert.</p></div><div class="pantry-toolbar"><button class="button button-primary" data-action="pantry-add">Zutat hinzufügen</button><button class="button" data-action="pantry-category">Neue Kategorie</button><button class="button" data-action="pantry-collapse-all" ${query ? 'disabled' : ''}>Alle einklappen</button><button class="button" data-action="pantry-expand-all" ${query ? 'disabled' : ''}>Alle ausklappen</button></div><label class="pantry-search">Vorrat durchsuchen<input id="pantry-search" type="search" maxlength="100" placeholder="Zutat suchen" value="${escapeHTML(state.pantryFilter)}"></label>${query ? '<p class="pantry-reorder-hint">Zum Sortieren die Suche leeren.</p>' : '<p class="pantry-reorder-hint">Kategorien am Griff ziehen und sortieren.</p>'}<div class="pantry-grid">${groups.filter(group => !query || group.items.length).map(group => pantryCategoryCard(group, query)).join('')}</div>${query && !groups.some(group => group.items.length) ? '<p class="pantry-no-results">Keine passenden Zutaten gefunden.</p>' : ''}`;
+  $('#content').innerHTML = `<div class="page-title"><h1>Mein Vorrat</h1></div><div class="pantry-toolbar"><button class="button button-primary" data-action="pantry-add">Zutat hinzufügen</button><button class="button" data-action="pantry-category">Neue Kategorie</button><button class="button" data-action="pantry-collapse-all" ${query ? 'disabled' : ''}>Alle einklappen</button><button class="button" data-action="pantry-expand-all" ${query ? 'disabled' : ''}>Alle ausklappen</button></div><label class="pantry-search">Vorrat durchsuchen<input id="pantry-search" type="search" maxlength="100" placeholder="Zutat suchen" value="${escapeHTML(state.pantryFilter)}"></label>${query ? '<p class="pantry-reorder-hint">Zum Sortieren die Suche leeren.</p>' : '<p class="pantry-reorder-hint">Kategorien am Griff ziehen und sortieren.</p>'}<div class="pantry-grid">${groups.filter(group => !query || group.items.length).map(group => pantryCategoryCard(group, query)).join('')}</div>${query && !groups.some(group => group.items.length) ? '<p class="pantry-no-results">Keine passenden Zutaten gefunden.</p>' : ''}`;
 }
 function setAllPantryCollapsed(collapsed) {
   expandedPantry.clear();
@@ -1019,12 +1156,12 @@ function chooseRecipeIngredient(index) {
 async function loadRecipes(append = false, request = state.request) {
   const params = new URLSearchParams({q:state.query,sort:state.sort,offset:append ? state.offset : 0,limit:48});
   if (state.collection) { params.set('collection', state.collection); params.set('show_all', 'true'); }
-  if (state.collection) applyRecipeFilters(params);
+  applyRecipeFilters(params);
   const result = await api('/api/recipes?' + params);
   if (request !== state.request || !$('#recipe-grid')) return;
   state.offset = result.offset + result.items.length; state.total = result.total;
-  const filtered = state.query || (state.collection && (state.filters.ingredient || state.filters.minServings || state.filters.maxMinutes));
-  $('#result-count').textContent = state.collection && filtered ? `${result.match_total} von ${result.total} Rezepten passen zum Filter` : `${result.total} ${result.total === 1 ? 'Rezept' : 'Rezepte'}${state.query ? ' gefunden' : ' in deiner Sammlung'}`;
+  const filtered = state.query || Object.values(state.filters).some(Boolean);
+  $('#result-count').textContent = state.collection && filtered ? `${result.match_total} von ${result.total} Rezepten passen zum Filter` : `${result.total} ${result.total === 1 ? 'Rezept' : 'Rezepte'}${filtered ? ' gefunden' : ' in deiner Sammlung'}`;
   if (!append) $('#recipe-grid').innerHTML = '';
   $('#recipe-grid').insertAdjacentHTML('beforeend', result.items.map(recipeCard).join(''));
   $('#recipe-empty').innerHTML = result.total ? '' : emptyContent(filtered ? 'Noch kein Treffer.' : 'Hier ist noch Platz für gute Ideen.', filtered ? 'Passe die Suche oder die Filter an und versuche es erneut.' : 'Diese Liste enthält noch keine gespeicherten Rezepte.', false, true);
@@ -1205,6 +1342,22 @@ async function install() {
   } else $('#install-dialog').showModal();
 }
 document.addEventListener('input', event => {
+  if (event.target.id === 'list-title-search') {
+    const query = event.target.value.trim().toLocaleLowerCase('de-DE');
+    const lists = [...document.querySelectorAll('[data-list-title]')];
+    lists.forEach(list => { list.hidden = !list.dataset.listTitle.toLocaleLowerCase('de-DE').includes(query); });
+    $('#list-title-empty').hidden = lists.some(list => !list.hidden) || !query;
+    return;
+  }
+  if (event.target.id === 'library-search') {
+    $('#search').value = event.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.query = event.target.value.trim();
+      loadRecipes(false, ++state.request).catch(error => toast(error.message));
+    }, 260);
+    return;
+  }
   if (event.target.id !== 'recipe-note-text' || !inlineNote?.loaded) return;
   inlineNote.draft = event.target.value;
   resizeInlineNote(event.target);
@@ -1636,7 +1789,7 @@ document.addEventListener('click', async event => {
           await renderRoute();
           break;
         }
-        case 'reset-filters': state.filters = {ingredient:'',minServings:'',maxMinutes:''}; await renderRoute(); break;
+        case 'reset-filters': state.filters = {ingredient:'',minServings:'',maxMinutes:''}; await renderRoute(); $('.library-filter-toggle')?.focus(); break;
         case 'pantry-add': showPantryDialog(); break;
         case 'pantry-category': showCategoryEditor(); break;
         case 'new-list': showListEditor(); break;
@@ -1804,7 +1957,7 @@ document.addEventListener('submit', async event => {
   event.preventDefault();
   const form = new FormData(event.target);
   state.filters = {ingredient:String(form.get('ingredient') || '').trim(), minServings:String(form.get('min_servings') || ''), maxMinutes:String(form.get('max_minutes') || '')};
-  renderRoute().catch(error => toast(error.message));
+  renderRoute().then(() => $('.library-filter-toggle')?.focus()).catch(error => toast(error.message));
 });
 document.addEventListener('change', async event => {
   try {
@@ -1861,6 +2014,7 @@ document.addEventListener('change', async event => {
   } catch (error) { toast(error.message); }
 });
 window.addEventListener('hashchange', () => {
+  clearTimeout(searchTimer);
   state.query = ''; state.candidateQuery = ''; state.pantryFilter = ''; state.filters = {ingredient:'',minServings:'',maxMinutes:''}; state.sort = 'name'; clearTimeout(candidateTimer); $('#search').value = '';
   renderRoute().catch(error => toast(error.message));
   window.scrollTo({top:0,behavior:'instant'});

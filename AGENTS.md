@@ -384,7 +384,7 @@ Nach Prüfung in Cookidoo kann der Nutzer ungeklärte Einträge ausdrücklich au
 oder erneut übertragbar setzen. Lokale Daten bleiben bis zum ausdrücklichen Entfernen
 oder Leeren erhalten; die SQLite-Sicherung und der Export enthalten den Wagen.
 
-Rezeptkarten zeigen Bild, Notizsymbol, Papierkorb sowie verfügbare Dauer und
+Rezeptvorschauen im Wagen zeigen Bild, Notizsymbol, Papierkorb sowie verfügbare Dauer und
 Portionen. Zutaten stehen nach Warenbereichen gruppiert; Vorratszuordnungen haben
 Vorrang, unbekannte Zutaten kommen nach „Sonstiges“. Kleine Symbole entsprechen
 denen in Vorrat und Rezeptdetails. Wasser wird in Zutatenansichten, Einkaufswagen,
@@ -392,6 +392,8 @@ Vorrat und Zutatenauswahl ausgeblendet; andere Zutaten wie Kokoswasser sowie
 Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 
 ## Listen, Vorrat und Navigation
+
+Die Desktop-Web-App orientiert sich an Android mit kompakter Kopfzeile, adaptiver Seitenleiste, getönten aufklappbaren Listen, kräftigen Titeln und pillenförmigen Hauptaktionen. Die Startseite bietet vier Direktzugriffe vor dem Tagesrezept. Die globale Rezeptbibliothek bündelt Suche, Sortierung und Filter. Die Woche zeigt die ISO-Kalenderwoche zwischen den Pfeilen und markiert den heutigen Berliner Tag. Einkaufszutaten stehen vor den Rezepten; auf Desktop erscheinen Rezepte als kompakte Zeilen mit runder Vorschau.
 
 „Zutat hinzufügen“ nutzt in Android und Web-App die volle Inhaltsbreite
 der Vorratsansicht einschließlich der üblichen Seitenabstände.
