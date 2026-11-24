@@ -168,6 +168,7 @@
 .catalog-feedback{margin:0 0 12px;color:var(--muted)}
 
 .header-search .search-box{margin:0}
+.header-search .search-box input{margin:0}
 .header-search{display:flex;align-items:center;gap:10px;width:100%;max-width:680px;min-width:0}
 .search-scope{display:flex;align-items:center;gap:6px;flex:none;margin:0;min-height:44px;cursor:pointer;font-size:.8rem;color:var(--muted)}
 .search-scope input{position:absolute;opacity:0;width:1px;height:1px}
