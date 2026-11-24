@@ -28,8 +28,9 @@ Android nutzt die Grundfarben der Web-App im Hell- und Dunkelmodus. Eine
 eigene Akzentfarbe passt Aktionsfarben an und behält die Grundflächen.
 Ansichtswechsel folgen beim Wischen dem Finger und berücksichtigen reduzierte Bewegung.
 Die Android-Wochenansicht hebt „Heute“ im Tageskopf hervor. Die ISO-Kalenderwoche
-steht zwischen den beiden Wochenpfeilen. „Heute“ und das Einkaufswagensymbol
-folgen in derselben Zeile. Die laufende Berliner Woche ist farblich markiert.
+steht zwischen den Wochenpfeilen. „Heute“ folgt direkt daneben. Das
+Einkaufswagensymbol sitzt in derselben Zeile am rechten Inhaltsrand.
+Die laufende Berliner Woche ist farblich markiert.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im

@@ -186,6 +186,10 @@ void main() {
     expect(find.text('Freitag, 01.01.2027'), findsOneWidget);
     final previous = find.byTooltip('Vorherige Woche');
     final cart = find.byTooltip('In den Einkaufswagen');
+    expect(
+      tester.getRect(cart).right,
+      closeTo(tester.getRect(find.text('Meine Woche')).right, 1),
+    );
     final controls = [previous, current, next, todayButton, cart];
     final centers = controls.map(tester.getCenter).toList();
     for (final (index, center) in centers.indexed.skip(1)) {
@@ -239,10 +243,15 @@ void main() {
     final weekButton = tester.getCenter(
       find.widgetWithText(FilledButton, 'Heute'),
     );
-    final shoppingButton = tester.getCenter(
+    final shoppingButton = tester.getRect(
       find.byTooltip('In den Einkaufswagen'),
     );
-    expect(weekButton.dy, closeTo(shoppingButton.dy, 1));
+    expect(weekButton.dy, closeTo(shoppingButton.center.dy, 1));
+    expect(
+      shoppingButton.right,
+      closeTo(tester.getRect(find.text('Meine Woche')).right, 1),
+    );
+    expect(shoppingButton.left - weekButton.dx, greaterThan(300));
     final monday = tester.getRect(
       find.ancestor(
         of: find.textContaining('Montag,'),

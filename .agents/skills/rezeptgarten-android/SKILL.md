@@ -28,7 +28,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   markieren und aufwärts ab 140 dp, abwärts ab 90 dp ausführen.
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
   Die Wochenleiste zeigt die ISO-Kalenderwoche zwischen den Pfeilen. „Heute“
-  und das Einkaufswagensymbol folgen in derselben Zeile. Die
+  steht neben den Pfeilen. Das Einkaufswagensymbol sitzt in derselben Zeile
+  bündig am rechten Inhaltsrand. Die
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
   „Heute“ wählt in beiden Modi den heutigen Tag der aktuellen Woche im
   Kalender aus.

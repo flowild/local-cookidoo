@@ -1060,75 +1060,82 @@ class _WeekViewState extends State<WeekView> {
       spacing: AppSpacing.related,
       children: [
         Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Row(
-              spacing: AppSpacing.related,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                    shape: const StadiumBorder(),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Vorherige Woche',
-                          style: IconButton.styleFrom(
-                            fixedSize: const Size.square(48),
+        Row(
+          spacing: AppSpacing.related,
+          children: [
+            Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 264),
+                  child: Row(
+                    spacing: AppSpacing.related,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Material(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHigh,
+                          shape: const StadiumBorder(),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Vorherige Woche',
+                                style: IconButton.styleFrom(
+                                  fixedSize: const Size.square(48),
+                                ),
+                                onPressed: canStep ? () => _navigate(-1) : null,
+                                icon: const Icon(Icons.chevron_left),
+                              ),
+                              Expanded(
+                                child: Center(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: weekBadge,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Nächste Woche',
+                                style: IconButton.styleFrom(
+                                  fixedSize: const Size.square(48),
+                                ),
+                                onPressed: canStep ? () => _navigate(1) : null,
+                                icon: const Icon(Icons.chevron_right),
+                              ),
+                            ],
                           ),
-                          onPressed: canStep ? () => _navigate(-1) : null,
-                          icon: const Icon(Icons.chevron_left),
                         ),
-                        Expanded(
-                          child: Center(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: weekBadge,
+                      ),
+                      Flexible(
+                        child: FilledButton.tonal(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.related,
+                              vertical: AppSpacing.tight,
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Nächste Woche',
-                          style: IconButton.styleFrom(
-                            fixedSize: const Size.square(48),
+                          onPressed: canNavigate ? () => _navigate(null) : null,
+                          child: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Heute'),
                           ),
-                          onPressed: canStep ? () => _navigate(1) : null,
-                          icon: const Icon(Icons.chevron_right),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                Flexible(
-                  child: FilledButton.tonal(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(48, 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.related,
-                        vertical: AppSpacing.tight,
                       ),
-                    ),
-                    onPressed: canNavigate ? () => _navigate(null) : null,
-                    child: const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text('Heute'),
-                    ),
+                    ],
                   ),
                 ),
-                IconButton.filled(
-                  tooltip: 'In den Einkaufswagen',
-                  style: IconButton.styleFrom(
-                    minimumSize: const Size.square(48),
-                  ),
-                  onPressed: _canPlaceRecipe ? _shopping : null,
-                  icon: const Icon(Icons.shopping_cart_outlined),
-                ),
-              ],
+              ),
             ),
-          ),
+            IconButton.filled(
+              tooltip: 'In den Einkaufswagen',
+              style: IconButton.styleFrom(fixedSize: const Size.square(48)),
+              onPressed: _canPlaceRecipe ? _shopping : null,
+              icon: const Icon(Icons.shopping_cart_outlined),
+            ),
+          ],
         ),
         if ((_loading && _week == null) || _busy)
           const LinearProgressIndicator(),
