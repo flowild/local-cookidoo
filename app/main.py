@@ -26,7 +26,7 @@ from .security import Vault
 from .storage import Database
 from .sync import REGIONS, SyncService, cooking_days, friendly_error
 from .cart import recipe_snapshot, transfer as transfer_cart
-from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, pantry_item_icons, shopping_category
+from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, pantry_item_icons, shopping_category, shopping_category_icon
 from .version import APP_VERSION
 from .telegram_cart import encrypt_payload
 from .telegram_week import snapshot as telegram_week_snapshot
@@ -557,14 +557,14 @@ def create_app(directory=None, secure_cookies=None):
                     ingredient['key'] = ingredient_group_key(name) or ingredient.get('key', '')
                     ingredient['category'] = shopping_category(name, pantry_categories)
                     ingredient['icon'] = item_icons.get(ingredient['key'])
-                    ingredient['category_icon'] = category_icons.get(ingredient['category'])
+                    ingredient['category_icon'] = shopping_category_icon(ingredient['category'], category_icons)
                     ingredient['in_pantry'] = ingredient_available(name, pantry_names)
                     ingredient['is_water'] = ingredient_group_key(name) == 'wasser'
             elif item['kind'] == 'additional':
                 name = item['data'].get('name', '')
                 item['data']['category'] = shopping_category(name, pantry_categories)
                 item['data']['icon'] = item_icons.get(ingredient_group_key(name))
-                item['data']['category_icon'] = category_icons.get(item['data']['category'])
+                item['data']['category_icon'] = shopping_category_icon(item['data']['category'], category_icons)
                 item['data']['is_water'] = ingredient_group_key(name) == 'wasser'
         for item in items:
             if item['kind'] == 'recipe':

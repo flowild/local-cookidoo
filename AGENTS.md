@@ -403,8 +403,10 @@ auch Lebensmittel und Haushaltsartikel wie Kartoffeln und Toilettenpapier.
 Gewählte Listensymbole erscheinen auch in der Woche und in Rezeptdetails.
 Gespeicherte Zutatensymbole werden in Rezeptdetails und im Einkaufswagen
 über dieselbe Zutatenzuordnung wie im Vorrat übernommen. Der Android-Wagen
-über Telegram zeigt sie ebenfalls. Warenbereiche mit einem Vorratssymbol
-zeigen dieses im Einkaufswagen am Gruppentitel.
+über Telegram zeigt sie ebenfalls. Alle Warenbereiche im Einkaufswagen
+haben ein Symbol am Gruppentitel. Gewählte Vorratssymbole haben Vorrang,
+bestehende Standardbereiche zeigen ein passendes Symbol und sonstige
+Bereiche einen Korb.
 
 In Web und Android lassen sich Symbole für Zutaten, Vorratskategorien und
 lokale Rezeptlisten beim Anlegen und Bearbeiten wählen. „Standard“ stellt die

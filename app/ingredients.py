@@ -166,6 +166,29 @@ _SHOPPING_CATEGORIES = (
     ('Eier', r'^ei(?:er)?$'),
 )
 
+_SHOPPING_CATEGORY_ICONS = {
+    'Gewürze': '🌿',
+    'Obst': '🍎',
+    'Gemüse': '🥕',
+    'Fisch': '🐟',
+    'Fleisch': '🥩',
+    'Milchprodukte': '🥛',
+    'Öle und Fette': '🫒',
+    'Backzutaten': '🌾',
+    'Brot und Backwaren': '🍞',
+    'Soßen': '🥣',
+    'Vorräte und Konserven': '🥫',
+    'Getränke': '🥤',
+    'Eier': '🥚',
+    'Kräuter (tiefgekühlt)': '🌿',
+    'Haushalt': '🧽',
+}
+
+
+def shopping_category_icon(category, custom_icons):
+    return custom_icons.get(category) or _SHOPPING_CATEGORY_ICONS.get(category, '🧺')
+
+
 def shopping_category(name, pantry_categories=None):
     key = ingredient_group_key(name)
     if pantry_categories and key in pantry_categories:

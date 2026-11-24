@@ -128,6 +128,9 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 - Rezepte im Einkaufswagen erscheinen als responsive Bildkacheln nebeneinander; der Papierkorb oben rechts entfernt das Rezept. Dauer und Portionsangaben stehen, soweit verfügbar, auf dem Bild und beim Darüberfahren bewegt sich das Bild leicht. Ältere Einkaufswageneinträge ergänzen fehlende Rezeptangaben beim Anzeigen aus der lokalen Sammlung. Abweichende Übertragungsstatus und Hinweise bleiben sichtbar; der Status „Bereit“ und der Wochenknopf entfallen in diesen Kacheln.
 
 - Einkaufszutaten erscheinen nach Warenbereichen gruppiert. Vorhandene Vorratszuordnungen haben Vorrang, weitere Zutaten erhalten eine passende Standardgruppe oder „Sonstiges“. Wasser wird weder bei benötigten noch bei vorhandenen Zutaten angezeigt; gespeicherte Einkaufsdaten bleiben erhalten.
+- Alle Warenbereiche im Einkaufswagen haben ein Gruppensymbol. Die gemeinsamen
+  Antworten bevorzugen gewählte Vorratssymbole. Standardbereiche zeigen ein
+  passendes Symbol, eigene Bereiche ohne Zuordnung und „Sonstiges“ einen Korb.
 
 - Einkaufszutaten zeigen neben dem Häkchen ein kleines Symbol passend zur Zutat oder zum Warenbereich, wie im Vorrat. Änderungen an Zutaten und Zusatzartikeln übergeben den zuletzt geladenen Änderungsstand. Bei einem Konflikt hat „abgehakt“ Vorrang. Das Entfernen auf Basis des aktuellen Stands bleibt möglich.
 

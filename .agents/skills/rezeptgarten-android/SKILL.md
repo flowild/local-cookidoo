@@ -78,8 +78,9 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   Anlegen und Bearbeiten. Die Auswahl umfasst Lebensmittel, Haushalt und
   Rezeptlisten. Bei lokalen Listen steht der Editor in der Verwaltung. Das
   gewählte Listensymbol erscheint auch in der Woche und in Rezeptdetails.
-  Zutaten und Warenbereiche verwenden auch im Telegram-Wagen die passenden
-  Vorratssymbole, sofern sie festgelegt sind.
+  Warenbereiche im Einkaufswagen zeigen auch über Telegram ein Symbol am
+  Gruppentitel. Verwende das Serversymbol oder für ältere Antworten und
+  Testdaten das passende Standardsymbol. Gewählte Vorratssymbole haben Vorrang.
   Kategorie- und Zutatenzeilen verwenden eine feste Symbolspalte und eine
   gemeinsame linke Textkante. Menüs und Aufklappsymbole stehen rechts.
 - Einkaufs-Häkchen sofort sichtbar ändern und im Hintergrund speichern.

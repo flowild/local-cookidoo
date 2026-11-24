@@ -68,6 +68,29 @@ final _ingredientIcons = {
     RegExp(pattern): symbol,
 };
 
+const _categoryIcons = {
+  'Gewürze': '🌿',
+  'Gemüse': '🥕',
+  'Obst': '🍎',
+  'Fleisch': '🥩',
+  'Fisch': '🐟',
+  'Soßen': '🥣',
+  'Öle und Fette': '🫒',
+  'Milchprodukte': '🥛',
+  'Vorräte und Konserven': '🥫',
+  'Backzutaten': '🌾',
+  'Brot und Backwaren': '🍞',
+  'Getränke': '🥤',
+  'Eier': '🥚',
+  'Kräuter (tiefgekühlt)': '🌿',
+  'Haushalt': '🧽',
+};
+
+String shoppingCategoryIcon(String category, Object? selected) =>
+    selected is String && selected.isNotEmpty
+    ? selected
+    : _categoryIcons[category] ?? '🧺';
+
 class IngredientIcon extends StatelessWidget {
   const IngredientIcon(this.name, {this.category, this.selected, super.key});
 
@@ -81,27 +104,13 @@ class IngredientIcon extends StatelessWidget {
     if (custom is String && custom.isNotEmpty) {
       return ExcludeSemantics(child: Text(custom));
     }
-    const fallback = {
-      'Gewürze': '🌿',
-      'Gemüse': '🥕',
-      'Obst': '🍎',
-      'Fleisch': '🥩',
-      'Fisch': '🐟',
-      'Soßen': '🥫',
-      'Öle und Fette': '🫒',
-      'Milchprodukte': '🥛',
-      'Vorräte und Konserven': '🥫',
-      'Backzutaten': '🌾',
-      'Getränke': '🥤',
-      'Kräuter (tiefgekühlt)': '🌿',
-    };
     final value = name.toLowerCase();
     final symbol =
         _ingredientIcons.entries
             .where((entry) => entry.key.hasMatch(value))
             .firstOrNull
             ?.value ??
-        fallback[category] ??
+        _categoryIcons[category] ??
         '🥣';
     return ExcludeSemantics(child: Text(symbol));
   }

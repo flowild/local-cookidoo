@@ -1035,7 +1035,10 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                       header: true,
                       child: SymbolLabel(
                         first.category,
-                        first.row['category_icon'],
+                        shoppingCategoryIcon(
+                          first.category,
+                          first.row['category_icon'],
+                        ),
                         style: theme.textTheme.titleSmall,
                       ),
                     ),

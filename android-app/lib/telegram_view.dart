@@ -310,7 +310,10 @@ class _TelegramViewState extends State<TelegramView> {
                   padding: const EdgeInsets.only(top: AppSpacing.related),
                   child: SymbolLabel(
                     text(row['category'], 'Sonstiges'),
-                    row['category_icon'],
+                    shoppingCategoryIcon(
+                      text(row['category'], 'Sonstiges'),
+                      row['category_icon'],
+                    ),
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),

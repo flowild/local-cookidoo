@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, pantry_item_icons, shopping_category
+from .ingredients import ingredient_available, ingredient_group_key, ingredient_name, pantry_item_icons, shopping_category, shopping_category_icon
 from .security import Vault
 from .telegram_pairs import select_pair
 
@@ -48,11 +48,9 @@ def snapshot(database, paired_owner):
 
     def appearance(name):
         category = shopping_category(name, pantry_categories)
-        fields = {'category': category}
+        fields = {'category': category, 'category_icon': shopping_category_icon(category, category_icons)}
         if symbol := item_icons.get(ingredient_group_key(name)):
             fields['icon'] = symbol
-        if symbol := category_icons.get(category):
-            fields['category_icon'] = symbol
         return fields
 
     result = []

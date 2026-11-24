@@ -54,6 +54,31 @@ class CartTests(unittest.TestCase):
     def cart(self):
         return self.client.get('/api/cart').json()['items']
 
+    def test_all_shopping_areas_have_icons_without_pantry_customization(self):
+        examples = {
+            'Salz': ('Gewürze', '🌿'),
+            'Birne': ('Obst', '🍎'),
+            'Brokkoli': ('Gemüse', '🥕'),
+            'Lachs': ('Fisch', '🐟'),
+            'Rindfleisch': ('Fleisch', '🥩'),
+            'Joghurt': ('Milchprodukte', '🥛'),
+            'Olivenöl': ('Öle und Fette', '🫒'),
+            'Mehl': ('Backzutaten', '🌾'),
+            'Baguette': ('Brot und Backwaren', '🍞'),
+            'Ketchup': ('Soßen', '🥣'),
+            'Reis': ('Vorräte und Konserven', '🥫'),
+            'Kaffee': ('Getränke', '🥤'),
+            'Eier': ('Eier', '🥚'),
+            'Spezialartikel': ('Sonstiges', '🧺'),
+            'Spezialzutat': ('Spezialregal', '🧺'),
+        }
+        category = self.client.post('/api/pantry/categories', json={'name': 'Spezialregal'}, headers=ORIGIN).json()
+        self.client.post('/api/pantry/items', json={'name': 'Spezialzutat', 'category_id': category['id']}, headers=ORIGIN)
+        for name in examples:
+            self.assertEqual(self.client.post('/api/cart/items', json={'name': name}, headers=ORIGIN).status_code, 200)
+        actual = {row['data']['name']: (row['data']['category'], row['data']['category_icon']) for row in self.cart()}
+        self.assertEqual(actual, examples)
+
     def test_checked_wins_over_stale_uncheck_for_ingredients_and_extra_items(self):
         self.add_recipe()
         self.client.post('/api/cart/items', json={'name': 'Milch'}, headers=ORIGIN)
@@ -98,9 +123,12 @@ class CartTests(unittest.TestCase):
         identifiers = [i['check_id'] for i in result['items'][0]['ingredients']] + [result['items'][1]['check_id']]
         self.assertEqual(len(set(identifiers)), 3)
         self.assertEqual(result['items'][1]['category'], 'Milchprodukte')
+        self.assertEqual(result['items'][1]['category_icon'], '🥛')
+        self.assertEqual(result['items'][0]['ingredients'][1]['category_icon'], '🌾')
         self.assertEqual(result['items'][2]['icon'], '🧻')
         self.assertEqual(result['items'][2]['category_icon'], '🧽')
         self.assertEqual(self.cart()[-1]['data']['icon'], '🧻')
+        self.assertEqual(self.cart()[-1]['data']['category_icon'], '🧽')
         again = base64.b64decode(encrypted_snapshot(self.tmp.name, nonce, client_id=333))
         self.assertEqual(json.loads(AESGCM(key).decrypt(again[:12], again[12:], nonce.encode())), result)
         self.assertEqual([i['in_pantry'] for i in self.cart()[0]['data']['ingredients']], [True, False])
