@@ -1167,6 +1167,34 @@ document.addEventListener('click', event => {
 function renderSettings() {
   const status = state.status, account = status.account;
   $('#content').innerHTML = `<div class="page-title"><span class="eyebrow">ALLES NACH DEINEM GESCHMACK</span><h1>Dein Rezeptgarten</h1></div><div class="settings-grid"><section class="settings-card"><span class="dialog-symbol">${icon('leaf')}</span><h2>Darstellung</h2><p>Wähle eine angenehme Darstellung für dieses Gerät.</p><label class="theme-toggle" for="dark-mode"><span>Dunkelmodus</span><input id="dark-mode" type="checkbox" role="switch" ${document.documentElement.dataset.theme === 'dark' ? 'checked' : ''}></label><div class="accent-control"><label for="accent-color">Akzentfarbe</label><div class="accent-picker-row"><input id="accent-color" type="color" value="${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}" aria-describedby="accent-description"><span id="accent-value">${escapeHTML(window.RezeptgartenAccent?.current() || '#234d3c')}</span><button class="button" type="button" data-action="accent-reset">Standardfarbe</button></div><p id="accent-description" class="settings-small">Die Farbe gilt für diesen Browser.</p></div><p class="settings-small">Die Auswahl wird in diesem Browser gespeichert.</p></section><section class="settings-card"><span class="dialog-symbol">${icon('link')}</span><h2>Dein Cookidoo-Konto</h2>${status.connected ? `<p class="account-email">${escapeHTML(account?.email)}</p><p>Verbunden mit Cookidoo ${escapeHTML(({de:'Deutschland',at:'Österreich',ch:'Schweiz'})[account?.region] || '')}.</p><button class="button" data-action="connect">Konto neu verbinden</button><button class="text-link danger-link" data-action="disconnect">Verbindung trennen</button><p class="settings-small">Deine lokale Sammlung bleibt beim Trennen erhalten.</p>` : `<p>Verbinde dein Konto, um persönliche Rezeptlisten und gespeicherte Cookidoo-Kollektionen zu laden.</p><button class="button button-primary" data-action="connect">${icon('link')}Cookidoo verbinden</button>`}</section>${isAndroidDevice() ? `<section class="settings-card"><span class="dialog-symbol">${icon('download')}</span><h2>Rezeptmix für Android</h2><a class="button" href="/android/test/" id="download-android">${icon('download')}App installieren</a></section>` : ''}</div>`;
+  const card = document.createElement('section');
+  card.className = 'settings-card';
+  card.innerHTML = `<h2>Telegram-Zugangsdaten</h2><p>Freigegebene Zugangsdaten können von Geräten im Heimnetz abgerufen werden.</p><form id="telegram-credentials-form"><label for="telegram-api-id">Telegram API-ID</label><input id="telegram-api-id" inputmode="numeric" autocomplete="off" required><label for="telegram-api-hash">Telegram API-Hash</label><input id="telegram-api-hash" type="password" autocomplete="off" required><button class="button" type="submit">Zugangsdaten speichern</button></form><label class="theme-toggle" for="telegram-exposure"><span>Für neue Apps freigeben</span><input id="telegram-exposure" type="checkbox" role="switch" disabled></label><p id="telegram-credentials-status" class="settings-small">Lade Status …</p>`;
+  $('#content .settings-grid').append(card);
+  const toggle = card.querySelector('#telegram-exposure');
+  const message = card.querySelector('#telegram-credentials-status');
+  const refresh = async () => {
+    const data = await api('/api/telegram-app-credentials/status');
+    toggle.checked = data.exposed;
+    toggle.disabled = !data.configured;
+    message.textContent = data.configured ? 'Zugangsdaten gespeichert.' : 'Noch keine Zugangsdaten gespeichert.';
+  };
+  card.querySelector('form').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      await api('/api/telegram-app-credentials', {method:'PUT', body:JSON.stringify({api_id:card.querySelector('#telegram-api-id').value.trim(), api_hash:card.querySelector('#telegram-api-hash').value.trim()})});
+      event.target.reset();
+      await refresh();
+      toast('Telegram-Zugangsdaten gespeichert.');
+    } catch (error) { toast(error.message); }
+  });
+  toggle.addEventListener('change', async () => {
+    toggle.disabled = true;
+    try { await api('/api/telegram-app-credentials/exposure', {method:'PUT', body:JSON.stringify({exposed:toggle.checked})}); }
+    catch (error) { toast(error.message); }
+    try { await refresh(); } catch (_) { message.textContent = 'Status konnte nicht geladen werden.'; }
+  });
+  refresh().catch(() => { message.textContent = 'Status konnte nicht geladen werden.'; });
 }
 function recipeDetails(recipe) {
   const parse = value => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } };

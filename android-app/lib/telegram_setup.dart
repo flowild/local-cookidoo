@@ -122,6 +122,30 @@ class _TelegramSetupState extends State<TelegramSetup> {
     if (mounted) setState(() => busy = false);
   }
 
+  Future<void> loadCredentials() async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      pairingMessage = null;
+    });
+    try {
+      if (widget.connection != null &&
+          widget.connection!.mode != ConnectionMode.local) {
+        throw StateError('Heimnetz nicht verbunden.');
+      }
+      final data = await widget.api.get('/api/telegram-app-credentials') as Json;
+      if (widget.telegram.step == TelegramStep.credentials) {
+        await widget.telegram.setCredentials(
+          data['api_id'] as String,
+          data['api_hash'] as String,
+        );
+      }
+    } catch (_) {
+      pairingMessage = 'Die Zugangsdaten konnten nicht übernommen werden. Bitte prüfe die Freigabe im Heimnetz.';
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -151,6 +175,11 @@ class _TelegramSetupState extends State<TelegramSetup> {
                   'Rezeptmix nutzt Telegram für den Zugriff unterwegs und sendet dazu Anfragen an den Rezeptgarten-Bot.',
                 ),
                 if (step == TelegramStep.credentials) ...[
+                  OutlinedButton(
+                    onPressed: busy ? null : loadCredentials,
+                    child: const Text('Aus dem Heimnetz übernehmen'),
+                  ),
+                  if (pairingMessage != null) Text(pairingMessage!),
                   TextField(
                     controller: id,
                     keyboardType: TextInputType.number,

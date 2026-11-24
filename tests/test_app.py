@@ -109,6 +109,24 @@ class AppTests(unittest.TestCase):
         service.plan_recipe_days.assert_awaited_once()
         self.assertEqual([day.isoformat() for day in service.plan_recipe_days.await_args.args[1]], selected)
 
+    def test_telegram_app_credentials_require_explicit_exposure(self):
+        path = '/api/telegram-app-credentials'
+        credentials = {'api_id': '12345', 'api_hash': 'a' * 32}
+        self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.put(path + '/exposure', json={'exposed': True}, headers=ORIGIN).status_code, 400)
+        self.assertEqual(self.client.put(path, json=credentials, headers={'Origin': 'https://evil.example'}).status_code, 403)
+        self.assertEqual(self.client.put(path, json=credentials, headers=ORIGIN).status_code, 200)
+        self.assertNotIn(credentials['api_hash'].encode(), (Path(self.tmp.name) / 'telegram-app-credentials.enc').read_bytes())
+        self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.put(path + '/exposure', json={'exposed': True}, headers=ORIGIN).status_code, 200)
+        response = self.client.get(path)
+        self.assertEqual(response.json(), credentials)
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        self.assertEqual(self.client.put(path + '/exposure', json={'exposed': False}, headers=ORIGIN).status_code, 200)
+        self.assertEqual(self.client.get(path).status_code, 403)
+        with TestClient(self.app, base_url='http://testserver') as insecure:
+            self.assertEqual(insecure.get(path).status_code, 403)
+
     def test_telegram_server_token_is_encrypted_and_origin_protected(self):
         token = '123456789:' + 'a' * 35
         self.assertFalse(self.client.get('/api/status').json()['telegram_server_bot_set'])

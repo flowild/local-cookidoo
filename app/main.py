@@ -146,6 +146,8 @@ def create_app(directory=None, secure_cookies=None):
     vault = Vault(database.directory)
     google_key_vault = Vault(database.directory, 'google-api-key.enc')
     telegram_vault = Vault(database.directory, 'telegram-server-bot.enc')
+    telegram_credentials_vault = Vault(database.directory, 'telegram-app-credentials.enc')
+    telegram_credentials_lock = Lock()
     telegram_lock = Lock()
     telegram_pending = {}
     telegram_account_lock = asyncio.Lock()
@@ -288,6 +290,53 @@ def create_app(directory=None, secure_cookies=None):
     @app.get('/api/status')
     def status():
         return {'stats': database.stats(), 'connected': service.client is not None, 'account': database.get('account'), 'sync': service.state, 'last_result': database.get('last_result'), 'sync_hours': database.get('sync_hours', 6), 'google_api_key_set': google_key_vault.path.is_file(), 'telegram_server_bot_set': telegram_vault.path.is_file(), 'calendar_queue': service.calendar_queue(), 'cart_recipe_count': database.cart_recipe_count(service.cart_owner())}
+
+    @app.get('/api/telegram-app-credentials/status')
+    def telegram_credentials_status():
+        with telegram_credentials_lock:
+            config = telegram_credentials_vault.read() or {}
+            return {'configured': bool(config.get('api_id') and config.get('api_hash')),
+                    'exposed': config.get('exposed') is True}
+
+    @app.put('/api/telegram-app-credentials')
+    async def set_telegram_app_credentials(request: Request):
+        if request.url.scheme != 'https':
+            raise HTTPException(403, 'HTTPS erforderlich.')
+        payload = await request.json()
+        api_id = payload.get('api_id') if isinstance(payload, dict) else None
+        api_hash = payload.get('api_hash') if isinstance(payload, dict) else None
+        if (not isinstance(api_id, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', api_id)
+                or int(api_id) > 2147483647 or not isinstance(api_hash, str)
+                or not re.fullmatch(r'[a-fA-F0-9]{32}', api_hash)):
+            raise HTTPException(400, 'Bitte gültige Telegram-API-Zugangsdaten eingeben.')
+        with telegram_credentials_lock:
+            config = telegram_credentials_vault.read() or {}
+            telegram_credentials_vault.write({'api_id': api_id, 'api_hash': api_hash, 'exposed': config.get('exposed') is True})
+        return {'ok': True}
+
+    @app.put('/api/telegram-app-credentials/exposure')
+    async def set_telegram_credentials_exposure(request: Request):
+        payload = await request.json()
+        exposed = payload.get('exposed') if isinstance(payload, dict) else None
+        if type(exposed) is not bool:
+            raise HTTPException(400, 'Ungültige Freigabe.')
+        with telegram_credentials_lock:
+            config = telegram_credentials_vault.read() or {}
+            if exposed and not (config.get('api_id') and config.get('api_hash')):
+                raise HTTPException(400, 'Bitte zuerst die Zugangsdaten speichern.')
+            config['exposed'] = exposed
+            telegram_credentials_vault.write(config)
+        return {'ok': True}
+
+    @app.get('/api/telegram-app-credentials')
+    def get_telegram_app_credentials(request: Request):
+        if request.url.scheme != 'https':
+            raise HTTPException(403, 'HTTPS erforderlich.')
+        with telegram_credentials_lock:
+            config = telegram_credentials_vault.read() or {}
+            if config.get('exposed') is not True or not config.get('api_id') or not config.get('api_hash'):
+                raise HTTPException(403, 'Die Zugangsdaten sind nicht freigegeben.')
+            return {'api_id': config['api_id'], 'api_hash': config['api_hash']}
 
     @app.post('/api/telegram-server-bot')
     async def set_telegram_server_bot(request: Request):

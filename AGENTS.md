@@ -214,6 +214,11 @@ Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git. Der erste regul�
 
 ## Telegram-Verbindung
 
+In den Web-Einstellungen lassen sich Telegram-API-ID und API-Hash verschlüsselt
+auf dem Server speichern und über einen Schalter für neue Android-Apps im
+Heimnetz freigeben. Bei aktiver Freigabe können Geräte im Heimnetz die Werte
+über HTTPS abrufen. Android bietet die Übernahme bei der Telegram-Einrichtung an.
+
 Die Server-API verwaltet das verschlüsselt auf dem Server gespeicherte Token
 des Rezeptgarten-Server-Bots. Die Android-App meldet sich mit dem Telegram-
 Benutzerkonto an und koppelt dieses im Heimnetz mit dem Server-Bot und dem

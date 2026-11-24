@@ -5,6 +5,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
 
 # Rezeptgarten für Android
 
+Telegram-API-ID und API-Hash werden verschlüsselt auf dem Server gespeichert. Die Web-Einstellungen schalten den HTTPS-Abruf im Heimnetz für neue Android-Apps frei. Android bietet die Übernahme bei der Einrichtung an.
+
 Die Lupe öffnet die separate Suche mit der auf der Übersicht gewählten Quelle und einem Lokal-/Cookidoo-Schalter. Im Telegram-Modus ist die Cookidoo-Suche gesperrt. Das Zufallsrezept kann auch im Telegram-Modus aus Cookidoo stammen. Katalogdetails sind lesend, Katalogbilder werden im Heimnetz geladen.
 
 Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Änderungsverlauf assets/changelog.txt. Relevante Änderungen ergänzen ihn. Beim Öffnen und Wiederöffnen im Heimnetz prüft die App automatisch auf APK-Updates. Ein neuer Build zeigt die Downloadaktion neben der Suche. Sie teilt ihren Zustand mit der manuellen Prüfung in den Einstellungen.

@@ -5,6 +5,8 @@ description: Teste, deploye, betreibe oder diagnostiziere die vorhandene Rezeptg
 
 # Rezeptgarten-Betrieb
 
+Telegram-API-ID und API-Hash werden verschlüsselt auf dem Server gespeichert. Die Web-Einstellungen schalten den HTTPS-Abruf im Heimnetz für neue Android-Apps frei. Android bietet die Übernahme bei der Einrichtung an.
+
 Die bereitgestellte App-Version steht in `app/version.py` und kann über
 `/api/health` geprüft werden. Versionsänderungen nach Prüfung und Deployment
 mit den zugehörigen Änderungen committen und nach `origin/main` pushen.
