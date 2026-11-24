@@ -186,6 +186,7 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   und die Chat-ID vor der Anforderung prüfen.
   Bei einer späteren Umstellung des Android-Ziel-SDK auf 37 oder höher die
   Laufzeitberechtigung `ACCESS_LOCAL_NETWORK` ergänzen und prüfen.
+- Der reguläre Release-Schlüssel liegt außerhalb von Git unter `.local/release-signing/`. Die lokale Datei `android-app/android/release-signing.properties` enthält die Build-Konfiguration. Für Updates beide geschützt erhalten.
 - Build und Veröffentlichung aus der Projektwurzel mit
   `scripts/Android-APK-veroeffentlichen.ps1`. Der WSL-Build prüft Flutter,
   führt die Widgettests aus und baut ARM64. Verwende eine steigende

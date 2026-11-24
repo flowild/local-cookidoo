@@ -205,7 +205,7 @@ Kopplung ist an das bei der Verbindung ausgewählte Cookidoo-Konto gebunden.
 Die Web-App benötigt das Heimnetz. Die APK enthält keine Gemini- oder
 Google-API-Schlüsselverwaltung.
 Die öffentliche Rezeptgarten-CA wird aus dem Container bezogen. Signaturschlüssel,
-Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git.
+Gradle-Zugangsdaten und APK-Dateien bleiben außerhalb von Git. Der erste reguläre Android-Kanal verwendet den privaten Schlüssel unter `.local/release-signing/` und die lokal ausgeschlossene Konfiguration `android-app/android/release-signing.properties`. Beide werden für weitere signierte Updates benötigt.
 
 ## Telegram-Verbindung
 
