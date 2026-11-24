@@ -11,7 +11,8 @@ let suggestionTimer, suggestionRequest = 0, selectedIngredient = null, suggestio
 let recipeIngredientOptions = [], recipeIngredientAliases = {}, recipeIngredientMatches = [], recipeIngredientIndex = -1;
 let featuredLocalDay = null, featuredRequest = 0;
 let featuredSource = 'local', catalogNextPage = null;
-let recipeSource = $('#search-scope').value;
+let recipeSource = $('#search-scope').checked ? 'cookidoo' : 'local';
+$('#search-scope-label').textContent = recipeSource === 'cookidoo' ? 'Cookidoo' : 'Lokal';
 try { if (localStorage.getItem('rezeptgarten-featured-source') === 'cookidoo') featuredSource = 'cookidoo'; } catch (_) {}
 const catalogPhoto = (token, name, thumb = true) => token
   ? `<img data-recipe-image src="/api/cookidoo/images/${encodeURIComponent(token)}.webp${thumb ? '?size=thumb' : ''}" alt="${escapeHTML(name)}" loading="${thumb ? 'lazy' : 'eager'}" decoding="async">`
@@ -1891,7 +1892,8 @@ $('#search').addEventListener('keydown', event => {
   runHeaderSearch();
 });
 $('#search-scope').addEventListener('change', event => {
-  recipeSource = event.target.value;
+  recipeSource = event.target.checked ? 'cookidoo' : 'local';
+  $('#search-scope-label').textContent = event.target.checked ? 'Cookidoo' : 'Lokal';
   if (state.view === 'suche') $('#recipe-grid').innerHTML = '';
   runHeaderSearch();
 });

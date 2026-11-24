@@ -12,8 +12,8 @@
   <link rel="icon" href="/static/icon-192.png?v=2" type="image/png">
   <link rel="apple-touch-icon" href="/static/icon-192.png?v=2">
   <script src="/static/theme.js?v=31"></script>
-  <link rel="stylesheet" href="/static/style.css?v=144">
-  <script src="/static/app.js?v=153" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=145">
+  <script src="/static/app.js?v=154" defer></script>
 </head>
 <body>
 <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -67,8 +67,9 @@
       <div class="header-search">
         <label class="search-box"><svg aria-hidden="true"><use href="#i-search"/></svg><span class="sr-only">Rezepte durchsuchen</span><input id="search" type="search" placeholder="Was möchtest du kochen?" maxlength="200" autocomplete="off"></label>
         <label class="search-scope">
-          <span class="sr-only">Suchquelle</span>
-          <select id="search-scope"><option value="local">Lokal</option><option value="cookidoo">Cookidoo</option></select>
+          <input id="search-scope" type="checkbox" role="switch" aria-label="Cookidoo durchsuchen">
+          <span class="search-scope-track" aria-hidden="true"></span>
+          <span id="search-scope-label">Lokal</span>
         </label>
       </div>
       <div class="top-actions"><a id="cart-shortcut" class="cart-shortcut" href="#einkaufswagen" aria-label="Einkaufswagen" title="Einkaufswagen öffnen"><svg aria-hidden="true"><use href="#i-cart"/></svg><span id="cart-shortcut-count" class="cart-shortcut-count" aria-hidden="true">…</span></a><a class="settings-shortcut" href="#einstellungen" data-nav="einstellungen" aria-label="Einstellungen" title="Einstellungen öffnen"><svg aria-hidden="true"><use href="#i-settings"/></svg></a></div>
