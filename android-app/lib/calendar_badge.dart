@@ -19,10 +19,10 @@ String calendarDayLabel(int index, String date) {
   return date.isEmpty ? weekday : '$weekday, ${calendarDateLabel(date)}';
 }
 
-class CalendarWeekBadge extends StatelessWidget {
-  const CalendarWeekBadge({super.key, required this.date, required this.today});
+class CalendarWeekLabel extends StatelessWidget {
+  const CalendarWeekLabel({super.key, required this.date, required this.today});
 
-  final String date;
+  final String? date;
   final String today;
 
   DateTime _monday(DateTime day) =>
@@ -30,20 +30,48 @@ class CalendarWeekBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayed = DateTime.tryParse(date);
-    if (displayed == null) return const SizedBox.shrink();
-    final monday = _monday(displayed);
+    final displayed = DateTime.tryParse(date ?? '');
+    final monday = displayed == null ? null : _monday(displayed);
     // The Thursday determines the ISO week year, even if Monday is in December.
-    final thursday = monday.add(const Duration(days: 3));
-    final week =
-        1 + thursday.difference(DateTime.utc(thursday.year)).inDays ~/ 7;
+    final thursday = monday?.add(const Duration(days: 3));
+    final week = thursday == null
+        ? null
+        : 1 + thursday.difference(DateTime.utc(thursday.year)).inDays ~/ 7;
     final current = DateTime.tryParse(today);
     final isCurrent = current != null && _monday(current) == monday;
+    final theme = Theme.of(context);
+    final color = isCurrent
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
     return Semantics(
       container: true,
-      label: isCurrent ? 'Aktuelle Kalenderwoche $week' : 'Kalenderwoche $week',
+      label: week == null
+          ? 'Kalenderwoche wird geladen'
+          : '${isCurrent ? 'Aktuelle Kalenderwoche' : 'Kalenderwoche'} $week',
       excludeSemantics: true,
-      child: InfoPill('KW $week', highlighted: isCurrent),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.related),
+            child: Text(
+              week == null ? 'KW –' : 'KW $week',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+          if (isCurrent)
+            Positioned(
+              bottom: 0,
+              width: 16,
+              height: 2,
+              child: ColoredBox(color: color),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -1,3 +1,3 @@
 """Version der bereitgestellten Rezeptgarten-App."""
 
-APP_VERSION = '1.19.2'
+APP_VERSION = '1.19.3'

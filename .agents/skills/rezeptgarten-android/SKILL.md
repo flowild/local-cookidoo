@@ -27,7 +27,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
   die geplante Aktion vor dem Loslassen anzeigen. Wochenkacheln nach 250 ms
   markieren und aufwärts ab 140 dp, abwärts ab 90 dp ausführen.
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
-  Die Wochenleiste zeigt die ISO-Kalenderwoche zwischen den Pfeilen. „Heute“
+  Die Wochenleiste zeigt die ISO-Kalenderwoche als Text zwischen umrandeten
+  Wochenpfeilen. Eine kurze Linie markiert die laufende Woche. „Heute“
   steht neben den Pfeilen. Das Einkaufswagensymbol sitzt in derselben Zeile
   bündig am rechten Inhaltsrand. Die
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.

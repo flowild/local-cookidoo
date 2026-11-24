@@ -161,7 +161,7 @@ class _TelegramViewState extends State<TelegramView> {
             Expanded(
               child: Column(
                 children: [
-                  CalendarWeekBadge(date: _date(monday), today: today),
+                  CalendarWeekLabel(date: _date(monday), today: today),
                   Text(
                     calendarDateLabel(_date(monday)),
                     textAlign: TextAlign.center,

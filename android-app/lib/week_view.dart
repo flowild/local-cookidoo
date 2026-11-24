@@ -10,7 +10,6 @@ import 'package:material_ui/material_ui.dart';
 import 'api.dart';
 import 'calendar_badge.dart';
 import 'expandable_list_card.dart';
-import 'pill_widgets.dart';
 import 'recipe_card.dart';
 import 'spacing.dart';
 
@@ -1051,10 +1050,13 @@ class _WeekViewState extends State<WeekView> {
     };
     final canNavigate = !_busy && (!_loading || _requestedDay != null);
     final canStep = canNavigate && (_monday != null || _requestedDay != null);
-    final monday = _monday ?? _requestedDay;
-    final weekBadge = monday == null
-        ? const InfoPill('KW –')
-        : CalendarWeekBadge(date: monday, today: text(_week?['today']));
+    const controlShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(14)),
+    );
+    final arrowStyle = IconButton.styleFrom(
+      fixedSize: const Size.square(48),
+      shape: controlShape,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.related,
@@ -1073,45 +1075,39 @@ class _WeekViewState extends State<WeekView> {
                     children: [
                       Expanded(
                         flex: 3,
-                        child: Material(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHigh,
-                          shape: const StadiumBorder(),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Vorherige Woche',
-                                style: IconButton.styleFrom(
-                                  fixedSize: const Size.square(48),
-                                ),
-                                onPressed: canStep ? () => _navigate(-1) : null,
-                                icon: const Icon(Icons.chevron_left),
-                              ),
-                              Expanded(
-                                child: Center(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: weekBadge,
+                        child: Row(
+                          children: [
+                            IconButton.outlined(
+                              tooltip: 'Vorherige Woche',
+                              style: arrowStyle,
+                              onPressed: canStep ? () => _navigate(-1) : null,
+                              icon: const Icon(Icons.chevron_left),
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: CalendarWeekLabel(
+                                    date: _monday ?? _requestedDay,
+                                    today: text(_week?['today']),
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                tooltip: 'Nächste Woche',
-                                style: IconButton.styleFrom(
-                                  fixedSize: const Size.square(48),
-                                ),
-                                onPressed: canStep ? () => _navigate(1) : null,
-                                icon: const Icon(Icons.chevron_right),
-                              ),
-                            ],
-                          ),
+                            ),
+                            IconButton.outlined(
+                              tooltip: 'Nächste Woche',
+                              style: arrowStyle,
+                              onPressed: canStep ? () => _navigate(1) : null,
+                              icon: const Icon(Icons.chevron_right),
+                            ),
+                          ],
                         ),
                       ),
                       Flexible(
                         child: FilledButton.tonal(
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(48, 48),
+                            shape: controlShape,
                             padding: const EdgeInsets.symmetric(
                               horizontal: AppSpacing.related,
                               vertical: AppSpacing.tight,
