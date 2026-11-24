@@ -433,6 +433,10 @@ In Web und Android lassen sich Symbole für Zutaten, Vorratskategorien und
 lokale Rezeptlisten beim Anlegen und Bearbeiten wählen. „Standard“ stellt die
 automatische Darstellung wieder her. Gewählte Symbole werden in SQLite gespeichert.
 
+Die Web-Listenansicht zeigt „Zurück zu deinen Listen“ als Pille. Bei lokalen
+Listen stehen Bearbeiten und Löschen nebeneinander über dem Filterbereich.
+Cookidoo-Listen zeigen ihre Beschreibung unter dem Titel.
+
 Lokale Rezeptlisten und Vorratskategorien können nach Bestätigung gelöscht werden.
 Beim Löschen einer Kategorie werden deren Vorratseinträge mit gelöscht; bei lokalen
 Listen entfallen die Listenzuordnungen. Cookidoo-Listen können derzeit nicht in der

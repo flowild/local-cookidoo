@@ -151,6 +151,8 @@ verwenden. Relevante Änderungen an Funktionen und Regeln in diesem Skill und in
 
 - Rezeptdetails zeigen vorhandene Cookidoo-Tipps in einem zunächst eingeklappten Bereich unter der Zubereitung. Katalog-Zusatzinformationen und Hinweise eigener Kreationen werden beim Synchronisieren gespeichert; fehlende Daten älterer Rezepte werden bei Bedarf nachgeladen.
 
+- Web-Listen haben eine Zurück-Pille. Lokale Listen zeigen Bearbeiten und Löschen
+  in einer Zeile über den Filtern. Cookidoo-Listen zeigen ihre Beschreibung.
 - Lokale Rezeptlisten und Vorratskategorien können nach ausdrücklicher Bestätigung gelöscht werden. Beim Löschen einer Vorratskategorie werden deren Vorratseinträge mit gelöscht; bei lokalen Listen entfallen nur die Listenzuordnungen.
 
 - Spaghetti, Nudeln und Pasta gelten beim Zutaten- und Vorratsabgleich als gleichwertig; gespeicherte Einkaufswagenzutaten werden bei der Anzeige anhand der aktuellen Regeln gruppiert.
