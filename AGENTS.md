@@ -407,7 +407,8 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 „Alle Rezepte“ bietet in der Web-App globale Zutaten-, Portions- und Zeitfilter.
 Die Web-Kopfzeile zeigt die Einstellungen rechts neben dem Einkaufswagen.
 Die Suchleiste ist auf Desktop bis zu 560 Pixel breit. Die Lupe und der
-Platzhalter kennzeichnen die Suche.
+Platzhalter kennzeichnen die Suche. Platzhalter und Suchtext haben innen
+16 Pixel Abstand zum linken Feldrand, auf dem Handy 14 Pixel.
 Cookidoo-Verbindung und letzter Abgleich stehen unten in der Desktop-Seitenleiste.
 Der Cookidoo-Abgleich startet beim Öffnen, bei Rückkehr und regelmäßig in der
 sichtbaren Web-App mit höchstens einem automatischen Start je fünf Minuten.

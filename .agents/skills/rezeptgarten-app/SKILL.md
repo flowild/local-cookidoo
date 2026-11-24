@@ -43,7 +43,8 @@ Die separate Warteschlange für Wochenänderungen bleibt aktiv.
   hinzufügbaren Rezepten. Zutatenfilter unterstützen mehrere Einträge.
 - „Alle Rezepte“ bietet globale Zutaten-, Portions- und Zeitfilter.
 - Die Desktop-Suchleiste ist bis zu 560 Pixel breit. Lupe und Platzhalter
-  kennzeichnen die Suche.
+  kennzeichnen die Suche. Der Suchtext und Platzhalter haben im Feld innen
+  16 Pixel Abstand zum linken Rand, auf dem Handy 14 Pixel.
 - Die Headersuche durchsucht Rezepttitel und Zutaten einschließlich bekannter Aliasse;
   Titeltreffer stehen vor reinen Zutatentreffern. Sortierung, Listenfilter und
   gruppierte Versionen bleiben berücksichtigt.
