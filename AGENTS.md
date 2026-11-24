@@ -299,6 +299,8 @@ bei Konflikten darf der ungespeicherte Text nicht still verworfen werden.
 In der Wochenansicht zeigt ein Symbol auf dem Rezeptbild vorhandene Notizen an;
 Gesamtzeit und Portionen stehen ebenfalls auf dem Bild. Die Notizbearbeitung
 erfolgt über die Rezeptdetailansicht.
+In den Web-Rezeptdetails öffnet „Zu lokalen Listen hinzufügen“ die Listenauswahl.
+Die Aktion steht zwischen „Zum Einkaufswagen hinzufügen“ und „In Cookidoo öffnen“.
 Die Rezeptdetailansicht zeigt zugeordnete Listen über dem Titel und vorhandene
 Notizen direkt an. Notizen werden im Feld mit Enter oder beim Verlassen gespeichert;
 Umschalt+Enter fügt einen Zeilenumbruch ein. Zutaten sind zunächst aufgeklappt,
