@@ -106,7 +106,7 @@ Der Modus zeigt „Testdaten“ an und verwendet keine Verbindung zu LXC, Cookid
 oder Telegram. Beim Ausschalten folgt die normale Verbindungsprüfung.
 
 Die native Flutter-App entsteht unter `android-app/`. Die
-[Flutter-Portierung](FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
+[Flutter-Portierung](docs/android/FLUTTER-PORTIERUNG.md) erfasst Funktionsumfang, Design und
 Freigabekriterien. Testbuilds verwenden eine eigene Android-Paket-ID und die
 Downloadseite `https://192.168.184.30/android/test/`. Das
 Android-Startmenü zeigt für beide Kanäle den Namen „Rezeptmix“. Android und

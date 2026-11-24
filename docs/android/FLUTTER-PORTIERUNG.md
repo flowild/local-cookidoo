@@ -6,7 +6,7 @@ Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Down
 
 ## Architektur
 
-- Die Android-App entsteht mit Flutter-Widgets in [android-app/](android-app/). Die mobile Web-App ist die Vorlage für Inhalte, Gesten und fachliche Abläufe. Die Web-App bleibt parallel erreichbar und als Chrome-PWA installierbar.
+- Die Android-App entsteht mit Flutter-Widgets in [android-app/](../../android-app/). Die mobile Web-App ist die Vorlage für Inhalte, Gesten und fachliche Abläufe. Die Web-App bleibt parallel erreichbar und als Chrome-PWA installierbar.
 - Beide Clients verwenden dieselben Rezeptgarten-APIs und denselben Datenbestand im bestehenden Proxmox-LXC 103. SQLite, Bilder, Konten, Cookidoo-Zugangsdaten, Synchronisierung und Kalender-Warteschlange bleiben auf dem Server. Der bestehende Cookidoo-Client und sein Lock werden weiterhin gemeinsam genutzt.
 - Ein zentraler API-Client verbindet Flutter mit `https://192.168.184.30`. Für diesen Endpunkt vertraut er dem öffentlichen Rezeptgarten-CA-Zertifikat und prüft Zertifikatskette und Host. Schreibanfragen setzen den passenden `Origin` für die bestehende Same-Origin-Prüfung. Der Zugang im Heimnetz bleibt ohne Passwort.
 - Beim Start und beim Öffnen des Einkaufswagens wartet die App höchstens 2,5 Sekunden auf die Erreichbarkeit des Heimnetzservers. Schreibanfragen erhalten dieses Zeitlimit nicht. Bei unklaren Schreibergebnissen prüft die App den Serverstand, bevor sie eine Wiederholung anbietet.
@@ -24,7 +24,7 @@ Der [Testdownload](https://192.168.184.30/android/test/) und der [reguläre Down
 | Einstellungen | Cookidoo-Konto verbinden und trennen, Dunkelmodus und Akzentfarbe. Der Sammlungsabgleich startet beim Öffnen der App und durch Herunterziehen einer Ansicht; ein Zeitplan existiert nicht. Der Installationsbereich zeigt die installierte Version, prüft den eigenen Aktualisierungskanal, lädt die APK und öffnet den Android-Installer. |
 | Debug-Modus | In den Einstellungen auch offline einschaltbar. Die sechs Hauptbereiche verwenden Beispieldaten; Teständerungen bleiben für die laufende App-Sitzung im Speicher. Beim nächsten Start bleibt der Modus ausgewählt und beginnt mit frischen Beispieldaten. |
 
-Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. Die Tabelle beschreibt das Ziel für alle Bereiche. Vor der Freigabe werden auch seit Projektstart hinzugekommene Webfunktionen anhand des dann aktuellen Webstands abgeglichen. Die fachlichen Details zu Kalender, Notizen, Einkaufswagen, Telegram und Datenhaltung stehen in [AGENTS.md](AGENTS.md).
+Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. Die Tabelle beschreibt das Ziel für alle Bereiche. Vor der Freigabe werden auch seit Projektstart hinzugekommene Webfunktionen anhand des dann aktuellen Webstands abgeglichen. Die fachlichen Details zu Kalender, Notizen, Einkaufswagen, Telegram und Datenhaltung stehen in [AGENTS.md](../../AGENTS.md).
 
 ## Design und Bedienung
 
@@ -56,7 +56,7 @@ Für die Umsetzung dient der bei Projektstart geprüfte Webstand als Referenz. D
 Die Android-App verwendet die Rezeptgarten-API im Heimnetz und die Telegram-
 Benutzeranmeldung für die lesenden Wochen- und Einkaufswagenansichten unterwegs.
 Die Google-API-Schlüsselverwaltung für Gemini gehört zur Web-App. Die
-Web-Funktionen sind in [AGENTS.md](AGENTS.md) beschrieben.
+Web-Funktionen sind in [AGENTS.md](../../AGENTS.md) beschrieben.
 
 ### ThomasWlan und Telegram-Zugriff
 

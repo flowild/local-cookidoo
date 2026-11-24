@@ -259,7 +259,7 @@ Paket-ID, Version, Architektur und Signatur wurden lokal geprüft.
 
 Telegram-Anmeldung und Kopplung sowie den In-App-Installer
 mit isolierten Daten in der Android-Laufzeit prüfen. Die vollständige Abnahme
-ist in `FLUTTER-PORTIERUNG.md` beschrieben.
+ist im [Portierungsplan](FLUTTER-PORTIERUNG.md) beschrieben.
 
 ## Aktueller technischer Stand
 
