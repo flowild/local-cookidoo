@@ -186,7 +186,7 @@ function updateSync() {
   if (state.status.connected && previewNotePending.size && !previewNoteBusy) schedulePreviewNotes();
   setCartCount(state.status.cart_recipe_count);
   const sync = state.status.sync;
-  $('#connection-label').innerHTML = `<span><span class="status-dot"></span>${state.status.connected ? 'Mit Cookidoo verbunden' : 'Lokale Sammlung'}</span><span class="last-sync">${state.status.stats.last_sync ? `Letzter Abgleich: ${escapeHTML(formatDate(state.status.stats.last_sync))}` : 'Noch nicht synchronisiert'}</span>`;
+  $('#connection-label').innerHTML = `<span><span class="status-dot"></span>${state.status.connected ? 'Mit Cookidoo verbunden' : 'Cookidoo getrennt'}</span><span class="last-sync">${state.status.stats.last_sync ? `Letzter Abgleich: ${escapeHTML(formatDate(state.status.stats.last_sync))}` : 'Noch nicht synchronisiert'}</span>`;
   $('#sync-progress').hidden = !sync.running;
   $('#sync-message').textContent = sync.message;
   $('#sync-counter').textContent = sync.total ? `${sync.done} von ${sync.total} Rezepten · bitte lass den Server weiterlaufen` : 'Deine bisherige Sammlung bleibt währenddessen verfügbar.';

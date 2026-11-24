@@ -1,5 +1,5 @@
-const CACHE = 'rezeptgarten-shell-v152';
-const SHELL = ['/', '/static/style.css?v=136', '/static/theme.js?v=31', '/static/app.js?v=145', '/static/week-placeholder-four.png', '/static/week-placeholder-steak-v2.png', '/static/week-placeholder-resteessen.png', '/static/manifest.webmanifest?v=2', '/static/icon-192.png?v=2', '/static/icon-512.png?v=2', '/static/icon-maskable-512.png?v=2'];
+const CACHE = 'rezeptgarten-shell-v153';
+const SHELL = ['/', '/static/changelog.html', '/static/style.css?v=137', '/static/theme.js?v=31', '/static/app.js?v=146', '/static/week-placeholder-four.png', '/static/week-placeholder-steak-v2.png', '/static/week-placeholder-resteessen.png', '/static/manifest.webmanifest?v=2', '/static/icon-192.png?v=2', '/static/icon-512.png?v=2', '/static/icon-maskable-512.png?v=2'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', event => {
@@ -7,8 +7,8 @@ self.addEventListener('fetch', event => {
   const path = new URL(event.request.url).pathname;
   // Personal recipes, account data and authenticated images never enter the shared shell cache.
   if (path.startsWith('/api/')) return;
-  if (event.request.mode === 'navigate') {
-    event.respondWith(caches.open(CACHE).then(cache => cache.match('/')).then(cached => cached || fetch(event.request)));
+  if (event.request.mode === 'navigate' && (path === '/' || path === '/static/changelog.html')) {
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(path)).then(cached => cached || fetch(event.request)));
   } else if (SHELL.some(url => new URL(url, self.location.origin).pathname === path)) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(event.request)).then(cached => cached || fetch(event.request)));
   }

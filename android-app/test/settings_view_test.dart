@@ -283,6 +283,10 @@ void main() {
       final version = find.text('Installierte Version 0.14.0-test');
       await tester.scrollUntilVisible(version, 280);
       expect(version, findsOneWidget);
+      expect(
+        find.widgetWithText(TextButton, 'Installierte Version 0.14.0-test'),
+        findsOneWidget,
+      );
       expect(find.text('Telegram'), findsOneWidget);
       expect(find.text('Google API'), findsNothing);
     },

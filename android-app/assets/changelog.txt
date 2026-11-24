@@ -1,0 +1,12 @@
+1.21.0
+• Rezeptmix prüft beim Öffnen im Heimnetz automatisch auf Updates. Ein Download-Symbol neben der Suche erscheint, sobald ein neuer Build verfügbar ist.
+• Die installierte Versionsnummer in den Einstellungen öffnet diesen Änderungsverlauf.
+
+1.19.3
+• In „Meine Woche“ steht die Kalenderwoche zwischen umrandeten Pfeilen. Die laufende Woche ist unterstrichen.
+
+1.19.1
+• Die Aktion „In den Einkaufswagen“ sitzt bündig am rechten Rand der Wochenleiste.
+
+1.18.10
+• „Meine Woche“ zeigt Kalenderwoche, „Heute“ und die Einkaufsaktion in einer Zeile.

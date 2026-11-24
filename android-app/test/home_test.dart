@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
@@ -14,6 +15,63 @@ import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/week_view.dart';
 
 void main() {
+  testWidgets(
+    'startup detects updates and the toolbar uses the Android installer',
+    (tester) async {
+      tester.view.physicalSize = const Size(332, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const channel = MethodChannel('de.rezeptgarten/update');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final metadata = Completer<Map<String, Object?>>();
+      var checks = 0;
+      var downloads = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'checkUpdate') {
+          checks++;
+          return metadata.future;
+        }
+        expect(call.method, 'downloadAndInstall');
+        downloads++;
+        return 'installerOpened';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final appearance = AppearanceController();
+      addTearDown(appearance.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RezeptgartenHome(api: _TestApi(), appearance: appearance),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.byTooltip('Update herunterladen');
+      expect(checks, 1);
+      expect(button, findsNothing);
+      metadata.complete({
+        'version': '1.21.0',
+        'build': 77,
+        'installedBuild': 76,
+      });
+      await tester.pumpAndSettle();
+      expect(button, findsOneWidget);
+      expect(downloads, 0);
+      expect(
+        tester.getCenter(button).dx,
+        greaterThan(tester.getCenter(find.byTooltip('Rezepte suchen')).dx),
+      );
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Build 77'), findsOneWidget);
+      await tester.tap(find.text('Herunterladen und installieren'));
+      await tester.pumpAndSettle();
+      expect(downloads, 1);
+      expect(checks, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('start and cart show controls before their data arrives', (
     tester,
   ) async {

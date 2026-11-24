@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'app_update.dart';
 import 'spacing.dart';
 import 'appearance.dart';
 import 'ingredient_icon.dart';
@@ -81,6 +82,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   int syncGeneration = 0;
   bool startupSyncAttempted = false;
   bool wasBackgrounded = false;
+  bool _updateChecked = false;
+  final _update = AppUpdateController();
   Timer? syncPoll;
   static const _retainedAreas = {1, 2, 3, 5};
   final _dirtyAreas = <int>{};
@@ -117,6 +120,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
     _lastMode = widget.connection?.mode;
     widget.connection?.addListener(_connectionChanged);
     if (_local) unawaited(_startupSync());
+    _checkForUpdate();
   }
 
   @override
@@ -132,9 +136,14 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   }
 
   Future<void> _resume(bool syncOnResume) async {
-    if (syncOnResume) startupSyncAttempted = false;
+    if (syncOnResume) {
+      startupSyncAttempted = false;
+      _updateChecked = false;
+    }
     await widget.connection?.refresh();
-    if (mounted && syncOnResume && _local) await _startupSync();
+    if (!mounted || !syncOnResume) return;
+    _checkForUpdate();
+    if (_local) await _startupSync();
   }
 
   void _connectionChanged() {
@@ -147,6 +156,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       }
       if (_lastMode != mode) {
         _lastMode = mode;
+        _updateChecked = false;
         _resetSession();
       }
       serverCartCount = null;
@@ -154,6 +164,47 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       _areaData[area] = _load(area);
     });
     if (_local) unawaited(_startupSync());
+    _checkForUpdate();
+  }
+
+  void _checkForUpdate() {
+    if (!_local ||
+        api.usesTestData ||
+        _updateChecked ||
+        _update.checking ||
+        _update.downloading) {
+      return;
+    }
+    _updateChecked = true;
+    unawaited(_update.check());
+  }
+
+  Future<void> _offerUpdate() async {
+    final install = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update verfügbar'),
+        content: Text(_update.status ?? 'Eine neue Version steht bereit.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Später'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.download),
+            label: const Text('Herunterladen und installieren'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || install != true || !_local) return;
+    await _update.install();
+    final message = _update.message;
+    if (mounted && message != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   void _resetSession() {
@@ -358,6 +409,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           appearance: widget.appearance,
           telegram: widget.telegram,
           connection: widget.connection,
+          update: _update,
           onSync: _syncFromPull,
           onDebugModeChanged: widget.onDebugModeChanged,
           onAccountChanged: () {
@@ -690,6 +742,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   @override
   void dispose() {
     _navigationIndex.dispose();
+    _update.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.connection?.removeListener(_connectionChanged);
     syncPoll?.cancel();
@@ -1405,6 +1458,27 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                   },
             icon: const Icon(Icons.search),
           ),
+          if (_local && !api.usesTestData)
+            ListenableBuilder(
+              listenable: _update,
+              builder: (context, _) {
+                if (!_update.available) return const SizedBox.shrink();
+                return IconButton(
+                  tooltip: _update.downloading
+                      ? 'Update wird heruntergeladen'
+                      : 'Update herunterladen',
+                  onPressed: _update.checking || _update.downloading
+                      ? null
+                      : _offerUpdate,
+                  icon: _update.downloading
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.downloading_outlined),
+                );
+              },
+            ),
           IconButton(
             tooltip: 'Einkaufswagen öffnen',
             onPressed: busy ? null : () => _navigate(4),

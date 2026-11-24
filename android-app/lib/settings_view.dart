@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
+import 'app_update.dart';
 import 'pill_widgets.dart';
 import 'spacing.dart';
 import 'appearance.dart';
@@ -23,6 +24,7 @@ class SettingsView extends StatefulWidget {
     this.onSync,
     this.onDebugModeChanged,
     this.onAccountChanged,
+    this.update,
   });
   final RezeptgartenApi api;
   final AppearanceController appearance;
@@ -31,23 +33,19 @@ class SettingsView extends StatefulWidget {
   final Future<void> Function()? onSync;
   final ValueChanged<bool>? onDebugModeChanged;
   final VoidCallback? onAccountChanged;
+  final AppUpdateController? update;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  static const _update = MethodChannel('de.rezeptgarten/update');
   static const _preferences = MethodChannel('de.rezeptgarten/preferences');
 
   Json? _status;
   String? _error;
   String? _version;
-  String? _updateMessage;
-  String? _updateStatus;
-  bool _updateAvailable = false;
-  bool _checkingUpdate = false;
-  bool _downloadingUpdate = false;
+  late final _update = widget.update ?? AppUpdateController();
   bool _loading = false;
   bool _busy = false;
   int _request = 0;
@@ -60,6 +58,7 @@ class _SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     widget.connection?.addListener(_connectionChanged);
+    _update.addListener(_updateChanged);
     if (_local) unawaited(_load(showLoading: true));
     unawaited(_loadVersion());
     _poll = Timer.periodic(const Duration(seconds: 3), (_) {
@@ -76,6 +75,8 @@ class _SettingsViewState extends State<SettingsView> {
   void dispose() {
     widget.connection?.removeListener(_connectionChanged);
     _poll?.cancel();
+    _update.removeListener(_updateChanged);
+    if (widget.update == null) _update.dispose();
     super.dispose();
   }
 
@@ -101,70 +102,35 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _checkUpdate() async {
-    if (_checkingUpdate || _downloadingUpdate) return;
-    setState(() {
-      _checkingUpdate = true;
-      _updateAvailable = false;
-      _updateMessage = null;
-    });
-    var status = 'Der Updatestatus konnte nicht geprüft werden.';
-    var available = false;
-    try {
-      final metadata = await _update.invokeMapMethod<String, Object?>(
-        'checkUpdate',
-      );
-      if (metadata case {
-        'version': final String version,
-        'build': final int build,
-        'installedBuild': final int installedBuild,
-      }) {
-        available = build > installedBuild;
-        status = switch (build.compareTo(installedBuild)) {
-          > 0 => 'Update verfügbar · Version $version (Build $build)',
-          0 => 'Deine App ist aktuell.',
-          _ => 'Deine App ist neuer als der Build auf dem Server.',
-        };
-      }
-    } on PlatformException catch (error) {
-      status = error.message ?? status;
-    } on MissingPluginException {
-      status = 'Die Updateprüfung ist nur in der Android-App verfügbar.';
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updateStatus = status;
-          _updateAvailable = available;
-          _checkingUpdate = false;
-        });
-      }
-    }
-  }
+  void _updateChanged() => setState(() {});
 
-  Future<void> _installUpdate() async {
-    if (_downloadingUpdate) return;
-    setState(() {
-      _downloadingUpdate = true;
-      _updateMessage = null;
-    });
-    String? message;
-    try {
-      final result = await _update.invokeMethod<String>('downloadAndInstall');
-      if (result != 'installerOpened') {
-        message = 'Der Android-Installer konnte nicht geöffnet werden.';
-      }
-    } on PlatformException catch (error) {
-      message = error.message ?? 'Die APK konnte nicht geladen werden.';
-    } on MissingPluginException {
-      message = 'Der APK-Download ist nur in der Android-App verfügbar.';
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updateMessage = message;
-          _downloadingUpdate = false;
-        });
-      }
-    }
+  Future<void> _changelog() async {
+    final entries = rootBundle.loadString('assets/changelog.txt');
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Änderungsverlauf für Android'),
+        scrollable: true,
+        content: FutureBuilder<String>(
+          future: entries,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Text(
+                'Der Änderungsverlauf konnte nicht geladen werden.',
+              );
+            }
+            if (!snapshot.hasData) return const LinearProgressIndicator();
+            return Text(snapshot.data!);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _load({
@@ -443,7 +409,7 @@ class _SettingsViewState extends State<SettingsView> {
                         'App offline mit Beispieldaten testen',
                       ),
                       value: widget.api.usesTestData,
-                      onChanged: _busy || _checkingUpdate || _downloadingUpdate
+                      onChanged: _busy || _update.downloading
                           ? null
                           : changeMode,
                     ),
@@ -501,37 +467,48 @@ class _SettingsViewState extends State<SettingsView> {
                 if (!widget.api.usesTestData)
                   _card('Rezeptmix für Android', [
                     if (_version != null)
-                      Text('Installierte Version $_version'),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: TextButton(
+                          onPressed: _changelog,
+                          child: Text(
+                            'Installierte Version $_version',
+                            style: const TextStyle(
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
                     Semantics(
                       liveRegion: true,
                       child: Text(
-                        _checkingUpdate
+                        _update.checking
                             ? 'Suche nach Updates …'
-                            : _updateStatus ?? 'Updatestatus unbekannt.',
+                            : _update.status ?? 'Updatestatus unbekannt.',
                       ),
                     ),
                     OutlinedButton.icon(
                       onPressed:
-                          _checkingUpdate || _downloadingUpdate || !_local
+                          _update.checking || _update.downloading || !_local
                           ? null
-                          : _updateAvailable
-                          ? _installUpdate
-                          : _checkUpdate,
+                          : _update.available
+                          ? _update.install
+                          : _update.check,
                       icon: Icon(
-                        _updateAvailable ? Icons.download : Icons.refresh,
+                        _update.available ? Icons.download : Icons.refresh,
                       ),
                       label: Text(
-                        _updateAvailable
+                        _update.available
                             ? 'APK herunterladen und installieren'
                             : 'Nach Updates suchen',
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    if (_downloadingUpdate) ...[
+                    if (_update.downloading) ...[
                       const LinearProgressIndicator(),
                       const Text('APK wird heruntergeladen und geprüft …'),
                     ],
-                    if (_updateMessage != null) Text(_updateMessage!),
+                    if (_update.message != null) Text(_update.message!),
                   ]),
               ],
             ),

@@ -1384,6 +1384,12 @@ class AppTests(unittest.TestCase):
         worker = self.client.get('/sw.js')
         self.assertEqual(worker.headers['service-worker-allowed'], '/')
         self.assertIn("path.startsWith('/api/')", worker.text)
+        path = '/static/changelog.html'
+        self.assertIn(path, worker.text)
+        self.assertIn(f'href="{path}"', self.client.get('/').text)
+        changelog = self.client.get(path)
+        self.assertEqual(changelog.status_code, 200)
+        self.assertIn(self.client.get('/api/health').json()['version'], changelog.text)
 
     def test_web_sync_is_rate_limited_and_does_not_expedite_the_calendar(self):
         service = self.app.state.sync

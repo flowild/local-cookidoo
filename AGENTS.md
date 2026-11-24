@@ -124,6 +124,9 @@ verfügbar, wird derselbe Knopf zu „APK herunterladen und installieren“.
 Die App lädt die APK über HTTPS, prüft Größe, SHA-256, Paket-ID und Version und
 startet den Android-Installer. Android verwaltet Quellenfreigabe und Bestätigung.
 Ein fehlgeschlagener Abruf bleibt als Fehler sichtbar und kann wiederholt werden.
+Beim Öffnen und Wiederöffnen im Heimnetz prüft Android automatisch auf Updates.
+Ein verfügbarer Build zeigt neben der Suche ein Download-Symbol mit Bestätigung.
+Kopfzeile und Einstellungen verwenden denselben Updatestatus.
 Der Android-Einkaufswagen verwendet die gemeinsamen Wagen-APIs für Rezept- und
 Zusatzartikel, Häkchen sowie den bestätigten Cookidoo-Transfer und seine Klärung.
 Die Android-Rezeptdetails laden Versionen, Tipps, Listen, Vorratsstatus und Notizen
@@ -240,6 +243,10 @@ und dort ihre Bereitstellung prüfen. Den Projektskill rezeptgarten-betrieb beac
 Produktivdaten und Konten erhalten.
 
 ## Versionierung und Git
+
+Die Versionsnummern verlinken die Änderungsverläufe. Jede relevante Änderung
+ergänzt den Eintrag der neuen Version in `app/static/changelog.html` für die
+Web-App oder in `android-app/assets/changelog.txt` für Android.
 
 Die App-Version steht ausschließlich als `APP_VERSION` in `app/version.py` und
 erscheint in der App sowie unter `/api/health`. Bei jeder relevanten App-Änderung
@@ -396,6 +403,7 @@ Zubereitungsschritte bleiben sichtbar. Einkaufsdaten bleiben erhalten.
 
 „Alle Rezepte“ bietet in der Web-App globale Zutaten-, Portions- und Zeitfilter.
 Die Web-Kopfzeile zeigt die Einstellungen rechts neben dem Einkaufswagen.
+Cookidoo-Verbindung und letzter Abgleich stehen unten in der Desktop-Seitenleiste.
 Der Cookidoo-Abgleich startet beim Öffnen, bei Rückkehr und regelmäßig in der
 sichtbaren Web-App mit höchstens einem automatischen Start je fünf Minuten.
 Die Web-Einstellungen zeigen „App installieren“ auf Android und laden die reguläre

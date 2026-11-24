@@ -5,6 +5,8 @@ description: Entwickle, prüfe und veröffentliche die native Rezeptgarten-App i
 
 # Rezeptgarten für Android
 
+Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Änderungsverlauf assets/changelog.txt. Relevante Änderungen ergänzen ihn. Beim Öffnen und Wiederöffnen im Heimnetz prüft die App automatisch auf APK-Updates. Ein neuer Build zeigt die Downloadaktion neben der Suche. Sie teilt ihren Zustand mit der manuellen Prüfung in den Einstellungen.
+
 - Nutze [FLUTTER-PORTIERUNG.md](../../../FLUTTER-PORTIERUNG.md) für Umfang,
   Design und offene Abnahme. Die mobile PWA ist die Vorlage für fachliche Abläufe
   und Gesten. Android verwendet Material 3 Expressive mit dem gemeinsamen Theme
