@@ -81,7 +81,8 @@ Sammlungsabgleich lädt Android die Vorschaubilder der Sammlung im Hintergrund.
 Der Telegram-Modus nutzt gespeicherte Bilder und zeigt für fehlende Bilder
 einen Platzhalter bis zum nächsten Heimnetzabruf. Andere API-Antworten verwenden
 keinen HTTP-Cache.
-Die Übersichtskarte „Deine Sammlung“ bietet Direktzugriffe auf Rezeptlisten,
+Die Übersichtskarte „Deine Sammlung“ steht direkt unter dem Zufallsrezept.
+Sie bietet Direktzugriffe auf Rezeptlisten,
 alle Rezepte, die Woche und den Einkaufswagen. Die vier Schaltflächen teilen
 sich gleich breite Spalten. Auf Handys steht der Einkaufswagen unten rechts,
 bei großer Schrift oder knapper Breite stehen die Ziele untereinander.

@@ -96,8 +96,17 @@ void main() {
     await tester.pump();
     expect(find.text('Frühe Vorschau'), findsOneWidget);
     expect(api.featured.isCompleted, isFalse);
-    api.featured.complete({});
+    api.featured.complete({
+      'recipe': {'id': 'r2', 'name': 'Zufallsrezept'},
+    });
     await tester.pumpAndSettle();
+    final featured = tester.getRect(find.text('Zufallsrezept'));
+    final collection = tester.getRect(find.text('Deine Sammlung'));
+    expect(featured.bottom, lessThan(collection.top));
+    expect(
+      collection.bottom,
+      lessThan(tester.getTopLeft(find.text('Ein Blick in deine Sammlung')).dy),
+    );
 
     await tester.tap(find.byTooltip('Einkaufswagen öffnen'));
     await tester.pump();

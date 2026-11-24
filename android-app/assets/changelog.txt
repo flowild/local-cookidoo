@@ -1,3 +1,6 @@
+1.21.6
+• In der Übersicht folgt „Deine Sammlung“ direkt auf das Zufallsrezept.
+
 1.21.2
 • In der Rezeptansicht steht „Zu lokalen Listen hinzufügen“ zwischen Einkaufswagen und „In Cookidoo öffnen“.
 

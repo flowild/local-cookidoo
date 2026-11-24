@@ -1214,6 +1214,22 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
       spacing: AppSpacing.section,
       children: [
         _heading('Dein Rezeptmix'),
+        if ((featured?['recipe'] ?? featured?['featured'])
+            case final Json recipe)
+          RecipeCard(
+            api: api,
+            recipe: recipe,
+            onTap: () => _recipe(recipe),
+            cornerAction: RecipeCornerAction(
+              tooltip: 'Anderes Rezept',
+              onPressed: busy || featured?['can_shuffle'] == false
+                  ? null
+                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
+              icon: Icons.shuffle,
+            ),
+          )
+        else if (featured != null)
+          const Text('Kein Zufallsrezept vorhanden.'),
         _section('Deine Sammlung', [
           ActionPillGrid(
             minColumnWidth: 130,
@@ -1251,22 +1267,6 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           if (stats?['last_sync'] case final String lastSync)
             Text('Letzter Abgleich: ${formatSyncDate(lastSync)}'),
         ]),
-        if ((featured?['recipe'] ?? featured?['featured'])
-            case final Json recipe)
-          RecipeCard(
-            api: api,
-            recipe: recipe,
-            onTap: () => _recipe(recipe),
-            cornerAction: RecipeCornerAction(
-              tooltip: 'Anderes Rezept',
-              onPressed: busy || featured?['can_shuffle'] == false
-                  ? null
-                  : () => _mutate('POST', '/api/featured-recipe/shuffle'),
-              icon: Icons.shuffle,
-            ),
-          )
-        else if (featured != null)
-          const Text('Kein Zufallsrezept vorhanden.'),
         if (_overviewPreviews.isNotEmpty) ...[
           Text(
             'Ein Blick in deine Sammlung',

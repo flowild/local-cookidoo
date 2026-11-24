@@ -18,6 +18,7 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
 - Verwende `AppSpacing` für Seiten- und Kartenränder, Abschnitte sowie Abstände
   zwischen zusammengehörigen Bedienelementen. Verbundene Schalter und Abzeichen
   verwenden die kompakten Werte. Listenkarten erhalten ihren Abstand im Layout.
+- Auf Start steht „Deine Sammlung“ direkt unter dem Zufallsrezept.
 - Prüfe zusammengehörige Aktionen auf gemeinsame Spaltenkanten. Die vier Direktzugriffe in „Deine Sammlung“ belegen je nach Platz eine, zwei oder vier Spalten. Vergleiche die Anordnung bei 332 dp mit normaler und großer Schrift. Reine Textpillen dürfen kompakt sein, antippbare Elemente brauchen auch bei kleiner sichtbarer Fläche ein 48-dp-Tippziel.
 - Bildbadges für Zeit und Portionen liegen in getrennten unteren Ecken.
   Die visuelle Kartenaktion bleibt innerhalb der Bildecke und behält ihr
