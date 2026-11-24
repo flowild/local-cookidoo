@@ -184,7 +184,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(page(), 4);
     expect(find.text('Freitag, 01.01.2027'), findsOneWidget);
-    expect(tester.getCenter(current).dy, closeTo(tester.getCenter(next).dy, 1));
+    final previous = find.byTooltip('Vorherige Woche');
+    final cart = find.byTooltip('In den Einkaufswagen');
+    final controls = [previous, current, next, todayButton, cart];
+    final centers = controls.map(tester.getCenter).toList();
+    for (final (index, center) in centers.indexed.skip(1)) {
+      expect(center.dy, closeTo(centers.first.dy, 1));
+      expect(center.dx, greaterThan(centers[index - 1].dx));
+    }
+    for (final button in [previous, next, todayButton, cart]) {
+      expect(tester.getSize(button).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+    }
     final currentColor = tester.widget<Text>(current).style?.color;
 
     await tester.tap(next);

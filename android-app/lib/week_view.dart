@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import 'api.dart';
 import 'calendar_badge.dart';
 import 'expandable_list_card.dart';
+import 'pill_widgets.dart';
 import 'recipe_card.dart';
 import 'spacing.dart';
 
@@ -1052,98 +1053,82 @@ class _WeekViewState extends State<WeekView> {
     final canStep = canNavigate && (_monday != null || _requestedDay != null);
     final monday = _monday ?? _requestedDay;
     final weekBadge = monday == null
-        ? null
+        ? const InfoPill('KW –')
         : CalendarWeekBadge(date: monday, today: text(_week?['today']));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.related,
       children: [
         Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
-        LayoutBuilder(
-          builder: (context, bounds) {
-            const controlsWidth =
-                4 * 48 + 2 * AppSpacing.connected + 4 * AppSpacing.related;
-            final labelWidth = MediaQuery.textScalerOf(context).scale(42);
-            final inlineBadge = bounds.maxWidth >= controlsWidth + labelWidth;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Row(
               spacing: AppSpacing.related,
               children: [
-                Row(
-                  spacing: AppSpacing.related,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton.filledTonal(
-                            tooltip: 'Vorherige Woche',
-                            style: ButtonStyle(
-                              shape: _weekControlShape(start: true),
-                              minimumSize: const WidgetStatePropertyAll(
-                                Size.square(48),
-                              ),
-                            ),
-                            onPressed: canStep ? () => _navigate(-1) : null,
-                            icon: const Icon(Icons.chevron_left),
+                Expanded(
+                  flex: 3,
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    shape: const StadiumBorder(),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Vorherige Woche',
+                          style: IconButton.styleFrom(
+                            fixedSize: const Size.square(48),
                           ),
-                          const SizedBox(width: AppSpacing.connected),
-                          Flexible(
-                            child: FilledButton.tonal(
-                              style: ButtonStyle(
-                                shape: _weekControlShape(),
-                                minimumSize: const WidgetStatePropertyAll(
-                                  Size(48, 48),
-                                ),
-                                padding: const WidgetStatePropertyAll(
-                                  EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.related,
-                                    vertical: AppSpacing.tight,
-                                  ),
-                                ),
-                              ),
-                              onPressed: canNavigate
-                                  ? () => _navigate(null)
-                                  : null,
-                              child: const Text(
-                                'Heute',
-                                textAlign: TextAlign.center,
-                              ),
+                          onPressed: canStep ? () => _navigate(-1) : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: weekBadge,
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.connected),
-                          IconButton.filledTonal(
-                            tooltip: 'Nächste Woche',
-                            style: ButtonStyle(
-                              shape: _weekControlShape(end: true),
-                              minimumSize: const WidgetStatePropertyAll(
-                                Size.square(48),
-                              ),
-                            ),
-                            onPressed: canStep ? () => _navigate(1) : null,
-                            icon: const Icon(Icons.chevron_right),
+                        ),
+                        IconButton(
+                          tooltip: 'Nächste Woche',
+                          style: IconButton.styleFrom(
+                            fixedSize: const Size.square(48),
                           ),
-                          if (inlineBadge && weekBadge != null) ...[
-                            const SizedBox(width: AppSpacing.related),
-                            weekBadge,
-                          ],
-                        ],
-                      ),
+                          onPressed: canStep ? () => _navigate(1) : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
                     ),
-                    IconButton.filled(
-                      tooltip: 'In den Einkaufswagen',
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size.square(48),
-                      ),
-                      onPressed: _canPlaceRecipe ? _shopping : null,
-                      icon: const Icon(Icons.shopping_cart_outlined),
-                    ),
-                  ],
+                  ),
                 ),
-                if (!inlineBadge && weekBadge != null) weekBadge,
+                Flexible(
+                  child: FilledButton.tonal(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.related,
+                        vertical: AppSpacing.tight,
+                      ),
+                    ),
+                    onPressed: canNavigate ? () => _navigate(null) : null,
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Heute'),
+                    ),
+                  ),
+                ),
+                IconButton.filled(
+                  tooltip: 'In den Einkaufswagen',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(48),
+                  ),
+                  onPressed: _canPlaceRecipe ? _shopping : null,
+                  icon: const Icon(Icons.shopping_cart_outlined),
+                ),
               ],
-            );
-          },
+            ),
+          ),
         ),
         if ((_loading && _week == null) || _busy)
           const LinearProgressIndicator(),
@@ -1188,22 +1173,6 @@ class _WeekViewState extends State<WeekView> {
       ],
     );
   }
-
-  WidgetStateProperty<OutlinedBorder> _weekControlShape({
-    bool start = false,
-    bool end = false,
-  }) => WidgetStateProperty.resolveWith((states) {
-    const outer = Radius.circular(24);
-    const inner = Radius.circular(6);
-    return states.contains(WidgetState.pressed)
-        ? const StadiumBorder()
-        : RoundedRectangleBorder(
-            borderRadius: BorderRadiusDirectional.horizontal(
-              start: start ? outer : inner,
-              end: end ? outer : inner,
-            ),
-          );
-  });
 
   Widget _placeholderList(String monday) => ExpandableListCard(
     title: 'Platzhalter',

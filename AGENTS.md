@@ -27,8 +27,9 @@ Aktionsgrößen um. Die Hauptnavigation wechselt auf breiten Fenstern zur Seiten
 Android nutzt die Grundfarben der Web-App im Hell- und Dunkelmodus. Eine
 eigene Akzentfarbe passt Aktionsfarben an und behält die Grundflächen.
 Ansichtswechsel folgen beim Wischen dem Finger und berücksichtigen reduzierte Bewegung.
-Die Android-Wochenansicht hebt „Heute“ im Tageskopf hervor. Neben der Navigation
-steht die ISO-Kalenderwoche. Die laufende Berliner Woche ist farblich markiert.
+Die Android-Wochenansicht hebt „Heute“ im Tageskopf hervor. Die ISO-Kalenderwoche
+steht zwischen den beiden Wochenpfeilen. „Heute“ und das Einkaufswagensymbol
+folgen in derselben Zeile. Die laufende Berliner Woche ist farblich markiert.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im
@@ -42,8 +43,7 @@ Die Android-Ansichten Woche und Einkaufswagen verzichten auf dauerhaft
 sichtbare Erklärtexte für Wischgesten und Häkchen.
 Android markiert Wochenrezepte und abgelegte Platzhalter nach 250 ms. Ein
 Wisch nach oben braucht 140 dp, nach unten 90 dp. Die Wochenablage zeigt kompakte
-Kacheln nebeneinander, sobald die Breite ausreicht. Das Wochen-Einkaufssymbol
-steht rechts neben den Datumsschaltern.
+Kacheln nebeneinander, sobald die Breite ausreicht.
 Android-Rezeptlisten sind unter ihren Titeln aufklappbar. Langes Drücken auf
 einen Listentitel startet das
 Verschieben und lässt die Listen wackeln. Ein Häkchen beendet den Modus.
