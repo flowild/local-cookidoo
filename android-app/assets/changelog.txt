@@ -1,3 +1,6 @@
+1.26.0
+• In „Meine Woche“ wechselt ein Drehknopf zwischen Hoch- und Querformat. Die App behält die gewählte Ausrichtung beim Drehen des Geräts bei.
+
 1.25.0
 • Telegram-API-Zugangsdaten lassen sich bei freigegebener Einrichtung aus dem Heimnetz übernehmen.
 

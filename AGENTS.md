@@ -31,6 +31,9 @@ Die Android-Wochenansicht hebt „Heute“ im Tageskopf hervor. Die ISO-Kalender
 steht als Text zwischen zwei umrandeten Wochenpfeilen. Eine kurze Linie
 markiert die laufende Berliner Woche. „Heute“ folgt direkt daneben. Das
 Einkaufswagensymbol sitzt in derselben Zeile am rechten Inhaltsrand.
+Der Drehknopf zwischen „Heute“ und dem Einkaufswagen wechselt zwischen
+Hoch- und Querformat. Die Android-App startet im Hochformat und hält die
+gewählte Ausrichtung auch beim Drehen des Geräts und beim Tabwechsel fest.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im

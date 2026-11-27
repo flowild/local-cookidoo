@@ -36,8 +36,10 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
   Die Wochenleiste zeigt die ISO-Kalenderwoche als Text zwischen umrandeten
   Wochenpfeilen. Eine kurze Linie markiert die laufende Woche. „Heute“
-  steht neben den Pfeilen. Das Einkaufswagensymbol sitzt in derselben Zeile
-  bündig am rechten Inhaltsrand. Die
+  steht neben den Pfeilen. Danach folgt der Drehknopf für Hoch- und Querformat,
+  und der Einkaufswagen schließt die Zeile bündig am rechten Inhaltsrand ab.
+  Die App startet im Hochformat und behält die manuell gewählte Ausrichtung
+  auch beim Drehen des Geräts und beim Tabwechsel bei. Die
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
   „Heute“ wählt in beiden Modi den heutigen Tag der aktuellen Woche im
   Kalender aus.

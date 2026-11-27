@@ -1038,6 +1038,8 @@ class _WeekViewState extends State<WeekView> {
   }
 
   Widget _toolbar() {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final queueError = _queue['phase'] == 'error';
     final state = switch (_queue['phase']) {
       'processing' => 'Änderungen werden mit Cookidoo abgeglichen …',
@@ -1063,7 +1065,7 @@ class _WeekViewState extends State<WeekView> {
       children: [
         Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
         Row(
-          spacing: AppSpacing.related,
+          spacing: AppSpacing.tight,
           children: [
             Expanded(
               child: Align(
@@ -1071,10 +1073,9 @@ class _WeekViewState extends State<WeekView> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 264),
                   child: Row(
-                    spacing: AppSpacing.related,
+                    spacing: AppSpacing.tight,
                     children: [
                       Expanded(
-                        flex: 3,
                         child: Row(
                           children: [
                             IconButton.outlined(
@@ -1103,13 +1104,14 @@ class _WeekViewState extends State<WeekView> {
                           ],
                         ),
                       ),
-                      Flexible(
+                      SizedBox(
+                        width: 56,
                         child: FilledButton.tonal(
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(48, 48),
                             shape: controlShape,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.related,
+                              horizontal: AppSpacing.tight,
                               vertical: AppSpacing.tight,
                             ),
                           ),
@@ -1124,6 +1126,18 @@ class _WeekViewState extends State<WeekView> {
                   ),
                 ),
               ),
+            ),
+            IconButton.filledTonal(
+              tooltip: landscape
+                  ? 'Ins Hochformat drehen'
+                  : 'Ins Querformat drehen',
+              style: IconButton.styleFrom(fixedSize: const Size.square(48)),
+              onPressed: () => SystemChrome.setPreferredOrientations([
+                landscape
+                    ? DeviceOrientation.portraitUp
+                    : DeviceOrientation.landscapeLeft,
+              ]),
+              icon: const Icon(Icons.screen_rotation_outlined),
             ),
             IconButton.filled(
               tooltip: 'In den Einkaufswagen',

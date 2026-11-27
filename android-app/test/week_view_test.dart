@@ -185,18 +185,19 @@ void main() {
     expect(page(), 4);
     expect(find.text('Freitag, 01.01.2027'), findsOneWidget);
     final previous = find.byTooltip('Vorherige Woche');
+    final rotate = find.byTooltip('Ins Querformat drehen');
     final cart = find.byTooltip('In den Einkaufswagen');
     expect(
       tester.getRect(cart).right,
       closeTo(tester.getRect(find.text('Meine Woche')).right, 1),
     );
-    final controls = [previous, current, next, todayButton, cart];
+    final controls = [previous, current, next, todayButton, rotate, cart];
     final centers = controls.map(tester.getCenter).toList();
     for (final (index, center) in centers.indexed.skip(1)) {
       expect(center.dy, closeTo(centers.first.dy, 1));
       expect(center.dx, greaterThan(centers[index - 1].dx));
     }
-    for (final button in [previous, next, todayButton, cart]) {
+    for (final button in [previous, next, todayButton, rotate, cart]) {
       expect(tester.getSize(button).width, greaterThanOrEqualTo(48));
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
     }
@@ -217,6 +218,53 @@ void main() {
     expect(current, findsOneWidget);
     expect(page(), 4);
     expect(find.text('Heute'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('week rotation requests one fixed orientation per tap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 840);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final orientations = <Object?>[];
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemChrome.setPreferredOrientations') {
+        orientations.add(call.arguments);
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: _WeekApi(),
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(orientations, isEmpty);
+    await tester.tap(find.byTooltip('Ins Querformat drehen'));
+    expect(orientations, [
+      ['DeviceOrientation.landscapeLeft'],
+    ]);
+
+    tester.view.physicalSize = const Size(840, 390);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ins Hochformat drehen'));
+    expect(orientations, [
+      ['DeviceOrientation.landscapeLeft'],
+      ['DeviceOrientation.portraitUp'],
+    ]);
     expect(tester.takeException(), isNull);
   });
 
