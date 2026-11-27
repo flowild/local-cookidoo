@@ -39,6 +39,7 @@ Tagesköpfen. Bei großer Schrift lässt sich die Woche seitlich scrollen. „He
 holt den aktuellen Tag ins Sichtfeld. Ablage, Platzhalter und lokale Listen sind
 unter den Tagen erreichbar. Antippen eines Eintrags öffnet die Auswahl für den
 Zieltag oder die Ablage und bietet je nach Eintrag Öffnen und Entfernen an.
+Bei genügend Breite steht der Abgleichstatus in der Wochenleiste.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im

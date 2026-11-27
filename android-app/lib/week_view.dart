@@ -1057,7 +1057,10 @@ class _WeekViewState extends State<WeekView> {
   Widget _toolbar() {
     final queueError = _queue['phase'] == 'error';
     final state = switch (_queue['phase']) {
-      'processing' => 'Änderungen werden mit Cookidoo abgeglichen …',
+      'processing' =>
+        _landscape
+            ? 'Cookidoo-Abgleich läuft …'
+            : 'Änderungen werden mit Cookidoo abgeglichen …',
       'waiting' => _landscape ? 'Änderungen vorgemerkt' : 'Änderungen vorgemerkt. Abgleich fünf Minuten nach der letzten Änderung.',
       'error' => text(
         _queue['error'],
@@ -1067,6 +1070,11 @@ class _WeekViewState extends State<WeekView> {
     };
     final canNavigate = !_busy && (!_loading || _requestedDay != null);
     final canStep = canNavigate && (_monday != null || _requestedDay != null);
+    final inlineStatus =
+        _landscape &&
+        !queueError &&
+        state.isNotEmpty &&
+        MediaQuery.sizeOf(context).width >= 600;
     const controlShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(14)),
     );
@@ -1146,6 +1154,17 @@ class _WeekViewState extends State<WeekView> {
                 ),
               ),
             ),
+            if (inlineStatus)
+              SizedBox(
+                width: 160,
+                child: Text(
+                  state,
+                  textAlign: TextAlign.end,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
             IconButton.filledTonal(
               tooltip: _landscape
                   ? 'Ins Hochformat drehen'
@@ -1175,7 +1194,7 @@ class _WeekViewState extends State<WeekView> {
             child: const Text('Erneut laden'),
           ),
         ],
-        if (state.isNotEmpty) Text(state),
+        if (state.isNotEmpty && !inlineStatus) Text(state),
         if (queueError && objects(_queue['items']).isNotEmpty)
           OutlinedButton(
             onPressed: _ready ? _discard : null,
@@ -1442,6 +1461,9 @@ class _WeekViewState extends State<WeekView> {
       (hovering) => Card(
         key: _plannerDayKeys[index],
         margin: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(AppSpacing.item)),
+        ),
         color: hovering
             ? colors.secondaryContainer
             : colors.surfaceContainerLow,
@@ -1462,7 +1484,7 @@ class _WeekViewState extends State<WeekView> {
                   excludeSemantics: true,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.tight,
+                      vertical: AppSpacing.connected,
                     ),
                     child: Column(
                       children: [
@@ -1526,7 +1548,7 @@ class _WeekViewState extends State<WeekView> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    _plannerThumbnail(entry, 24),
+                                    _plannerThumbnail(entry, 20),
                                     const Icon(Icons.more_horiz, size: 16),
                                   ],
                                 ),
@@ -1534,9 +1556,11 @@ class _WeekViewState extends State<WeekView> {
                                   entry.name,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium,
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        height: 1.15,
+                                        letterSpacing: 0,
+                                      ),
                                 ),
                               ],
                             ),

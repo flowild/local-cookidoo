@@ -1,3 +1,6 @@
+1.27.1
+• Im Querformat schaffen flachere Tagesköpfe und der Abgleichstatus in der Werkzeugleiste mehr Platz für die geplanten Rezepte.
+
 1.27.0
 • „Meine Woche“ zeigt im Querformat kompakte Tagesspalten. Rezepte und Platzhalter lassen sich direkt für einen Tag einplanen. Ablage und lokale Listen sind unter der Woche erreichbar.
 

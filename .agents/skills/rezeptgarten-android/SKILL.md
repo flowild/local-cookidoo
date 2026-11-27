@@ -46,6 +46,8 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   Im Querformat nutzt die Woche kompakte Tagesspalten mit festen Tagesköpfen
   und eigenen vertikalen Listen. Bei großer Schrift bleiben die Spalten lesbar
   und lassen sich seitlich scrollen. „Heute“ holt seinen Tag ins Sichtfeld.
+  Auf kurzen Querformat-Displays soll die erste Karte mit zwei Titelzeilen
+  sichtbar sein. Der Abgleichstatus steht bei genügend Breite in der Wochenleiste.
   Ablage, Platzhalter und lokale Listen sind unter den Spalten erreichbar.
   Ein Eintrag öffnet die Tagesauswahl für die gemeinsame Wochenwarteschlange
   oder die lokale Platzhalterablage. Die Hochformatgesten bleiben verfügbar.

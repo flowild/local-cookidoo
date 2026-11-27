@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:rezeptgarten/api.dart';
 import 'package:rezeptgarten/debug_api.dart';
+import 'package:rezeptgarten/expressive_theme.dart';
 import 'package:rezeptgarten/recipe_card.dart';
 import 'package:rezeptgarten/spacing.dart';
 import 'package:rezeptgarten/week_view.dart';
@@ -358,6 +359,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fr').hitTestable(), findsOneWidget);
     expect(find.text('Ablage').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('short landscape shows the first two-line recipe in full', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 228);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title = 'Linsensuppe mit Möhren';
+    final api = _WeekApi(recipeName: title)
+      ..queued = [
+        {'source': '2026-11-16', 'target': 'shelf', 'recipe_id': 'anderes'},
+      ];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rezeptgartenTheme(Brightness.light, 0xff234d3c),
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Änderungen vorgemerkt').hitTestable(), findsOneWidget);
+    final recipe = find.text(title);
+    final dayCard = find.ancestor(of: recipe, matching: find.byType(Card));
+    expect(dayCard, findsOneWidget);
+    expect(
+      tester.getRect(recipe).bottom,
+      lessThan(tester.getRect(dayCard).bottom),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -894,8 +931,9 @@ class _ShelfApi extends _WeekApi {
 }
 
 class _WeekApi extends RezeptgartenApi {
-  _WeekApi() : super(client: HttpClient());
+  _WeekApi({this.recipeName = 'Reisgericht'}) : super(client: HttpClient());
 
+  final String recipeName;
   static const recipe = {
     'id': 'r1',
     'calendar_id': 'r1',
@@ -921,7 +959,9 @@ class _WeekApi extends RezeptgartenApi {
       'days': [
         {
           'date': '2026-11-16',
-          'recipes': [recipe],
+          'recipes': [
+            {...recipe, 'name': recipeName},
+          ],
         },
       ],
       'shelf': [if (shelf) recipe],
