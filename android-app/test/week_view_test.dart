@@ -470,6 +470,44 @@ void main() {
     expect(tester.getCenter(last).dx, lessThan(lastBefore.dx - 150));
   });
 
+  testWidgets('a planned placeholder shows its bundled image on the day', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 1300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _WeekApi()
+      ..placeholder = {'placeholder': 'sushi', 'target': '2026-11-16'};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.widgetWithText(RecipeCard, 'Sushi');
+    final image = tester.widget<Image>(
+      find.descendant(of: card, matching: find.byType(Image)),
+    );
+    expect(
+      image.image,
+      const AssetImage('assets/week_placeholders/sushi.webp'),
+    );
+    final move = find.byTooltip('Sushi in die Ablage');
+    await tester.ensureVisible(move);
+    await tester.pumpAndSettle();
+    await tester.tap(move);
+    await tester.pumpAndSettle();
+    expect(api.placeholder?['target'], 'shelf');
+    expect(tester.widget<RecipeCard>(card).compact, isTrue);
+  });
+
   testWidgets('swipes a selected recipe to the shelf and undoes its removal', (
     tester,
   ) async {
@@ -536,6 +574,21 @@ void main() {
     await tester.pumpAndSettle();
     final options = find.byType(CompactRecipeTile);
     expect(options, findsNWidgets(6));
+    final thumbnails = find.descendant(
+      of: options,
+      matching: find.byType(Image),
+    );
+    expect(tester.widgetList<Image>(thumbnails).map((image) => image.image), [
+      for (final type in [
+        'restaurant',
+        'fastfood',
+        'sushi',
+        'pasta',
+        'abendbrot',
+        'resteessen',
+      ])
+        AssetImage('assets/week_placeholders/$type.webp'),
+    ]);
     expect(
       tester.getRect(options.at(1)).top - tester.getRect(options.first).bottom,
       AppSpacing.related,
@@ -555,7 +608,7 @@ void main() {
     expect(
       tester
           .getCenter(
-            find.descendant(of: placeholder, matching: find.text('🍴')),
+            find.descendant(of: placeholder, matching: find.byType(Image)),
           )
           .dy,
       lessThan(

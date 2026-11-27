@@ -14,12 +14,12 @@ import 'recipe_card.dart';
 import 'spacing.dart';
 
 const _placeholders = {
-  'restaurant': ('Im Restaurant essen', '🍴'),
-  'fastfood': ('Fastfood', '🍔'),
-  'sushi': ('Sushi', '🍣'),
-  'pasta': ('Pasta mit Pesto', '🍝'),
-  'abendbrot': ('Abendbrot', '🍞'),
-  'resteessen': ('Resteessen', '🍲'),
+  'restaurant': 'Im Restaurant essen',
+  'fastfood': 'Fastfood',
+  'sushi': 'Sushi',
+  'pasta': 'Pasta mit Pesto',
+  'abendbrot': 'Abendbrot',
+  'resteessen': 'Resteessen',
 };
 String _dayString(DateTime value) => value.toIso8601String().substring(0, 10);
 
@@ -37,9 +37,8 @@ class _WeekEntry {
     data['calendar_id'],
     id.startsWith('creation:') ? id.substring('creation:'.length) : id,
   );
-  String get name => placeholder
-      ? _placeholders[type]?.$1 ?? type
-      : text(data['name'], 'Rezept');
+  String get name =>
+      placeholder ? _placeholders[type] ?? type : text(data['name'], 'Rezept');
 }
 
 class WeekView extends StatefulWidget {
@@ -666,46 +665,14 @@ class _WeekViewState extends State<WeekView> {
       }
     }
 
-    final recipe = entry.placeholder && !shelf
-        ? Stack(
-            alignment: AlignmentDirectional.topEnd,
-            children: [
-              Card(
-                child: ListTile(
-                  leading: Text(_placeholders[entry.type]?.$2 ?? ''),
-                  title: Text(entry.name),
-                  contentPadding: const EdgeInsetsDirectional.only(
-                    start: AppSpacing.section,
-                    end: 48,
-                  ),
-                  onTap: selected
-                      ? () => setState(() => _selected = null)
-                      : null,
-                ),
-              ),
-              ?action,
-            ],
-          )
-        : RecipeCard(
-            api: widget.api,
-            recipe: entry.placeholder ? {'name': entry.name} : entry.data,
-            picture: entry.placeholder
-                ? ColoredBox(
-                    color: Theme.of(context).colorScheme.tertiaryContainer,
-                    child: Center(
-                      child: ExcludeSemantics(
-                        child: Text(
-                          _placeholders[entry.type]?.$2 ?? '🍽️',
-                          style: const TextStyle(fontSize: 32),
-                        ),
-                      ),
-                    ),
-                  )
-                : null,
-            cornerAction: action,
-            onTap: !entry.placeholder || selected ? open : null,
-            compact: shelf,
-          );
+    final recipe = RecipeCard(
+      api: widget.api,
+      recipe: entry.placeholder ? {'name': entry.name} : entry.data,
+      picture: entry.placeholder ? _placeholderPicture(entry.type) : null,
+      cornerAction: action,
+      onTap: !entry.placeholder || selected ? open : null,
+      compact: shelf,
+    );
     final colors = Theme.of(context).colorScheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     const touchDevices = {
@@ -1191,6 +1158,22 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
+  Widget _placeholderPicture(String type) {
+    if (!_placeholders.containsKey(type)) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.tertiaryContainer,
+        child: const Center(
+          child: ExcludeSemantics(child: Icon(Icons.restaurant)),
+        ),
+      );
+    }
+    return Image.asset(
+      'assets/week_placeholders/$type.webp',
+      fit: BoxFit.cover,
+      excludeFromSemantics: true,
+    );
+  }
+
   Widget _placeholderList(String monday) => ExpandableListCard(
     title: 'Platzhalter',
     body: Padding(
@@ -1208,9 +1191,14 @@ class _WeekViewState extends State<WeekView> {
                 _ready,
                 CompactRecipeTile(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  leading: Text(entry.value.$2),
-                  title: entry.value.$1,
-                  actionLabel: '${entry.value.$1} zur Wochenablage hinzufügen',
+                  leading: ClipOval(
+                    child: SizedBox.square(
+                      dimension: 40,
+                      child: _placeholderPicture(entry.key),
+                    ),
+                  ),
+                  title: entry.value,
+                  actionLabel: '${entry.value} zur Wochenablage hinzufügen',
                   onAction: _ready
                       ? () => _move(
                           _WeekEntry('library', {

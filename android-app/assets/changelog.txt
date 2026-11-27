@@ -1,3 +1,6 @@
+1.26.1
+• Die sechs Platzhalter in „Meine Woche“ zeigen dieselben Bilder wie die Web-App. Die Bilder sind auch unterwegs verfügbar.
+
 1.26.0
 • In „Meine Woche“ wechselt ein Drehknopf zwischen Hoch- und Querformat. Die App behält die gewählte Ausrichtung beim Drehen des Geräts bei.
 

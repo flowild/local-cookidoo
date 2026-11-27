@@ -23,3 +23,4 @@ flutter:
   assets:
     - assets/
     - assets/debug/
+    - assets/week_placeholders/

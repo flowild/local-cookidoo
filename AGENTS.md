@@ -176,8 +176,10 @@ werden. Beim Löschen einer Kategorie ist die Bestätigung erforderlich.
 kontobezogene Ablage. Platzhalter, lokale Listen, Halte- und Wischgesten sowie
 Rückgängig sind über diese Ansicht erreichbar.
 Die Wochenablage zeigt kompakte Rezeptkarten mit dem Bild über dem Titel in
-einer seitlich scrollbaren Reihe. Abgelegte Platzhalter haben denselben Rahmen
-und zeigen ihr Symbol über dem Titel. Ein Wisch nach unten entfernt den Eintrag.
+einer seitlich scrollbaren Reihe. Platzhalter zeigen in Tagen und Ablage
+dieselben Bilder wie in der Web-App über dem Titel. Die Auswahlliste zeigt
+runde Vorschaubilder. Die APK enthält die Bilder für die Nutzung ohne Heimnetz.
+Ein Wisch nach unten entfernt den Eintrag aus der Ablage.
 Die Gruppen „Platzhalter“ und „Lokale Listen“ nutzen dieselben aufklappbaren
 Köpfe und Abstände. In lokalen Wochenlisten hat jede Rezeptzeile ein Vorschaubild
 und rechts ein Plus. Nach dem Hinzufügen zeigt sie ein Häkchen.

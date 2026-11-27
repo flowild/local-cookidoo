@@ -130,7 +130,10 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   wechselt die Ansicht direkt. Der
   horizontale Tageswechsel und das seitliche Scrollen der Wochenablage in
   „Meine Woche“ haben in ihren Bereichen Vorrang. Die Ablage zeigt eine Reihe
-  kompakter Karten mit Rezeptbild oder Platzhaltersymbol über dem Titel. Platzhalter- und Listengruppen haben dieselben Kopfzeilen und Abstände. In geöffneten Wochenlisten zeigen Rezeptpillen ein Vorschaubild und ein Plus für die Ablage.
+  kompakter Karten mit Bild über dem Titel. Verwende für Platzhalter in Tagen,
+  Ablage und Auswahlliste die Bilder der Web-App. Das Skript
+  `scripts/generate_week_placeholder_assets.py` erzeugt daraus die in der APK
+  gebündelten WebP-Dateien. Platzhalter- und Listengruppen haben dieselben Kopfzeilen und Abstände. In geöffneten Wochenlisten zeigen Rezeptpillen ein Vorschaubild und ein Plus für die Ablage.
   Einträge werden mit der vertikalen Wischgeste entfernt.
 - Rezeptdetails zeigen kontrastreiche Vorratspunkte. Die Schaltfläche über
   „Diese Woche kochen“ fügt das Rezept über die gemeinsame Kalender-API zur Ablage der
