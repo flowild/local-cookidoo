@@ -14,6 +14,10 @@ void main() {
   testWidgets(
     'week shows its layout and recipes while queue status is pending',
     (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final api = _DelayedWeekApi();
       await tester.pumpWidget(
         MaterialApp(
@@ -268,10 +272,146 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('landscape shows the week and plans between days and shelf', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _MultipleDaysApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final day in ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']) {
+      expect(find.text(day).hitTestable(), findsOneWidget);
+    }
+    expect(
+      find.bySemanticsLabel('Heute, Mittwoch, 18.11.2026'),
+      findsOneWidget,
+    );
+    expect(find.text('Lokale Listen').hitTestable(), findsOneWidget);
+
+    Future<void> tap(Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
+    await tap(find.text('Platzhalter'));
+    await tap(find.text('Sushi'));
+    await tap(find.byTooltip('Freitag, 20.11.2026'));
+    expect(api.placeholder?['create'], isTrue);
+    expect(api.placeholder?['target'], '2026-11-20');
+
+    await tap(find.byTooltip('Sushi'));
+    await tap(find.byTooltip('Donnerstag, 19.11.2026'));
+    expect(api.placeholder?['target'], '2026-11-19');
+
+    await tap(find.byTooltip('Sushi'));
+    await tap(find.text('In die Ablage'));
+    expect(api.placeholder?['target'], 'shelf');
+    await tap(find.text('Ablage'));
+    await tap(find.text('Sushi'));
+    await tap(find.byTooltip('Sonntag, 22.11.2026'));
+    expect(api.placeholder?['target'], '2026-11-22');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('today reveals its day in the wider large-text planner', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(640, 320),
+              textScaler: TextScaler.linear(2),
+            ),
+            child: WeekView(
+              api: _WeekBoundaryApi(),
+              openRecipe: (_, _) async {},
+              cartCountChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Fr').hitTestable(), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Heute'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fr').hitTestable(), findsOneWidget);
+    expect(find.text('Ablage').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local list planning stages the recipe before placing it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(670, 330);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _PlannerApi();
+    await api.write('PUT', '/api/local-collections/test-alltag', {
+      'name': 'Schnelle Alltagsküche',
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> tap(Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
+    await tap(find.text('Lokale Listen'));
+    await tap(find.text('Schnelle Alltagsküche'));
+    await tap(find.byTooltip('Linsensuppe mit Möhren einplanen'));
+    await tap(find.byTooltip(RegExp(r'^Sonntag, ')));
+    expect(api.moves.map((move) => move['source']), ['library', 'shelf']);
+    expect(api.moves.first['target'], 'shelf');
+    final week = await api.get('/api/calendar/week') as Json;
+    final sunday = objects(week['days']).last;
+    expect(api.moves.last['target'], sunday['date']);
+    expect(
+      objects(sunday['recipes']).map((recipe) => recipe['id']),
+      contains('linsensuppe'),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('recipe metadata stays below the action in narrow day columns', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.physicalSize = const Size(1000, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -698,17 +838,33 @@ class _MultipleDaysApi extends _WeekApi {
   @override
   Future<dynamic> get(String path, {Duration? timeout}) async {
     if (path == '/api/calendar/week') {
+      final week = await super.get(path, timeout: timeout) as Json;
       return {
+        ...week,
         'today': '2026-11-18',
         'days': [
           for (var day = 16; day <= 22; day++)
             {'date': '2026-11-$day', 'recipes': <Json>[]},
         ],
         'shelf': <Json>[],
-        'placeholder_placements': <Json>[],
       };
     }
     return super.get(path, timeout: timeout);
+  }
+}
+
+class _PlannerApi extends DebugRezeptgartenApi {
+  final moves = <Json>[];
+
+  @override
+  Future<dynamic> write(String method, String path, [Json? body]) async {
+    if (path == '/api/calendar/placement' && body != null) {
+      if (body['source'] == 'library' && body['target'] != 'shelf') {
+        throw const ApiException('Ungültiges Ziel für diese Woche.');
+      }
+      moves.add(body);
+    }
+    return super.write(method, path, body);
   }
 }
 

@@ -34,6 +34,11 @@ Einkaufswagensymbol sitzt in derselben Zeile am rechten Inhaltsrand.
 Der Drehknopf zwischen „Heute“ und dem Einkaufswagen wechselt zwischen
 Hoch- und Querformat. Die Android-App startet im Hochformat und hält die
 gewählte Ausrichtung auch beim Drehen des Geräts und beim Tabwechsel fest.
+Im Querformat zeigt „Meine Woche“ sieben kompakte Tagesspalten mit festen
+Tagesköpfen. Bei großer Schrift lässt sich die Woche seitlich scrollen. „Heute“
+holt den aktuellen Tag ins Sichtfeld. Ablage, Platzhalter und lokale Listen sind
+unter den Tagen erreichbar. Antippen eines Eintrags öffnet die Auswahl für den
+Zieltag oder die Ablage und bietet je nach Eintrag Öffnen und Entfernen an.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im

@@ -1,3 +1,6 @@
+1.27.0
+• „Meine Woche“ zeigt im Querformat kompakte Tagesspalten. Rezepte und Platzhalter lassen sich direkt für einen Tag einplanen. Ablage und lokale Listen sind unter der Woche erreichbar.
+
 1.26.1
 • Die sechs Platzhalter in „Meine Woche“ zeigen dieselben Bilder wie die Web-App. Die Bilder sind auch unterwegs verfügbar.
 

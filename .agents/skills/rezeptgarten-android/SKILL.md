@@ -43,6 +43,12 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   aktuelle Berliner Woche und der heutige Tageskopf sind hervorgehoben.
   „Heute“ wählt in beiden Modi den heutigen Tag der aktuellen Woche im
   Kalender aus.
+  Im Querformat nutzt die Woche kompakte Tagesspalten mit festen Tagesköpfen
+  und eigenen vertikalen Listen. Bei großer Schrift bleiben die Spalten lesbar
+  und lassen sich seitlich scrollen. „Heute“ holt seinen Tag ins Sichtfeld.
+  Ablage, Platzhalter und lokale Listen sind unter den Spalten erreichbar.
+  Ein Eintrag öffnet die Tagesauswahl für die gemeinsame Wochenwarteschlange
+  oder die lokale Platzhalterablage. Die Hochformatgesten bleiben verfügbar.
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit

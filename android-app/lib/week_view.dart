@@ -21,6 +21,7 @@ const _placeholders = {
   'abendbrot': 'Abendbrot',
   'resteessen': 'Resteessen',
 };
+const _shortWeekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 String _dayString(DateTime value) => value.toIso8601String().substring(0, 10);
 
 class _WeekEntry {
@@ -70,6 +71,7 @@ class WeekView extends StatefulWidget {
 class _WeekViewState extends State<WeekView> {
   static const _preferences = MethodChannel('de.rezeptgarten/preferences');
   final _daysController = PageController(viewportFraction: .82);
+  final _plannerDayKeys = List.generate(7, (_) => GlobalKey());
   Json? _week;
   Json _queue = {};
   Map<String, List<Json>> _recipes = {};
@@ -82,6 +84,7 @@ class _WeekViewState extends State<WeekView> {
   int _request = 0;
   int _visibleDay = 0;
   bool _dayChanged = false;
+  bool _landscape = false;
   Timer? _poll;
   Timer? _undoExpiry;
   ({String name, String id})? _undo;
@@ -105,6 +108,20 @@ class _WeekViewState extends State<WeekView> {
       const Duration(seconds: 15),
       (_) => unawaited(_pollQueue()),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    if (_landscape == landscape) return;
+    _landscape = landscape;
+    if (landscape) {
+      _revealPlannerDay();
+    } else {
+      _restorePage();
+    }
   }
 
   @override
@@ -137,6 +154,7 @@ class _WeekViewState extends State<WeekView> {
       if (mounted && !_dayChanged && saved != null && saved >= 0 && saved < 7) {
         _visibleDay = saved;
         _restorePage();
+        _revealPlannerDay();
       }
     } on PlatformException {
       // The week remains usable with the default day.
@@ -150,6 +168,19 @@ class _WeekViewState extends State<WeekView> {
       if (!mounted || !_daysController.hasClients) return;
       final count = _calendarDates().length;
       if (count > 0) _daysController.jumpToPage(min(_visibleDay, count - 1));
+    });
+  }
+
+  void _revealPlannerDay() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.active) return;
+      final day = _plannerDayKeys[_visibleDay].currentContext;
+      if (day == null) return;
+      final position = Scrollable.maybeOf(day, axis: Axis.horizontal)?.position;
+      final object = day.findRenderObject();
+      if (position != null && object != null) {
+        unawaited(position.ensureVisible(object, alignment: .5));
+      }
     });
   }
 
@@ -225,6 +256,7 @@ class _WeekViewState extends State<WeekView> {
             .indexWhere((day) => day['date'] == week['today']);
         if (index >= 0) {
           unawaited(_selectDay(index, force: true));
+          _revealPlannerDay();
         }
       }
       _restorePage();
@@ -481,6 +513,14 @@ class _WeekViewState extends State<WeekView> {
             ? 'Das Rezept liegt bereits in der Ablage.'
             : 'Das Rezept ist dort bereits eingeplant.',
       );
+      return;
+    }
+    if (entry.source == 'library' && target != 'shelf') {
+      // The shared API verifies local-list recipes when adding to the shelf.
+      if (_recipes['shelf']?.any((item) => item['id'] == entry.id) != true) {
+        await _move(entry, 'shelf', monday);
+      }
+      if (mounted) await _move(_WeekEntry('shelf', entry.data), target, monday);
       return;
     }
     final moveId = newCalendarMoveId();
@@ -843,110 +883,120 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
+  List<_WeekEntry> _entriesFor(String target) {
+    final recipes = _recipes[target] ?? [];
+    final placeholders = objects(_week?['placeholder_placements'])
+        .where((item) => item['target'] == target);
+    return [
+      for (final recipe in recipes) _WeekEntry(target, recipe),
+      for (final item in placeholders)
+        _WeekEntry(target, item, placeholder: true),
+    ];
+  }
+
+  Widget _dropTarget(
+    String target,
+    String monday,
+    Widget Function(bool hovering) builder,
+  ) => DragTarget<_WeekDrag>(
+    onWillAcceptWithDetails: (details) {
+      final data = details.data;
+      return data.monday == monday &&
+          data.item.source != target &&
+          (data.item.placeholder ||
+              data.item.source != 'library' ||
+              target == 'shelf') &&
+          (data.item.placeholder ? _ready : _canPlaceRecipe);
+    },
+    onAcceptWithDetails: (details) =>
+        _move(details.data.item, target, details.data.monday),
+    builder: (_, hovering, _) => builder(hovering.isNotEmpty),
+  );
+
   Widget _section(
     String title,
     String target,
     String monday, {
     bool scroll = false,
   }) {
-    final recipes = _recipes[target] ?? [];
-    final placeholders = objects(_week?['placeholder_placements'])
-        .where((item) => item['target'] == target);
-    final entries = [
-      for (final recipe in recipes) _WeekEntry(target, recipe),
-      for (final item in placeholders)
-        _WeekEntry(target, item, placeholder: true),
-    ];
-    return DragTarget<_WeekDrag>(
-      onWillAcceptWithDetails: (details) {
-        final data = details.data;
-        return data.monday == monday &&
-            data.item.source != target &&
-            (data.item.placeholder ||
-                data.item.source != 'library' ||
-                target == 'shelf') &&
-            (data.item.placeholder ? _ready : _canPlaceRecipe);
-      },
-      onAcceptWithDetails: (details) =>
-          _move(details.data.item, target, details.data.monday),
-      builder: (context, hovering, rejected) {
-        final theme = Theme.of(context);
-        final colors = theme.colorScheme;
-        final isToday = target == _week?['today'];
-        final foreground = hovering.isNotEmpty
-            ? colors.onSecondaryContainer
-            : isToday
-            ? colors.onPrimaryContainer
-            : colors.onSurface;
-        final shelfTileWidth = MediaQuery.textScalerOf(context).scale(1) > 1.25
-            ? 168.0
-            : 144.0;
-        final content = [
-          CalendarDayHeading(
-            title,
-            isToday: isToday,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: foreground,
-              fontWeight: isToday ? FontWeight.w800 : null,
-            ),
+    final entries = _entriesFor(target);
+    return _dropTarget(target, monday, (hovering) {
+      final theme = Theme.of(context);
+      final colors = theme.colorScheme;
+      final isToday = target == _week?['today'];
+      final foreground = hovering
+          ? colors.onSecondaryContainer
+          : isToday
+          ? colors.onPrimaryContainer
+          : colors.onSurface;
+      final shelfTileWidth = MediaQuery.textScalerOf(context).scale(1) > 1.25
+          ? 168.0
+          : 144.0;
+      final content = [
+        CalendarDayHeading(
+          title,
+          isToday: isToday,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: foreground,
+            fontWeight: isToday ? FontWeight.w800 : null,
           ),
-          if (entries.isEmpty && _queueReady)
-            Text(
-              target == 'shelf'
-                  ? 'Rezepte hier ablegen, wenn der Tag noch offen ist.'
-                  : 'Noch nichts geplant',
-              style: TextStyle(color: foreground),
+        ),
+        if (entries.isEmpty && _queueReady)
+          Text(
+            target == 'shelf'
+                ? 'Rezepte hier ablegen, wenn der Tag noch offen ist.'
+                : 'Noch nichts geplant',
+            style: TextStyle(color: foreground),
+          ),
+        if (target == 'shelf' && entries.isNotEmpty)
+          ClipRect(
+            clipper: const _ShelfClipper(),
+            child: SingleChildScrollView(
+              key: PageStorageKey('shelf-$monday'),
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
+                spacing: AppSpacing.tight,
+                children: [
+                  for (final entry in entries)
+                    SizedBox(
+                      key: ValueKey(entry.identity),
+                      width: shelfTileWidth,
+                      child: _tile(entry, monday),
+                    ),
+                ],
+              ),
             ),
-          if (target == 'shelf' && entries.isNotEmpty)
-            ClipRect(
-              clipper: const _ShelfClipper(),
-              child: SingleChildScrollView(
-                key: PageStorageKey('shelf-$monday'),
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                child: Row(
-                  spacing: AppSpacing.tight,
-                  children: [
-                    for (final entry in entries)
-                      SizedBox(
-                        key: ValueKey(entry.identity),
-                        width: shelfTileWidth,
-                        child: _tile(entry, monday),
-                      ),
-                  ],
+          )
+        else
+          for (final entry in entries) _tile(entry, monday),
+      ];
+      return Card(
+        margin: EdgeInsets.zero,
+        color: hovering
+            ? colors.secondaryContainer
+            : isToday
+            ? colors.primaryContainer
+            : null,
+        child: scroll
+            ? ListView.separated(
+                primary: false,
+                padding: AppSpacing.compactPanel,
+                itemCount: content.length,
+                itemBuilder: (_, index) => content[index],
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.related),
+              )
+            : Padding(
+                padding: AppSpacing.compactPanel,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.related,
+                  children: content,
                 ),
               ),
-            )
-          else
-            for (final entry in entries) _tile(entry, monday),
-        ];
-        return Card(
-          margin: EdgeInsets.zero,
-          color: hovering.isNotEmpty
-              ? colors.secondaryContainer
-              : isToday
-              ? colors.primaryContainer
-              : null,
-          child: scroll
-              ? ListView.separated(
-                  primary: false,
-                  padding: AppSpacing.compactPanel,
-                  itemCount: content.length,
-                  itemBuilder: (_, index) => content[index],
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: AppSpacing.related),
-                )
-              : Padding(
-                  padding: AppSpacing.compactPanel,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: AppSpacing.related,
-                    children: content,
-                  ),
-                ),
-        );
-      },
-    );
+      );
+    });
   }
 
   Widget _days(String monday) {
@@ -1005,12 +1055,10 @@ class _WeekViewState extends State<WeekView> {
   }
 
   Widget _toolbar() {
-    final landscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
     final queueError = _queue['phase'] == 'error';
     final state = switch (_queue['phase']) {
       'processing' => 'Änderungen werden mit Cookidoo abgeglichen …',
-      'waiting' => 'Änderungen vorgemerkt. Abgleich fünf Minuten nach der letzten Änderung.',
+      'waiting' => _landscape ? 'Änderungen vorgemerkt' : 'Änderungen vorgemerkt. Abgleich fünf Minuten nach der letzten Änderung.',
       'error' => text(
         _queue['error'],
         'Der Wochenabgleich konnte nicht bestätigt werden.',
@@ -1030,7 +1078,11 @@ class _WeekViewState extends State<WeekView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.related,
       children: [
-        Text('Meine Woche', style: Theme.of(context).textTheme.headlineMedium),
+        if (!_landscape)
+          Text(
+            'Meine Woche',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
         Row(
           spacing: AppSpacing.tight,
           children: [
@@ -1095,12 +1147,12 @@ class _WeekViewState extends State<WeekView> {
               ),
             ),
             IconButton.filledTonal(
-              tooltip: landscape
+              tooltip: _landscape
                   ? 'Ins Hochformat drehen'
                   : 'Ins Querformat drehen',
               style: IconButton.styleFrom(fixedSize: const Size.square(48)),
               onPressed: () => SystemChrome.setPreferredOrientations([
-                landscape
+                _landscape
                     ? DeviceOrientation.portraitUp
                     : DeviceOrientation.landscapeLeft,
               ]),
@@ -1216,11 +1268,363 @@ class _WeekViewState extends State<WeekView> {
     ),
   );
 
+  Future<void> _choosePlannerTarget(_WeekEntry entry, String monday) async {
+    final canMove = entry.placeholder ? _ready : _canPlaceRecipe;
+    final dates = _calendarDates().take(7).toList();
+    final target = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(entry.name),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: AppSpacing.related,
+          children: [
+            if (canMove) ...[
+              Text(
+                entry.source == 'library'
+                    ? 'Einplanen für'
+                    : 'Verschieben nach',
+              ),
+              Wrap(
+                spacing: AppSpacing.related,
+                runSpacing: AppSpacing.tight,
+                children: [
+                  for (final (index, date) in dates.indexed)
+                    Tooltip(
+                      message: calendarDayLabel(index, date),
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(56, 48),
+                          padding: const EdgeInsets.all(AppSpacing.tight),
+                        ),
+                        onPressed: date.isEmpty || date == entry.source
+                            ? null
+                            : () => Navigator.pop(dialog, date),
+                        child: Text(
+                          '${_shortWeekdays[index]}\n${_shortDate(date)}',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  if (entry.source != 'shelf')
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(dialog, 'shelf'),
+                      child: const Text('In die Ablage'),
+                    ),
+                ],
+              ),
+            ],
+            if (!entry.placeholder || (canMove && entry.source != 'library'))
+              Wrap(
+                spacing: AppSpacing.related,
+                children: [
+                  if (!entry.placeholder)
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialog, 'open'),
+                      child: const Text('Rezept öffnen'),
+                    ),
+                  if (canMove && entry.source != 'library')
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialog, 'trash'),
+                      child: const Text('Entfernen'),
+                    ),
+                ],
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || target == null || _monday != monday) return;
+    if (target == 'open') {
+      await _openRecipe(entry.data, entry.source != 'library');
+      return;
+    }
+    await _move(entry, target, monday);
+    final index = dates.indexOf(target);
+    if (mounted && _monday == monday && index >= 0) {
+      unawaited(_selectDay(index));
+      _revealPlannerDay();
+    }
+  }
+
+  Future<void> _openPlannerSource(String source, String monday) async {
+    final selection =
+        await showModalBottomSheet<({_WeekEntry entry, bool open})>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          builder: (sheet) {
+            final shelf = source == 'shelf';
+            final entries = shelf
+                ? _entriesFor('shelf')
+                : [
+                    for (final type in _placeholders.keys)
+                      _WeekEntry('library', {
+                        'placeholder': type,
+                      }, placeholder: true),
+                  ];
+            void select(_WeekEntry entry, {bool open = false}) =>
+                Navigator.pop(sheet, (entry: entry, open: open));
+            return SafeArea(
+              top: false,
+              child: ListView(
+                shrinkWrap: true,
+                padding: AppSpacing.page,
+                children: [
+                  if (source == 'lists')
+                    _WeekLists(
+                      api: widget.api,
+                      canAdd: _canPlaceRecipe,
+                      onOpen: (recipe) async =>
+                          select(_WeekEntry('library', recipe), open: true),
+                      onAdd: (recipe) async =>
+                          select(_WeekEntry('library', recipe)),
+                    )
+                  else ...[
+                    Text(
+                      shelf ? 'Ablage für diese Woche' : 'Platzhalter',
+                      style: Theme.of(sheet).textTheme.titleLarge,
+                    ),
+                    if (entries.isEmpty)
+                      const ListTile(title: Text('Die Wochenablage ist leer.')),
+                    for (final entry in entries)
+                      ListTile(
+                        leading: _plannerThumbnail(entry, 40),
+                        title: Text(entry.name),
+                        trailing: const Icon(Icons.event_outlined),
+                        onTap: !entry.placeholder || _ready
+                            ? () => select(entry)
+                            : null,
+                      ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+    if (!mounted || selection == null || _monday != monday) return;
+    if (selection.open) {
+      await _openRecipe(selection.entry.data, false);
+    } else {
+      await _choosePlannerTarget(selection.entry, monday);
+    }
+  }
+
+  Widget _plannerThumbnail(_WeekEntry entry, double size) => ClipRRect(
+    borderRadius: BorderRadius.circular(AppSpacing.related),
+    child: SizedBox.square(
+      dimension: size,
+      child: entry.placeholder
+          ? _placeholderPicture(entry.type)
+          : RecipeImage(api: widget.api, filename: entry.data['image_file']),
+    ),
+  );
+
+  String _shortDate(String date) =>
+      calendarDateLabel(date).split('.').take(2).join('.');
+
+  Widget _plannerDay(int index, String date, String monday) {
+    final today = date == _week?['today'];
+    final colors = Theme.of(context).colorScheme;
+    final entries = _entriesFor(date);
+    return _dropTarget(
+      date,
+      monday,
+      (hovering) => Card(
+        key: _plannerDayKeys[index],
+        margin: EdgeInsets.zero,
+        color: hovering
+            ? colors.secondaryContainer
+            : colors.surfaceContainerLow,
+        clipBehavior: Clip.antiAlias,
+        child: CustomScrollView(
+          primary: false,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            PinnedHeaderSliver(
+              child: ColoredBox(
+                color: today
+                    ? colors.primaryContainer
+                    : colors.surfaceContainerHigh,
+                child: Semantics(
+                  header: true,
+                  label:
+                      '${today ? 'Heute, ' : ''}${calendarDayLabel(index, date)}',
+                  excludeSemantics: true,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.tight,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _shortWeekdays[index],
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: today
+                                    ? colors.onPrimaryContainer
+                                    : colors.onSurface,
+                              ),
+                        ),
+                        if (date.isNotEmpty)
+                          Text(
+                            _shortDate(date),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: today
+                                      ? colors.onPrimaryContainer
+                                      : colors.onSurfaceVariant,
+                                ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.all(AppSpacing.tight),
+              sliver: SliverList.separated(
+                itemCount: entries.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.tight),
+                itemBuilder: (_, position) {
+                  final entry = entries[position];
+                  final canMove = entry.placeholder ? _ready : _canPlaceRecipe;
+                  return _draggable(
+                    entry,
+                    monday,
+                    canMove,
+                    Tooltip(
+                      message: entry.name,
+                      child: Material(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(AppSpacing.item),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: canMove || !entry.placeholder
+                              ? () => _choosePlannerTarget(entry, monday)
+                              : null,
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            padding: const EdgeInsets.all(AppSpacing.tight),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              spacing: AppSpacing.connected,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _plannerThumbnail(entry, 24),
+                                    const Icon(Icons.more_horiz, size: 16),
+                                  ],
+                                ),
+                                Text(
+                                  entry.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _landscapePlanner(String monday) => LayoutBuilder(
+    builder: (context, constraints) {
+      final dates = _calendarDates().take(7);
+      final boardWidth = constraints.maxWidth - AppSpacing.section;
+      final dayWidth = max(
+        74 * MediaQuery.textScalerOf(context).scale(1),
+        (boardWidth - 6 * AppSpacing.tight) / 7,
+      );
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.related),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.tight,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: max(48, constraints.maxHeight * .4),
+              ),
+              child: SingleChildScrollView(child: _toolbar()),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.tight,
+                  children: [
+                    for (final (index, date) in dates.indexed)
+                      SizedBox(
+                        width: dayWidth,
+                        child: _plannerDay(index, date, monday),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Row(
+              spacing: AppSpacing.tight,
+              children: [
+                for (final (source, label) in [
+                  ('shelf', 'Ablage'),
+                  ('placeholders', 'Platzhalter'),
+                  ('lists', 'Lokale Listen'),
+                ])
+                  Expanded(
+                    child: FilledButton.tonal(
+                      onPressed: _monday == null
+                          ? null
+                          : () => _openPlannerSource(source, monday),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(label),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
     final monday = _monday;
     final displayedMonday = monday ?? _requestedDay ?? '';
     return RefreshIndicator(
+      notificationPredicate: _landscape
+          ? (notification) => notification.metrics.axis == Axis.vertical
+          : defaultScrollNotificationPredicate,
       onRefresh: () async {
         if (_busy || _loading) return;
         await widget.onSync?.call();
@@ -1231,34 +1635,36 @@ class _WeekViewState extends State<WeekView> {
         onTap: () {
           if (_selected != null) setState(() => _selected = null);
         },
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppSpacing.page,
-          children: [
-            _toolbar(),
-            const SizedBox(height: AppSpacing.section),
-            _days(displayedMonday),
-            const SizedBox(height: AppSpacing.section),
-            _section('Ablage für diese Woche', 'shelf', displayedMonday),
-            const SizedBox(height: AppSpacing.section),
-            _placeholderList(displayedMonday),
-            if (monday != null) ...[
-              const SizedBox(height: AppSpacing.section),
-              _WeekLists(
-                key: ValueKey(monday),
-                api: widget.api,
-                canAdd: _canPlaceRecipe,
-                shelfIds: {
-                  for (final item in _recipes['shelf'] ?? <Json>[])
-                    text(item['id']),
-                },
-                onOpen: (recipe) => _openRecipe(recipe, false),
-                onAdd: (recipe) =>
-                    _move(_WeekEntry('library', recipe), 'shelf', monday),
+        child: _landscape
+            ? _landscapePlanner(displayedMonday)
+            : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: AppSpacing.page,
+                children: [
+                  _toolbar(),
+                  const SizedBox(height: AppSpacing.section),
+                  _days(displayedMonday),
+                  const SizedBox(height: AppSpacing.section),
+                  _section('Ablage für diese Woche', 'shelf', displayedMonday),
+                  const SizedBox(height: AppSpacing.section),
+                  _placeholderList(displayedMonday),
+                  if (monday != null) ...[
+                    const SizedBox(height: AppSpacing.section),
+                    _WeekLists(
+                      key: ValueKey(monday),
+                      api: widget.api,
+                      canAdd: _canPlaceRecipe,
+                      shelfIds: {
+                        for (final item in _recipes['shelf'] ?? <Json>[])
+                          text(item['id']),
+                      },
+                      onOpen: (recipe) => _openRecipe(recipe, false),
+                      onAdd: (recipe) =>
+                          _move(_WeekEntry('library', recipe), 'shelf', monday),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -1299,14 +1705,14 @@ class _WeekLists extends StatefulWidget {
     super.key,
     required this.api,
     required this.canAdd,
-    required this.shelfIds,
+    this.shelfIds,
     required this.onOpen,
     required this.onAdd,
   });
 
   final RezeptgartenApi api;
   final bool canAdd;
-  final Set<String> shelfIds;
+  final Set<String>? shelfIds;
   final Future<void> Function(Json) onOpen;
   final Future<void> Function(Json) onAdd;
 
@@ -1317,6 +1723,14 @@ class _WeekLists extends StatefulWidget {
 class _WeekListsState extends State<_WeekLists> {
   Future<dynamic>? _collections;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.shelfIds == null) {
+      _collections = widget.api.get('/api/collections');
+    }
+  }
+
   void _load() {
     setState(() {
       _collections = widget.api.get('/api/collections');
@@ -1326,6 +1740,7 @@ class _WeekListsState extends State<_WeekLists> {
   @override
   Widget build(BuildContext context) => ExpandableListCard(
     title: 'Lokale Listen',
+    initiallyExpanded: widget.shelfIds == null,
     onExpansionChanged: (expanded) {
       if (expanded && _collections == null) _load();
     },
@@ -1382,7 +1797,7 @@ class _WeekList extends StatefulWidget {
   final Json list;
   final RezeptgartenApi api;
   final bool canAdd;
-  final Set<String> shelfIds;
+  final Set<String>? shelfIds;
   final Future<void> Function(Json) onOpen;
   final Future<void> Function(Json) onAdd;
 
@@ -1456,13 +1871,18 @@ class _WeekListState extends State<_WeekList> {
                 ),
               ),
               onTap: () => widget.onOpen(recipe),
-              actionLabel: widget.shelfIds.contains(recipe['id'])
-                  ? '${recipe['name']} bereits in der Wochenablage'
-                  : '${recipe['name']} zur Wochenablage hinzufügen',
-              onAction: widget.canAdd && !widget.shelfIds.contains(recipe['id'])
+              actionLabel: switch (widget.shelfIds) {
+                null => '${recipe['name']} einplanen',
+                final ids when ids.contains(recipe['id']) =>
+                  '${recipe['name']} bereits in der Wochenablage',
+                _ => '${recipe['name']} zur Wochenablage hinzufügen',
+              },
+              onAction:
+                  widget.canAdd &&
+                      widget.shelfIds?.contains(recipe['id']) != true
                   ? () => widget.onAdd(recipe)
                   : null,
-              actionIcon: widget.shelfIds.contains(recipe['id'])
+              actionIcon: widget.shelfIds?.contains(recipe['id']) == true
                   ? Icons.check
                   : Icons.add,
             ),
