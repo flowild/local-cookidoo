@@ -37,8 +37,10 @@ gewählte Ausrichtung auch beim Drehen des Geräts und beim Tabwechsel fest.
 Im Querformat zeigt „Meine Woche“ sieben kompakte Tagesspalten mit festen
 Tagesköpfen. Bei großer Schrift lässt sich die Woche seitlich scrollen. „Heute“
 holt den aktuellen Tag ins Sichtfeld. Ablage, Platzhalter und lokale Listen sind
-unter den Tagen erreichbar. Antippen eines Eintrags öffnet die Auswahl für den
-Zieltag oder die Ablage und bietet je nach Eintrag Öffnen und Entfernen an.
+unter den Tagen erreichbar. Antippen eines Rezepts in einer Tagesspalte oder
+in der Ablage öffnet seine Details. Rezepte aus lokalen Listen werden über
+deren Plus und die Tagesauswahl eingeplant. In der geöffneten Ablage können
+Rezepte über den Papierkorb entfernt werden.
 Bei genügend Breite steht der Abgleichstatus in der Wochenleiste.
 Im Querformat von „Meine Woche“ sind die App-Kopfzeile und die Hauptnavigation
 ausgeblendet. Die Wochenleiste enthält weiterhin den Drehknopf. Die Ablage zeigt

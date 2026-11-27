@@ -367,6 +367,57 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('landscape recipe taps open details without a move dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _PlannerApi();
+    final opened = <(String, bool)>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (recipe, calendar) async {
+              opened.add((text(recipe['id']), calendar));
+            },
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
+
+    for (final title in ['Linsensuppe mit Möhren', 'Apfelporridge']) {
+      await tester.tap(find.widgetWithText(InkWell, title));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    }
+    expect(opened, [('linsensuppe', true), ('apfelporridge', true)]);
+
+    final shelf = find.widgetWithText(TextButton, 'Ablage');
+    await tester.tap(shelf);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Apfelporridge'));
+    await tester.pumpAndSettle();
+    expect(opened.last, ('apfelporridge', true));
+    expect(opened, hasLength(3));
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(api.moves, isEmpty);
+
+    await tester.tap(shelf);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Apfelporridge aus der Ablage entfernen'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.moves.single['target'], 'trash');
+    expect(find.text('Rückgängig'), findsOneWidget);
+  });
+
   testWidgets('touch moves a shelf thumbnail onto and between planner days', (
     tester,
   ) async {

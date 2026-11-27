@@ -53,10 +53,12 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   scrollbaren Ablage Höhe für Vorschaubilder mit mehrzeiligen Titeln.
   Nach 150 ms Halten beginnen Touch und Stift das Ziehen zwischen Ablage und
   Tagen. Ein kurzer Vibrationsimpuls bestätigt das Anheben. Kurzes Tippen
-  öffnet die Auswahl.
+  auf ein Rezept öffnet seine Details.
   Ablage, Platzhalter und lokale Listen sind unter den Spalten erreichbar.
-  Ein Eintrag öffnet die Tagesauswahl für die gemeinsame Wochenwarteschlange
-  oder die lokale Platzhalterablage. Die Hochformatgesten bleiben verfügbar.
+  Das Plus an Rezepten aus lokalen Listen öffnet die Tagesauswahl für die
+  gemeinsame Wochenwarteschlange. Platzhalter haben weiter eine Tagesauswahl.
+  In der geöffneten Ablage entfernt der Papierkorb einzelne Rezepte.
+  Die Hochformatgesten bleiben verfügbar.
   Wischhinweise erscheinen während der Geste. Einkaufs-Häkchen brauchen
   keinen dauerhaft sichtbaren Erklärungstext.
 - Hauptansichten beim Tabwechsel bedarfsgerecht erhalten und Hintergrundarbeit

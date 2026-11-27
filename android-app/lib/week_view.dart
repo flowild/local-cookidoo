@@ -22,6 +22,9 @@ const _placeholders = {
   'resteessen': 'Resteessen',
 };
 const _shortWeekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+enum _PlannerAction { plan, open, remove }
+
 String _dayString(DateTime value) => value.toIso8601String().substring(0, 10);
 
 class _WeekEntry {
@@ -1358,21 +1361,10 @@ class _WeekViewState extends State<WeekView> {
                 ],
               ),
             ],
-            if (!entry.placeholder || (canMove && entry.source != 'library'))
-              Wrap(
-                spacing: AppSpacing.related,
-                children: [
-                  if (!entry.placeholder)
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialog, 'open'),
-                      child: const Text('Rezept öffnen'),
-                    ),
-                  if (canMove && entry.source != 'library')
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialog, 'trash'),
-                      child: const Text('Entfernen'),
-                    ),
-                ],
+            if (entry.placeholder && canMove && entry.source != 'library')
+              TextButton(
+                onPressed: () => Navigator.pop(dialog, 'trash'),
+                child: const Text('Entfernen'),
               ),
           ],
         ),
@@ -1385,10 +1377,6 @@ class _WeekViewState extends State<WeekView> {
       ),
     );
     if (!mounted || target == null || _monday != monday) return;
-    if (target == 'open') {
-      await _openRecipe(entry.data, entry.source != 'library');
-      return;
-    }
     await _move(entry, target, monday);
     final index = dates.indexOf(target);
     if (mounted && _monday == monday && index >= 0) {
@@ -1399,7 +1387,7 @@ class _WeekViewState extends State<WeekView> {
 
   Future<void> _openPlannerSource(String source, String monday) async {
     final selection =
-        await showModalBottomSheet<({_WeekEntry entry, bool open})>(
+        await showModalBottomSheet<({_WeekEntry entry, _PlannerAction action})>(
           context: context,
           isScrollControlled: true,
           useSafeArea: true,
@@ -1414,8 +1402,10 @@ class _WeekViewState extends State<WeekView> {
                         'placeholder': type,
                       }, placeholder: true),
                   ];
-            void select(_WeekEntry entry, {bool open = false}) =>
-                Navigator.pop(sheet, (entry: entry, open: open));
+            void select(
+              _WeekEntry entry, [
+              _PlannerAction action = _PlannerAction.plan,
+            ]) => Navigator.pop(sheet, (entry: entry, action: action));
             return SafeArea(
               top: false,
               child: ListView(
@@ -1426,8 +1416,10 @@ class _WeekViewState extends State<WeekView> {
                     _WeekLists(
                       api: widget.api,
                       canAdd: _canPlaceRecipe,
-                      onOpen: (recipe) async =>
-                          select(_WeekEntry('library', recipe), open: true),
+                      onOpen: (recipe) async => select(
+                        _WeekEntry('library', recipe),
+                        _PlannerAction.open,
+                      ),
                       onAdd: (recipe) async =>
                           select(_WeekEntry('library', recipe)),
                     )
@@ -1442,10 +1434,19 @@ class _WeekViewState extends State<WeekView> {
                       ListTile(
                         leading: _plannerThumbnail(entry, 40),
                         title: Text(entry.name),
-                        trailing: const Icon(Icons.event_outlined),
-                        onTap: !entry.placeholder || _ready
-                            ? () => select(entry)
-                            : null,
+                        trailing: entry.placeholder
+                            ? const Icon(Icons.event_outlined)
+                            : IconButton(
+                                tooltip:
+                                    '${entry.name} aus der Ablage entfernen',
+                                onPressed: _canPlaceRecipe
+                                    ? () => select(entry, _PlannerAction.remove)
+                                    : null,
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                        onTap: entry.placeholder
+                            ? (_ready ? () => select(entry) : null)
+                            : () => select(entry, _PlannerAction.open),
                       ),
                   ],
                 ],
@@ -1454,10 +1455,16 @@ class _WeekViewState extends State<WeekView> {
           },
         );
     if (!mounted || selection == null || _monday != monday) return;
-    if (selection.open) {
-      await _openRecipe(selection.entry.data, false);
-    } else {
-      await _choosePlannerTarget(selection.entry, monday);
+    switch (selection.action) {
+      case _PlannerAction.open:
+        await _openRecipe(
+          selection.entry.data,
+          selection.entry.source != 'library',
+        );
+      case _PlannerAction.plan:
+        await _choosePlannerTarget(selection.entry, monday);
+      case _PlannerAction.remove:
+        await _move(selection.entry, 'trash', monday);
     }
   }
 
@@ -1557,9 +1564,11 @@ class _WeekViewState extends State<WeekView> {
                         borderRadius: BorderRadius.circular(AppSpacing.item),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
-                          onTap: canMove || !entry.placeholder
-                              ? () => _choosePlannerTarget(entry, monday)
-                              : null,
+                          onTap: entry.placeholder
+                              ? (canMove
+                                    ? () => _choosePlannerTarget(entry, monday)
+                                    : null)
+                              : () => _openRecipe(entry.data, true),
                           child: Container(
                             constraints: const BoxConstraints(minHeight: 48),
                             padding: const EdgeInsets.all(AppSpacing.tight),
@@ -1572,7 +1581,8 @@ class _WeekViewState extends State<WeekView> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     _plannerThumbnail(entry, 20),
-                                    const Icon(Icons.more_horiz, size: 16),
+                                    if (entry.placeholder)
+                                      const Icon(Icons.more_horiz, size: 16),
                                   ],
                                 ),
                                 Text(
@@ -1677,9 +1687,12 @@ class _WeekViewState extends State<WeekView> {
                           borderRadius: BorderRadius.circular(AppSpacing.item),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
-                            onTap: canMove || !entry.placeholder
-                                ? () => _choosePlannerTarget(entry, monday)
-                                : null,
+                            onTap: entry.placeholder
+                                ? (canMove
+                                      ? () =>
+                                            _choosePlannerTarget(entry, monday)
+                                      : null)
+                                : () => _openRecipe(entry.data, true),
                             child: SizedBox(
                               width: tileWidth,
                               child: Padding(

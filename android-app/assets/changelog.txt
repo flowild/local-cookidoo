@@ -1,3 +1,6 @@
+1.28.2
+• Ein Tipp auf ein Rezept in Woche oder Ablage öffnet im Querformat direkt die Rezeptdetails. Verschieben erfolgt per Ziehen.
+
 1.28.1
 • Im Querformat lassen kürzere Tagesspalten Platz für Ablagebilder mit Rezeptnamen. Beim Anheben nach 150 ms bestätigt ein kurzer Vibrationsimpuls den Beginn der Ziehgeste.
 

@@ -1,4 +1,4 @@
-const CACHE = 'rezeptgarten-shell-v177';
+const CACHE = 'rezeptgarten-shell-v178';
 const SHELL = ['/', '/static/changelog.html', '/static/style.css?v=147', '/static/theme.js?v=31', '/static/app.js?v=155', '/static/week-placeholder-four.png', '/static/week-placeholder-steak-v2.png', '/static/week-placeholder-resteessen.png', '/static/manifest.webmanifest?v=2', '/static/icon-192.png?v=2', '/static/icon-512.png?v=2', '/static/icon-maskable-512.png?v=2'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())); });
