@@ -323,7 +323,12 @@ void main() {
     await tap(find.text('In die Ablage'));
     expect(api.placeholder?['target'], 'shelf');
     await tap(find.text('Ablage'));
-    await tap(find.text('Sushi'));
+    await tap(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Sushi'),
+      ),
+    );
     await tap(find.byTooltip('Sonntag, 22.11.2026'));
     expect(api.placeholder?['target'], '2026-11-22');
     expect(tester.takeException(), isNull);
@@ -369,6 +374,16 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final haptics = <Object?>[];
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments);
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
     final api = _PlannerApi();
     await tester.pumpWidget(
       MaterialApp(
@@ -383,24 +398,33 @@ void main() {
     );
     await tester.pumpAndSettle();
     final shelf = find.widgetWithText(TextButton, 'Ablage');
-    final apple = find.byTooltip('Apfelporridge');
-    expect(apple.hitTestable(), findsOneWidget);
+    final apple = find.widgetWithText(InkWell, 'Apfelporridge');
+    expect(apple, findsOneWidget);
     expect(tester.getCenter(apple).dy, tester.getCenter(shelf).dy);
+    final title = find.descendant(
+      of: apple,
+      matching: find.text('Apfelporridge'),
+    );
+    expect(title, findsOneWidget);
+    expect(tester.widget<Text>(title).maxLines, 3);
+    expect(tester.getRect(apple).contains(tester.getCenter(title)), isTrue);
+    expect(tester.getSize(apple).height, greaterThanOrEqualTo(88));
 
     final sunday = find.bySemanticsLabel(RegExp(r'(Heute, )?Sonntag, '));
     final saturday = find.bySemanticsLabel(RegExp(r'(Heute, )?Samstag, '));
-    Future<void> dragTo(Finder day, Duration hold) async {
+    Future<void> dragTo(Finder day, Duration hold, int expectedHaptics) async {
       final finger = await tester.startGesture(tester.getCenter(apple));
       await tester.pump(hold);
+      expect(haptics.length, expectedHaptics);
       await finger.moveTo(tester.getCenter(day));
       await tester.pump();
       await finger.up();
       await tester.pumpAndSettle();
     }
 
-    await dragTo(sunday, const Duration(milliseconds: 100));
+    await dragTo(sunday, const Duration(milliseconds: 140), 0);
     expect(api.moves, isEmpty);
-    await dragTo(sunday, const Duration(milliseconds: 270));
+    await dragTo(sunday, const Duration(milliseconds: 160), 1);
     final week = await api.get('/api/calendar/week') as Json;
     final dates = objects(week['days']).map((day) => day['date']).toList();
     expect(api.moves.single['source'], 'shelf');
@@ -410,9 +434,10 @@ void main() {
       greaterThan(tester.getTopLeft(sunday).dx),
     );
 
-    await dragTo(saturday, const Duration(milliseconds: 270));
+    await dragTo(saturday, const Duration(milliseconds: 160), 2);
     expect(api.moves.last['source'], dates[6]);
     expect(api.moves.last['target'], dates[5]);
+    expect(haptics, List.filled(2, 'HapticFeedbackType.lightImpact'));
     expect(tester.takeException(), isNull);
   });
 

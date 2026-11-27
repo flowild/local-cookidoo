@@ -42,9 +42,10 @@ Zieltag oder die Ablage und bietet je nach Eintrag Öffnen und Entfernen an.
 Bei genügend Breite steht der Abgleichstatus in der Wochenleiste.
 Im Querformat von „Meine Woche“ sind die App-Kopfzeile und die Hauptnavigation
 ausgeblendet. Die Wochenleiste enthält weiterhin den Drehknopf. Die Ablage zeigt
-eine seitlich scrollbare Reihe kleiner Bilder. Nach 250 ms Halten lassen sich
-Rezepte und Platzhalter mit dem Finger in die Tagesspalten, zwischen Tagen
-oder zurück in die Ablage ziehen.
+eine höhere, seitlich scrollbare Reihe mit kleinen Bildern und mehrzeiligen
+Titeln. Nach 150 ms Halten bestätigt ein kurzer Vibrationsimpuls das Anheben.
+Rezepte und Platzhalter lassen sich mit dem Finger in die Tagesspalten,
+zwischen Tagen oder zurück in die Ablage ziehen.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im
@@ -56,7 +57,7 @@ vorgesehene Aktion. Kurze Wische lassen die Kachel zurückkehren. Bei reduzierte
 Bewegung bleibt die Aktionsvorschau sichtbar und die Kachel bleibt am Platz.
 Die Android-Ansichten Woche und Einkaufswagen verzichten auf dauerhaft
 sichtbare Erklärtexte für Wischgesten und Häkchen.
-Android markiert Wochenrezepte und abgelegte Platzhalter nach 250 ms. Ein
+Im Hochformat markiert Android Wochenrezepte und abgelegte Platzhalter nach 250 ms. Ein
 Wisch nach oben braucht 140 dp, nach unten 90 dp. Die Wochenablage zeigt kompakte
 Kacheln nebeneinander, sobald die Breite ausreicht.
 Android-Rezeptlisten sind unter ihren Titeln aufklappbar. Langes Drücken auf

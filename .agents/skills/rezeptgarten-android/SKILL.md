@@ -30,7 +30,7 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
 - Gleich breite Rezeptkarten reservieren zwei Titelzeilen und eine Zeile
   für die Schwierigkeit. Kürze überlange Kartentitel mit Auslassungszeichen.
   Die vollständigen Titel stehen in den Rezeptdetails.
-- Beim Wischen wie in der mobilen PWA die markierte Wochenkachel mitführen und
+- Beim Wischen im Hochformat wie in der mobilen PWA die markierte Wochenkachel mitführen und
   die geplante Aktion vor dem Loslassen anzeigen. Wochenkacheln nach 250 ms
   markieren und aufwärts ab 140 dp, abwärts ab 90 dp ausführen.
   Bei reduzierter Bewegung bleibt die textliche Vorschau sichtbar.
@@ -49,9 +49,11 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   Auf kurzen Querformat-Displays soll die erste Karte mit zwei Titelzeilen
   sichtbar sein. Der Abgleichstatus steht bei genügend Breite in der Wochenleiste.
   Blende App-Kopfzeile und Hauptnavigation im Querformat der Woche aus und
-  lasse den Drehknopf in der Wochenleiste erreichbar. Die Ablage zeigt kleine,
-  horizontal scrollbare Vorschaubilder. Nach 250 ms Halten beginnen Touch und
-  Stift das Ziehen zwischen Ablage und Tagen. Kurzes Tippen öffnet die Auswahl.
+  lasse den Drehknopf in der Wochenleiste erreichbar. Gib der horizontal
+  scrollbaren Ablage Höhe für Vorschaubilder mit mehrzeiligen Titeln.
+  Nach 150 ms Halten beginnen Touch und Stift das Ziehen zwischen Ablage und
+  Tagen. Ein kurzer Vibrationsimpuls bestätigt das Anheben. Kurzes Tippen
+  öffnet die Auswahl.
   Ablage, Platzhalter und lokale Listen sind unter den Spalten erreichbar.
   Ein Eintrag öffnet die Tagesauswahl für die gemeinsame Wochenwarteschlange
   oder die lokale Platzhalterablage. Die Hochformatgesten bleiben verfügbar.

@@ -1,3 +1,6 @@
+1.28.1
+• Im Querformat lassen kürzere Tagesspalten Platz für Ablagebilder mit Rezeptnamen. Beim Anheben nach 150 ms bestätigt ein kurzer Vibrationsimpuls den Beginn der Ziehgeste.
+
 1.28.0
 • Die Wochenplanung nutzt im Querformat die volle Fläche. Rezepte und Platzhalter lassen sich nach kurzem Halten aus der Bilderleiste auf einen Tag und zwischen Tagen ziehen.
 

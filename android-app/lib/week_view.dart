@@ -1602,9 +1602,35 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
-  Widget _plannerShelf(String monday) {
+  Widget _plannerShelf(String monday, double availableHeight) {
     final entries = _entriesFor('shelf');
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final titleStyle = theme.textTheme.labelLarge!.copyWith(height: 1.2);
+    final titleScaler = MediaQuery.textScalerOf(context);
+    final painter = TextPainter(
+      text: TextSpan(text: ' ', style: titleStyle),
+      textDirection: Directionality.of(context),
+      textScaler: titleScaler,
+    );
+    final lineHeight = painter.preferredLineHeight;
+    painter.dispose();
+    const previewWidth = 40.0;
+    const titlePadding = AppSpacing.related;
+    final shelfHeight = entries.isEmpty
+        ? 48.0
+        : max(
+            72.0,
+            min(
+              availableHeight * .42,
+              max(88.0, 3 * lineHeight + 2 * titlePadding),
+            ),
+          );
+    final titleLines = ((shelfHeight - 2 * titlePadding) / lineHeight)
+        .floor()
+        .clamp(1, 3);
+    final tileWidth =
+        previewWidth + 3 * titlePadding + max(112.0, titleScaler.scale(112));
     return _dropTarget(
       'shelf',
       monday,
@@ -1624,10 +1650,13 @@ class _WeekViewState extends State<WeekView> {
             ),
             Expanded(
               child: SizedBox(
-                height: 48,
+                height: shelfHeight,
                 child: ListView.separated(
                   primary: false,
                   scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsetsDirectional.only(
+                    end: AppSpacing.tight,
+                  ),
                   itemCount: entries.length,
                   separatorBuilder: (_, _) =>
                       const SizedBox(width: AppSpacing.tight),
@@ -1640,16 +1669,39 @@ class _WeekViewState extends State<WeekView> {
                       entry,
                       monday,
                       canMove,
-                      IconButton(
-                        tooltip: entry.name,
-                        style: IconButton.styleFrom(
-                          fixedSize: const Size.square(48),
+                      Tooltip(
+                        message: entry.name,
+                        excludeFromSemantics: true,
+                        child: Material(
+                          color: colors.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(AppSpacing.item),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: canMove || !entry.placeholder
+                                ? () => _choosePlannerTarget(entry, monday)
+                                : null,
+                            child: SizedBox(
+                              width: tileWidth,
+                              child: Padding(
+                                padding: const EdgeInsets.all(titlePadding),
+                                child: Row(
+                                  spacing: titlePadding,
+                                  children: [
+                                    _plannerThumbnail(entry, previewWidth),
+                                    Expanded(
+                                      child: Text(
+                                        entry.name,
+                                        style: titleStyle,
+                                        maxLines: titleLines,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.all(AppSpacing.tight),
-                        onPressed: canMove || !entry.placeholder
-                            ? () => _choosePlannerTarget(entry, monday)
-                            : null,
-                        icon: _plannerThumbnail(entry, 40),
                       ),
                       touch: true,
                     );
@@ -1702,7 +1754,10 @@ class _WeekViewState extends State<WeekView> {
             Row(
               spacing: AppSpacing.tight,
               children: [
-                Expanded(flex: 4, child: _plannerShelf(monday)),
+                Expanded(
+                  flex: 5,
+                  child: _plannerShelf(monday, constraints.maxHeight),
+                ),
                 for (final (source, label) in [
                   ('placeholders', 'Platzhalter'),
                   ('lists', 'Lokale Listen'),
@@ -1816,7 +1871,7 @@ class _TouchWeekDrag extends LongPressDraggable<_WeekDrag> {
     required super.childWhenDragging,
     required super.child,
   }) : super(
-         delay: const Duration(milliseconds: 250),
+         delay: const Duration(milliseconds: 150),
          maxSimultaneousDrags: 1,
          dragAnchorStrategy: pointerDragAnchorStrategy,
        );
@@ -1836,7 +1891,7 @@ class _TouchWeekDrag extends LongPressDraggable<_WeekDrag> {
         )
         ..onStart = (position) {
           final drag = onStart(position);
-          if (drag != null) HapticFeedback.selectionClick();
+          if (drag != null) unawaited(HapticFeedback.lightImpact());
           return drag;
         };
 }
