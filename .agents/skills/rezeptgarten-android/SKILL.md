@@ -48,6 +48,10 @@ Die Android-Versionsnummer in den Einstellungen öffnet den mitgelieferten Ände
   und lassen sich seitlich scrollen. „Heute“ holt seinen Tag ins Sichtfeld.
   Auf kurzen Querformat-Displays soll die erste Karte mit zwei Titelzeilen
   sichtbar sein. Der Abgleichstatus steht bei genügend Breite in der Wochenleiste.
+  Blende App-Kopfzeile und Hauptnavigation im Querformat der Woche aus und
+  lasse den Drehknopf in der Wochenleiste erreichbar. Die Ablage zeigt kleine,
+  horizontal scrollbare Vorschaubilder. Nach 250 ms Halten beginnen Touch und
+  Stift das Ziehen zwischen Ablage und Tagen. Kurzes Tippen öffnet die Auswahl.
   Ablage, Platzhalter und lokale Listen sind unter den Spalten erreichbar.
   Ein Eintrag öffnet die Tagesauswahl für die gemeinsame Wochenwarteschlange
   oder die lokale Platzhalterablage. Die Hochformatgesten bleiben verfügbar.

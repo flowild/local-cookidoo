@@ -362,6 +362,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('touch moves a shelf thumbnail onto and between planner days', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _PlannerApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WeekView(
+            api: api,
+            openRecipe: (_, _) async {},
+            cartCountChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final shelf = find.widgetWithText(TextButton, 'Ablage');
+    final apple = find.byTooltip('Apfelporridge');
+    expect(apple.hitTestable(), findsOneWidget);
+    expect(tester.getCenter(apple).dy, tester.getCenter(shelf).dy);
+
+    final sunday = find.bySemanticsLabel(RegExp(r'(Heute, )?Sonntag, '));
+    final saturday = find.bySemanticsLabel(RegExp(r'(Heute, )?Samstag, '));
+    Future<void> dragTo(Finder day, Duration hold) async {
+      final finger = await tester.startGesture(tester.getCenter(apple));
+      await tester.pump(hold);
+      await finger.moveTo(tester.getCenter(day));
+      await tester.pump();
+      await finger.up();
+      await tester.pumpAndSettle();
+    }
+
+    await dragTo(sunday, const Duration(milliseconds: 100));
+    expect(api.moves, isEmpty);
+    await dragTo(sunday, const Duration(milliseconds: 270));
+    final week = await api.get('/api/calendar/week') as Json;
+    final dates = objects(week['days']).map((day) => day['date']).toList();
+    expect(api.moves.single['source'], 'shelf');
+    expect(api.moves.single['target'], dates[6]);
+    expect(
+      tester.getCenter(apple).dx,
+      greaterThan(tester.getTopLeft(sunday).dx),
+    );
+
+    await dragTo(saturday, const Duration(milliseconds: 270));
+    expect(api.moves.last['source'], dates[6]);
+    expect(api.moves.last['target'], dates[5]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('short landscape shows the first two-line recipe in full', (
     tester,
   ) async {

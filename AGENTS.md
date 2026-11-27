@@ -40,6 +40,11 @@ holt den aktuellen Tag ins Sichtfeld. Ablage, Platzhalter und lokale Listen sind
 unter den Tagen erreichbar. Antippen eines Eintrags öffnet die Auswahl für den
 Zieltag oder die Ablage und bietet je nach Eintrag Öffnen und Entfernen an.
 Bei genügend Breite steht der Abgleichstatus in der Wochenleiste.
+Im Querformat von „Meine Woche“ sind die App-Kopfzeile und die Hauptnavigation
+ausgeblendet. Die Wochenleiste enthält weiterhin den Drehknopf. Die Ablage zeigt
+eine seitlich scrollbare Reihe kleiner Bilder. Nach 250 ms Halten lassen sich
+Rezepte und Platzhalter mit dem Finger in die Tagesspalten, zwischen Tagen
+oder zurück in die Ablage ziehen.
 Die Android-Ansichten verwenden `AppSpacing` für gemeinsame Seitenränder,
 Kartenabstände und Abstände in Gruppen, Formularen und Dialogen.
 Android-Rezeptkarten zeigen Dauer links unten und Portionen rechts unten im

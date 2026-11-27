@@ -1432,132 +1432,143 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final useRail = width >= 600;
+    final weekPlanner =
+        area == 3 &&
+        _available &&
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final useRail = width >= 600 && !weekPlanner;
     final compactToolbar = width < 360;
     final hideNavigationLabels =
         width < 320 || width / MediaQuery.textScalerOf(context).scale(1) < 310;
     return Scaffold(
-      appBar: AppBar(
-        leadingWidth: compactToolbar ? 0 : 48,
-        titleSpacing: compactToolbar ? AppSpacing.section : AppSpacing.related,
-        leading: compactToolbar
-            ? null
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.item,
-                  AppSpacing.related,
-                  0,
-                  AppSpacing.related,
-                ),
-                child: Image.asset(
-                  'assets/icon.png',
-                  excludeFromSemantics: true,
-                ),
-              ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Rezeptmix',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (api.usesTestData)
-              Text(
-                compactToolbar ? 'Testdaten' : 'Debug-Modus · Testdaten',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
-              )
-            else if (widget.connection != null)
-              Text(
-                switch (widget.connection!.mode) {
-                  ConnectionMode.local => 'Heimnetz',
-                  ConnectionMode.telegram => 'Telegram',
-                  ConnectionMode.checking => 'Verbindung wird geprüft',
-                  ConnectionMode.offline => 'Offline',
-                },
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
-              )
-            else if (connected != null)
-              Text(
-                connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-          ],
-        ),
-        actions: [
-          if (widget.connection?.mode == ConnectionMode.telegram)
-            const Icon(
-              Icons.send,
-              color: Colors.blue,
-              semanticLabel: 'Telegram-Verbindung',
-            ),
-          IconButton(
-            tooltip: 'Rezepte suchen',
-            onPressed: busy || !_available
-                ? null
-                : () async {
-                    final catalog = _catalogFeatured && !searchState.telegram;
-                    if (searchState.catalog != catalog) {
-                      searchState.setCatalog(catalog);
-                    }
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => RecipeSearchPage(
-                          state: searchState,
-                          openRecipe: (recipe, catalog) =>
-                              _recipe(recipe, catalog: catalog),
-                        ),
+      appBar: weekPlanner
+          ? null
+          : AppBar(
+              leadingWidth: compactToolbar ? 0 : 48,
+              titleSpacing: compactToolbar
+                  ? AppSpacing.section
+                  : AppSpacing.related,
+              leading: compactToolbar
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.item,
+                        AppSpacing.related,
+                        0,
+                        AppSpacing.related,
                       ),
-                    );
-                  },
-            icon: const Icon(Icons.search),
-          ),
-          if (_local && !api.usesTestData)
-            ListenableBuilder(
-              listenable: _update,
-              builder: (context, _) {
-                if (!_update.available) return const SizedBox.shrink();
-                return IconButton(
-                  tooltip: _update.downloading
-                      ? 'Update wird heruntergeladen'
-                      : 'Update herunterladen',
-                  onPressed: _update.checking || _update.downloading
+                      child: Image.asset(
+                        'assets/icon.png',
+                        excludeFromSemantics: true,
+                      ),
+                    ),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Rezeptmix',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (api.usesTestData)
+                    Text(
+                      compactToolbar ? 'Testdaten' : 'Debug-Modus · Testdaten',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    )
+                  else if (widget.connection != null)
+                    Text(
+                      switch (widget.connection!.mode) {
+                        ConnectionMode.local => 'Heimnetz',
+                        ConnectionMode.telegram => 'Telegram',
+                        ConnectionMode.checking => 'Verbindung wird geprüft',
+                        ConnectionMode.offline => 'Offline',
+                      },
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    )
+                  else if (connected != null)
+                    Text(
+                      connected! ? 'Cookidoo verbunden' : 'Cookidoo getrennt',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                ],
+              ),
+              actions: [
+                if (widget.connection?.mode == ConnectionMode.telegram)
+                  const Icon(
+                    Icons.send,
+                    color: Colors.blue,
+                    semanticLabel: 'Telegram-Verbindung',
+                  ),
+                IconButton(
+                  tooltip: 'Rezepte suchen',
+                  onPressed: busy || !_available
                       ? null
-                      : _offerUpdate,
-                  icon: _update.downloading
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.downloading_outlined),
-                );
-              },
+                      : () async {
+                          final catalog =
+                              _catalogFeatured && !searchState.telegram;
+                          if (searchState.catalog != catalog) {
+                            searchState.setCatalog(catalog);
+                          }
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => RecipeSearchPage(
+                                state: searchState,
+                                openRecipe: (recipe, catalog) =>
+                                    _recipe(recipe, catalog: catalog),
+                              ),
+                            ),
+                          );
+                        },
+                  icon: const Icon(Icons.search),
+                ),
+                if (_local && !api.usesTestData)
+                  ListenableBuilder(
+                    listenable: _update,
+                    builder: (context, _) {
+                      if (!_update.available) return const SizedBox.shrink();
+                      return IconButton(
+                        tooltip: _update.downloading
+                            ? 'Update wird heruntergeladen'
+                            : 'Update herunterladen',
+                        onPressed: _update.checking || _update.downloading
+                            ? null
+                            : _offerUpdate,
+                        icon: _update.downloading
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.downloading_outlined),
+                      );
+                    },
+                  ),
+                IconButton(
+                  tooltip: 'Einkaufswagen öffnen',
+                  onPressed: busy ? null : () => _navigate(4),
+                  icon: Badge(
+                    isLabelVisible: serverCartCount != null,
+                    label: Text(text(serverCartCount)),
+                    child: const Icon(Icons.shopping_cart_outlined),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Einstellungen öffnen',
+                  onPressed: busy ? null : _settings,
+                  icon: const Icon(Icons.settings_outlined),
+                ),
+              ],
             ),
-          IconButton(
-            tooltip: 'Einkaufswagen öffnen',
-            onPressed: busy ? null : () => _navigate(4),
-            icon: Badge(
-              isLabelVisible: serverCartCount != null,
-              label: Text(text(serverCartCount)),
-              child: const Icon(Icons.shopping_cart_outlined),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Einstellungen öffnen',
-            onPressed: busy ? null : _settings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
       body: SafeArea(
-        top: false,
-        bottom: useRail,
+        top: weekPlanner,
+        bottom: useRail || weekPlanner,
         child: Row(
           children: [
             if (useRail)
@@ -1590,7 +1601,8 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
                 index: area,
                 firstIndex: _available || area < 3 ? 0 : 3,
                 count: _available || area < 3 ? areas.length : 2,
-                swipeEnabled: !busy && (_available || area >= 3),
+                swipeEnabled:
+                    !weekPlanner && !busy && (_available || area >= 3),
                 canOpen: _canOpen,
                 onPageChanged: (index) => _navigationIndex.value = index,
                 onOpen: _open,
@@ -1600,7 +1612,7 @@ class _RezeptgartenHomeState extends State<RezeptgartenHome>
           ],
         ),
       ),
-      bottomNavigationBar: useRail
+      bottomNavigationBar: useRail || weekPlanner
           ? null
           : ValueListenableBuilder<int>(
               valueListenable: _navigationIndex,

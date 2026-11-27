@@ -16,6 +16,39 @@ import 'package:rezeptgarten/week_view.dart';
 
 void main() {
   testWidgets(
+    'landscape week hides app chrome and keeps the same planner state',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
+      await tester.pumpAndSettle();
+      final week = find.byType(WeekView);
+      final state = tester.state(week);
+      expect(find.byTooltip('Rezepte suchen'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+
+      tester.view.physicalSize = const Size(844, 390);
+      await tester.pumpAndSettle();
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(
+        find.byTooltip('Ins Hochformat drehen').hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.state(week), same(state));
+
+      tester.view.physicalSize = const Size(390, 844);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Rezepte suchen'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(tester.state(week), same(state));
+    },
+  );
+
+  testWidgets(
     'startup detects updates and the toolbar uses the Android installer',
     (tester) async {
       tester.view.physicalSize = const Size(332, 1000);
@@ -222,7 +255,7 @@ void main() {
     testWidgets(
       'main sections and settings fit at width $width with large text',
       (tester) async {
-        tester.view.physicalSize = Size(width, 915);
+        tester.view.physicalSize = Size(width, width >= 600 ? 1200 : 915);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
@@ -343,6 +376,10 @@ void main() {
   testWidgets(
     'reading a search result keeps the results and adding it updates the cart badge',
     (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final api = _SectionReadsApi();
       await tester.pumpWidget(RezeptgartenApp(api: api));
       await tester.pumpAndSettle();
@@ -544,6 +581,10 @@ void main() {
   testWidgets(
     'a fast tab fling settles without passing its destination or reversing',
     (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(RezeptgartenApp(api: DebugRezeptgartenApi()));
       await tester.pumpAndSettle();
       final pager = tester.widget<PageView>(

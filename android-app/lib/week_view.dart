@@ -866,20 +866,43 @@ class _WeekViewState extends State<WeekView> {
     _WeekEntry entry,
     String monday,
     bool enabled,
-    Widget child,
-  ) {
+    Widget child, {
+    bool touch = false,
+  }) {
     if (!enabled) return child;
-    return _MouseWeekDrag(
-      data: (item: entry, monday: monday),
-      feedback: Material(
-        elevation: 4,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: AppSpacing.compactPanel,
-          child: Text(entry.name),
+    final data = (item: entry, monday: monday);
+    final feedback = Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: AppSpacing.compactPanel,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: AppSpacing.related,
+          children: [
+            if (touch) _plannerThumbnail(entry, 28),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: Text(
+                entry.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
-      child: child,
+    );
+    final mouse = _MouseWeekDrag(data: data, feedback: feedback, child: child);
+    if (!touch) return mouse;
+    return _TouchWeekDrag(
+      data: data,
+      feedback: Transform.translate(
+        offset: const Offset(8, -52),
+        child: feedback,
+      ),
+      childWhenDragging: Opacity(opacity: .4, child: child),
+      child: mouse,
     );
   }
 
@@ -1568,8 +1591,70 @@ class _WeekViewState extends State<WeekView> {
                         ),
                       ),
                     ),
+                    touch: true,
                   );
                 },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _plannerShelf(String monday) {
+    final entries = _entriesFor('shelf');
+    final colors = Theme.of(context).colorScheme;
+    return _dropTarget(
+      'shelf',
+      monday,
+      (hovering) => Material(
+        color: hovering
+            ? colors.secondaryContainer
+            : colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppSpacing.item),
+        child: Row(
+          spacing: AppSpacing.tight,
+          children: [
+            TextButton(
+              onPressed: _monday == null
+                  ? null
+                  : () => _openPlannerSource('shelf', monday),
+              child: const Text('Ablage'),
+            ),
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: ListView.separated(
+                  primary: false,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: AppSpacing.tight),
+                  itemBuilder: (_, index) {
+                    final entry = entries[index];
+                    final canMove = entry.placeholder
+                        ? _ready
+                        : _canPlaceRecipe;
+                    return _draggable(
+                      entry,
+                      monday,
+                      canMove,
+                      IconButton(
+                        tooltip: entry.name,
+                        style: IconButton.styleFrom(
+                          fixedSize: const Size.square(48),
+                        ),
+                        padding: const EdgeInsets.all(AppSpacing.tight),
+                        onPressed: canMove || !entry.placeholder
+                            ? () => _choosePlannerTarget(entry, monday)
+                            : null,
+                        icon: _plannerThumbnail(entry, 40),
+                      ),
+                      touch: true,
+                    );
+                  },
+                ),
               ),
             ),
           ],
@@ -1617,8 +1702,8 @@ class _WeekViewState extends State<WeekView> {
             Row(
               spacing: AppSpacing.tight,
               children: [
+                Expanded(flex: 4, child: _plannerShelf(monday)),
                 for (final (source, label) in [
-                  ('shelf', 'Ablage'),
                   ('placeholders', 'Platzhalter'),
                   ('lists', 'Lokale Listen'),
                 ])
@@ -1722,6 +1807,38 @@ class _MouseWeekDrag extends Draggable<_WeekDrag> {
     supportedDevices: const {PointerDeviceKind.mouse},
     allowedButtonsFilter: (buttons) => buttons == kPrimaryMouseButton,
   )..onStart = onStart;
+}
+
+class _TouchWeekDrag extends LongPressDraggable<_WeekDrag> {
+  const _TouchWeekDrag({
+    required super.data,
+    required super.feedback,
+    required super.childWhenDragging,
+    required super.child,
+  }) : super(
+         delay: const Duration(milliseconds: 250),
+         maxSimultaneousDrags: 1,
+         dragAnchorStrategy: pointerDragAnchorStrategy,
+       );
+
+  @override
+  DelayedMultiDragGestureRecognizer createRecognizer(
+    GestureMultiDragStartCallback onStart,
+  ) =>
+      DelayedMultiDragGestureRecognizer(
+          delay: delay,
+          supportedDevices: const {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.invertedStylus,
+          },
+          allowedButtonsFilter: allowedButtonsFilter,
+        )
+        ..onStart = (position) {
+          final drag = onStart(position);
+          if (drag != null) HapticFeedback.selectionClick();
+          return drag;
+        };
 }
 
 class _WeekLists extends StatefulWidget {
